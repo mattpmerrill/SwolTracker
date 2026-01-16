@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Minus, Flame, Target, Zap, Brain, Edit3, Save, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle } from 'lucide-react';
+import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle } from 'lucide-react';
+import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 
-// Default workout program data
+// Default workout program data (used when no database or for demo)
 const defaultWorkoutProgram = {
   1: {
     Monday: {
@@ -233,7 +234,7 @@ const defaultWorkoutProgram = {
   },
 };
 
-// Default data
+// Default profiles for demo mode
 const defaultProfiles = {
   merrill: {
     id: 'merrill',
@@ -248,16 +249,6 @@ const defaultProfiles = {
       'Power Clean': 185,
       'Front Squat': 225,
       'Overhead Press': 165,
-      'Incline Bench Press': 185,
-      'Romanian Deadlift': 275,
-      'Barbell Rows': 175,
-      'Close-Grip Bench Press': 185,
-      'Clean & Jerk': 175,
-      'Hang Clean': 165,
-      'Power Snatch': 135,
-      'Hang Snatch': 125,
-      'Thrusters': 155,
-      'Snatch Pull': 155,
     },
   },
   wren: {
@@ -273,16 +264,6 @@ const defaultProfiles = {
       'Power Clean': 155,
       'Front Squat': 185,
       'Overhead Press': 135,
-      'Incline Bench Press': 165,
-      'Romanian Deadlift': 255,
-      'Barbell Rows': 155,
-      'Close-Grip Bench Press': 165,
-      'Clean & Jerk': 155,
-      'Hang Clean': 145,
-      'Power Snatch': 115,
-      'Hang Snatch': 105,
-      'Thrusters': 135,
-      'Snatch Pull': 135,
     },
   },
 };
@@ -295,7 +276,7 @@ const defaultEquipment = [
 
 const avatarOptions = ['💪', '🔥', '⚡', '🏋️', '💥', '🦾', '🎯', '🚀', '⭐', '🏆'];
 
-// Helper to get Monday of a given week
+// Helper functions
 const getMondayOfWeek = (date) => {
   const d = new Date(date);
   const day = d.getDay();
@@ -303,12 +284,10 @@ const getMondayOfWeek = (date) => {
   return new Date(d.setDate(diff));
 };
 
-// Helper to format date
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// Helper to get week dates
 const getWeekDates = (programStartDate, weekNumber) => {
   const start = new Date(programStartDate);
   start.setDate(start.getDate() + (weekNumber - 1) * 7);
@@ -317,7 +296,6 @@ const getWeekDates = (programStartDate, weekNumber) => {
   return { start, end };
 };
 
-// Helper to find matching 1RM key
 const findMaxKey = (exerciseName, maxes) => {
   const lowerName = exerciseName.toLowerCase();
   for (const key of Object.keys(maxes)) {
@@ -356,7 +334,131 @@ const calculateWeight = (percentage, maxes, exerciseName) => {
   return null;
 };
 
+// ============================================
+// LOGIN PAGE COMPONENT
+// ============================================
+function LoginPage({ onLogin, isLoading }) {
+  const [error, setError] = useState('');
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    const { error } = await signInWithGoogle();
+    if (error) {
+      setError(error.message);
+    }
+  };
+
+  const handleDemoMode = () => {
+    onLogin({ demoMode: true });
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-purple-500/10 pointer-events-none" />
+      
+      <div className="flex-1 flex flex-col items-center justify-center px-6 relative z-10">
+        {/* Logo */}
+        <div className="mb-8 text-center">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-2xl shadow-orange-500/30">
+            <Dumbbell className="w-12 h-12 text-white" />
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">SwolTracker</h1>
+          <p className="text-zinc-400">Track your gains. Crush your goals.</p>
+        </div>
+
+        {/* Login Card */}
+        <div className="w-full max-w-sm">
+          <div className="bg-zinc-900/80 backdrop-blur-xl rounded-3xl p-8 border border-zinc-800/50 shadow-2xl">
+            <h2 className="text-xl font-bold text-center mb-6">Welcome Back</h2>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            )}
+
+            {/* Google Login Button */}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+              className="w-full py-4 px-6 rounded-xl bg-white text-zinc-900 font-semibold hover:bg-zinc-100 transition-colors flex items-center justify-center gap-3 disabled:opacity-50 mb-4"
+            >
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Continue with Google
+                </>
+              )}
+            </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-zinc-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-zinc-900 text-zinc-500">or</span>
+              </div>
+            </div>
+
+            {/* Demo Mode Button */}
+            <button
+              onClick={handleDemoMode}
+              className="w-full py-4 px-6 rounded-xl bg-zinc-800 text-white font-semibold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Zap className="w-5 h-5 text-orange-500" />
+              Try Demo Mode
+            </button>
+
+            <p className="text-xs text-zinc-500 text-center mt-4">
+              Demo mode lets you explore without signing in
+            </p>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div className="mt-12 grid grid-cols-3 gap-6 max-w-sm w-full">
+          {[
+            { icon: Target, label: 'Track 1RMs' },
+            { icon: Calendar, label: 'Plan Weeks' },
+            { icon: Brain, label: 'AI Coach' },
+          ].map((feature, i) => (
+            <div key={i} className="text-center">
+              <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-zinc-800/50 flex items-center justify-center">
+                <feature.icon className="w-6 h-6 text-orange-500" />
+              </div>
+              <p className="text-xs text-zinc-400">{feature.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="py-6 text-center">
+        <p className="text-xs text-zinc-600">Get Swoll Together 💪</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
 export default function SwolTracker() {
+  // Auth state
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
+
+  // App state
   const [isLoading, setIsLoading] = useState(true);
   const [profiles, setProfiles] = useState(defaultProfiles);
   const [currentUser, setCurrentUser] = useState('merrill');
@@ -364,10 +466,9 @@ export default function SwolTracker() {
   const [exerciseLog, setExerciseLog] = useState({});
   const [workoutProgram, setWorkoutProgram] = useState(defaultWorkoutProgram);
   const [programStartDate, setProgramStartDate] = useState(() => {
-    // Week 4 is current week, so program started 3 weeks ago
     const today = new Date();
     const monday = getMondayOfWeek(today);
-    monday.setDate(monday.getDate() - 21); // 3 weeks back
+    monday.setDate(monday.getDate() - 21);
     return monday.toISOString();
   });
   
@@ -384,6 +485,7 @@ export default function SwolTracker() {
   const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [showAddLift, setShowAddLift] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
   
   // Form states
   const [newUserName, setNewUserName] = useState('');
@@ -395,13 +497,13 @@ export default function SwolTracker() {
   const [tempMaxValue, setTempMaxValue] = useState('');
   
   // AI states
-  const [aiResponse, setAiResponse] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [aiNotes, setAiNotes] = useState('');
-  const [generationWeek, setGenerationWeek] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [generatedPreview, setGeneratedPreview] = useState(null);
+  const [generationWeek, setGenerationWeek] = useState(null);
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   const user = profiles[currentUser];
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
@@ -409,52 +511,87 @@ export default function SwolTracker() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const weekDates = getWeekDates(programStartDate, currentWeek);
 
-  // Load data from storage
+  // Check auth state on mount
   useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load data from localStorage (works for both demo and logged-in users)
+  useEffect(() => {
+    if (authLoading) return;
+    
     const loadData = async () => {
       try {
-        const [profilesData, equipmentData, logData, startDateData, currentUserData, programData] = await Promise.all([
-          window.storage.get('swoltracker-profiles').catch(() => null),
-          window.storage.get('swoltracker-equipment').catch(() => null),
-          window.storage.get('swoltracker-log').catch(() => null),
-          window.storage.get('swoltracker-startdate').catch(() => null),
-          window.storage.get('swoltracker-currentuser').catch(() => null),
-          window.storage.get('swoltracker-program').catch(() => null),
-        ]);
+        const savedProfiles = localStorage.getItem('swoltracker-profiles');
+        const savedEquipment = localStorage.getItem('swoltracker-equipment');
+        const savedLog = localStorage.getItem('swoltracker-log');
+        const savedProgram = localStorage.getItem('swoltracker-program');
+        const savedStartDate = localStorage.getItem('swoltracker-startdate');
+        const savedCurrentUser = localStorage.getItem('swoltracker-currentuser');
+        const savedOpenaiKey = localStorage.getItem('swoltracker-openai-key');
 
-        if (profilesData?.value) setProfiles(JSON.parse(profilesData.value));
-        if (equipmentData?.value) setEquipment(JSON.parse(equipmentData.value));
-        if (logData?.value) setExerciseLog(JSON.parse(logData.value));
-        if (startDateData?.value) setProgramStartDate(startDateData.value);
-        if (currentUserData?.value) setCurrentUser(currentUserData.value);
-        if (programData?.value) setWorkoutProgram(JSON.parse(programData.value));
+        if (savedProfiles) setProfiles(JSON.parse(savedProfiles));
+        if (savedEquipment) setEquipment(JSON.parse(savedEquipment));
+        if (savedLog) setExerciseLog(JSON.parse(savedLog));
+        if (savedProgram) setWorkoutProgram(JSON.parse(savedProgram));
+        if (savedStartDate) setProgramStartDate(savedStartDate);
+        if (savedCurrentUser) setCurrentUser(savedCurrentUser);
+        if (savedOpenaiKey) setOpenaiKey(savedOpenaiKey);
       } catch (error) {
-        console.log('No saved data found, using defaults');
+        console.log('Error loading data:', error);
       }
       setIsLoading(false);
     };
+    
     loadData();
-  }, []);
+  }, [authLoading]);
 
-  // Save data to storage
+  // Save data to localStorage
   useEffect(() => {
-    if (isLoading) return;
-    const saveData = async () => {
-      try {
-        await Promise.all([
-          window.storage.set('swoltracker-profiles', JSON.stringify(profiles)),
-          window.storage.set('swoltracker-equipment', JSON.stringify(equipment)),
-          window.storage.set('swoltracker-log', JSON.stringify(exerciseLog)),
-          window.storage.set('swoltracker-startdate', programStartDate),
-          window.storage.set('swoltracker-currentuser', currentUser),
-          window.storage.set('swoltracker-program', JSON.stringify(workoutProgram)),
-        ]);
-      } catch (error) {
-        console.error('Error saving data:', error);
-      }
-    };
-    saveData();
-  }, [profiles, equipment, exerciseLog, programStartDate, currentUser, workoutProgram, isLoading]);
+    if (isLoading || authLoading) return;
+    
+    try {
+      localStorage.setItem('swoltracker-profiles', JSON.stringify(profiles));
+      localStorage.setItem('swoltracker-equipment', JSON.stringify(equipment));
+      localStorage.setItem('swoltracker-log', JSON.stringify(exerciseLog));
+      localStorage.setItem('swoltracker-program', JSON.stringify(workoutProgram));
+      localStorage.setItem('swoltracker-startdate', programStartDate);
+      localStorage.setItem('swoltracker-currentuser', currentUser);
+      if (openaiKey) localStorage.setItem('swoltracker-openai-key', openaiKey);
+    } catch (error) {
+      console.error('Error saving data:', error);
+    }
+  }, [profiles, equipment, exerciseLog, workoutProgram, programStartDate, currentUser, openaiKey, isLoading, authLoading]);
+
+  // Handle login
+  const handleLogin = (options) => {
+    if (options?.demoMode) {
+      setDemoMode(true);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    if (supabase && !demoMode) {
+      await signOut();
+    }
+    setDemoMode(false);
+    setAuthUser(null);
+  };
 
   // Log a set completion
   const logSet = (exerciseIndex, setIndex, data) => {
@@ -551,7 +688,7 @@ export default function SwolTracker() {
     }));
   };
 
-  // AI workout generation
+  // AI workout generation with ChatGPT
   const getRecentWeeksContext = (targetWeek) => {
     const weeksToInclude = [];
     for (let w = Math.max(1, targetWeek - 3); w < targetWeek; w++) {
@@ -566,8 +703,8 @@ export default function SwolTracker() {
     const progress = {};
     weeks.forEach(({ week }) => {
       progress[week] = {};
-      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      days.forEach(day => {
+      const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      dayNames.forEach(day => {
         const dayLog = [];
         Object.keys(exerciseLog).forEach(key => {
           if (key.includes(`-${week}-${day}-`) && exerciseLog[key]?.completed) {
@@ -588,9 +725,19 @@ export default function SwolTracker() {
     setAiError('');
     setGeneratedPreview(null);
     setShowAiGenerator(true);
+    
+    if (!openaiKey) {
+      setShowApiKeyInput(true);
+    }
   };
 
   const generateAiWorkout = async () => {
+    if (!openaiKey) {
+      setAiError('Please enter your OpenAI API key');
+      setShowApiKeyInput(true);
+      return;
+    }
+
     setAiLoading(true);
     setAiError('');
     setGeneratedPreview(null);
@@ -599,7 +746,6 @@ export default function SwolTracker() {
       const recentWeeks = getRecentWeeksContext(generationWeek);
       const progressData = getProgressForWeeks(recentWeeks);
       
-      // Build the prompt
       const systemPrompt = `You are an elite strength and conditioning coach with 20+ years of experience training athletes. You design periodized programs that build systematically on previous weeks while preventing overtraining and promoting recovery.
 
 Your philosophy:
@@ -624,13 +770,13 @@ ${Object.entries(p.maxes).map(([lift, weight]) => `- ${lift}: ${weight} lbs`).jo
 ${equipment.join(', ')}
 
 ## PREVIOUS WEEKS PROGRAMMING:
-${recentWeeks.map(({ week, program }) => `
+${recentWeeks.length > 0 ? recentWeeks.map(({ week, program }) => `
 ### Week ${week}:
 ${Object.entries(program).filter(([day]) => day !== 'Sunday').map(([day, workout]) => `
 **${day} - ${workout.focus}:**
 ${workout.exercises?.map(ex => `- ${ex.name}: ${ex.sets}x${ex.reps}${ex.percentages ? ` @ ${ex.percentages.join('/')}% 1RM` : ''}`).join('\n') || 'Rest Day'}
 `).join('')}
-`).join('\n')}
+`).join('\n') : 'No previous weeks available - create a foundational program.'}
 
 ## LOGGED PROGRESS FROM RECENT WEEKS:
 ${Object.keys(progressData).length > 0 ? JSON.stringify(progressData, null, 2) : 'No logged progress yet - this may be their first week tracking.'}
@@ -673,30 +819,30 @@ Respond with ONLY valid JSON in this exact structure (no markdown, no explanatio
 
 For exercises without percentage-based loading (bodyweight, conditioning, etc.), set "percentages": null.`;
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          system: systemPrompt,
+          model: 'gpt-4o',
           messages: [
-            { role: "user", content: userPrompt }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
           ],
+          temperature: 0.7,
+          max_tokens: 4000
         })
       });
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
       }
 
       const data = await response.json();
-      const responseText = data.content
-        .map(item => (item.type === "text" ? item.text : ""))
-        .filter(Boolean)
-        .join("\n");
+      const responseText = data.choices[0]?.message?.content || '';
 
       // Parse the JSON response
       const cleanedResponse = responseText.replace(/```json|```/g, '').trim();
@@ -711,7 +857,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
       }
 
       setGeneratedPreview(generatedProgram);
-      setAiResponse('Workout generated successfully! Review below and confirm to add to your program.');
 
     } catch (error) {
       console.error('AI Generation Error:', error);
@@ -748,12 +893,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
     return totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
   };
 
-  // Get total completed sets for user
   const getTotalCompletedSets = () => {
     return Object.keys(exerciseLog).filter(k => k.startsWith(currentUser) && exerciseLog[k]?.completed).length;
   };
 
-  if (isLoading) {
+  // Show loading screen
+  if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="text-center">
@@ -764,6 +909,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
     );
   }
 
+  // Show login page if not authenticated
+  if (!authUser && !demoMode) {
+    return <LoginPage onLogin={handleLogin} isLoading={authLoading} />;
+  }
+
+  // Main App
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-24">
       {/* Header */}
@@ -776,7 +927,9 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
               <div>
                 <h1 className="text-lg font-bold tracking-tight">SwolTracker</h1>
-                <p className="text-xs text-zinc-400 font-medium">{user?.name}'s Training</p>
+                <p className="text-xs text-zinc-400 font-medium">
+                  {demoMode ? 'Demo Mode' : user?.name + "'s Training"}
+                </p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -849,6 +1002,15 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               <UserPlus className="w-5 h-5" />
               Add New User
             </button>
+            
+            {/* Logout Button */}
+            <button 
+              onClick={handleLogout}
+              className="w-full mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 font-semibold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 text-red-400"
+            >
+              <LogOut className="w-5 h-5" />
+              {demoMode ? 'Exit Demo' : 'Sign Out'}
+            </button>
           </div>
         </div>
       )}
@@ -915,6 +1077,24 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
+            </div>
+            
+            {/* OpenAI API Key */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Brain className="w-5 h-5 text-purple-500" />
+                ChatGPT API Key
+              </h3>
+              <input
+                type="password"
+                value={openaiKey}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+                placeholder="sk-..."
+                className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              />
+              <p className="text-xs text-zinc-500 mt-2">
+                Required for AI workout generation. Get your key at platform.openai.com
+              </p>
             </div>
             
             {/* Equipment Section */}
@@ -1041,12 +1221,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
                   <Brain className="w-6 h-6" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold">AI Workout Generator</h2>
-                  <p className="text-sm text-zinc-400">Creating Week {generationWeek}</p>
+                  <p className="text-sm text-zinc-400">Powered by ChatGPT • Week {generationWeek}</p>
                 </div>
               </div>
               <button 
@@ -1060,6 +1240,23 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
             {!generatedPreview ? (
               <>
+                {/* API Key Input */}
+                {showApiKeyInput && !openaiKey && (
+                  <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                    <h3 className="font-semibold text-yellow-400 mb-2">OpenAI API Key Required</h3>
+                    <input
+                      type="password"
+                      value={openaiKey}
+                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm mb-2"
+                    />
+                    <p className="text-xs text-zinc-400">
+                      Get your API key at <span className="text-yellow-400">platform.openai.com</span>
+                    </p>
+                  </div>
+                )}
+
                 {/* Context Summary */}
                 <div className="space-y-4 mb-6">
                   {/* Athletes */}
@@ -1140,7 +1337,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 • I have a shoulder injury - avoid overhead pressing
 • Increase conditioning intensity
 • Add more core work"
-                    className="w-full h-32 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm resize-none"
+                    className="w-full h-32 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none"
                   />
                 </div>
 
@@ -1158,8 +1355,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 {/* Generate Button */}
                 <button
                   onClick={generateAiWorkout}
-                  disabled={aiLoading}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25"
+                  disabled={aiLoading || !openaiKey}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
                 >
                   {aiLoading ? (
                     <>
@@ -1175,7 +1372,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </button>
 
                 <p className="text-xs text-zinc-500 text-center mt-4">
-                  AI will analyze your history and create a progressive program
+                  Uses GPT-4o to analyze your history and create a progressive program
                 </p>
               </>
             ) : (
@@ -1183,7 +1380,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 {/* Preview Generated Workout */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-4">
-                    <Check className="w-5 h-5 text-green-500" />
+                    <CheckCircle className="w-5 h-5 text-green-500" />
                     <span className="font-semibold text-green-400">Workout Generated Successfully!</span>
                   </div>
 
@@ -1301,14 +1498,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             {!hasWorkoutProgrammed && (
               <div className="mt-8 text-center py-12">
                 <div className="relative w-32 h-32 mx-auto mb-6">
-                  {/* Animated dumbbell illustration */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="w-28 h-28 rounded-full bg-gradient-to-br from-orange-500/20 to-purple-500/20 animate-pulse" />
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-6xl animate-bounce">🏋️</div>
                   </div>
-                  {/* Floating question marks */}
                   <div className="absolute -top-2 -right-2 text-2xl animate-bounce" style={{ animationDelay: '0.1s' }}>❓</div>
                   <div className="absolute -bottom-1 -left-1 text-xl animate-bounce" style={{ animationDelay: '0.3s' }}>✨</div>
                   <div className="absolute top-0 left-0 text-lg animate-bounce" style={{ animationDelay: '0.2s' }}>💭</div>
@@ -1325,7 +1520,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <div className="flex flex-col gap-3 max-w-xs mx-auto">
                   <button
                     onClick={() => openAiGenerator(currentWeek)}
-                    className="py-4 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25"
+                    className="py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
                   >
                     <Brain className="w-5 h-5" />
                     Generate Week {currentWeek} with AI
@@ -1338,7 +1533,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   </button>
                 </div>
 
-                {/* Fun stats teaser */}
                 <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
                   <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
                   <p className="text-sm text-zinc-400">
@@ -1395,84 +1589,83 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             {/* Exercises */}
             {hasWorkoutProgrammed && (
               todayWorkout?.focus === 'Rest Day' ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                  <Clock className="w-10 h-10 text-blue-400" />
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                    <Clock className="w-10 h-10 text-blue-400" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Recovery Day</h3>
+                  <p className="text-zinc-400 max-w-xs mx-auto">
+                    Rest, stretch, and prepare for tomorrow. Your muscles grow when you recover.
+                  </p>
                 </div>
-                <h3 className="text-xl font-bold mb-2">Recovery Day</h3>
-                <p className="text-zinc-400 max-w-xs mx-auto">
-                  Rest, stretch, and prepare for tomorrow. Your muscles grow when you recover.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {todayWorkout?.exercises?.map((exercise, exIdx) => (
-                  <div key={exIdx} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 overflow-hidden">
-                    <div className="p-5">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-lg leading-tight">{exercise.name}</h4>
-                          <p className="text-sm text-zinc-400 mt-1">{exercise.muscleGroups}</p>
+              ) : (
+                <div className="space-y-4">
+                  {todayWorkout?.exercises?.map((exercise, exIdx) => (
+                    <div key={exIdx} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 overflow-hidden">
+                      <div className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <h4 className="font-bold text-lg leading-tight">{exercise.name}</h4>
+                            <p className="text-sm text-zinc-400 mt-1">{exercise.muscleGroups}</p>
+                          </div>
+                          <div className="flex items-center gap-2 bg-zinc-800/80 px-3 py-1.5 rounded-lg">
+                            <span className="text-sm font-semibold">{exercise.sets}×{exercise.reps}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-zinc-800/80 px-3 py-1.5 rounded-lg">
-                          <span className="text-sm font-semibold">{exercise.sets}×{exercise.reps}</span>
-                        </div>
-                      </div>
 
-                      {exercise.note && (
-                        <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
-                          <p className="text-xs text-zinc-400">{exercise.note}</p>
-                        </div>
-                      )}
+                        {exercise.note && (
+                          <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
+                            <p className="text-xs text-zinc-400">{exercise.note}</p>
+                          </div>
+                        )}
 
-                      {/* Sets */}
-                      <div className="space-y-2">
-                        {Array.from({ length: exercise.sets }).map((_, setIdx) => {
-                          const percentage = exercise.percentages?.[setIdx];
-                          const weight = percentage ? calculateWeight(percentage, user?.maxes || {}, exercise.name) : null;
-                          const logged = isSetLogged(exIdx, setIdx);
+                        <div className="space-y-2">
+                          {Array.from({ length: exercise.sets }).map((_, setIdx) => {
+                            const percentage = exercise.percentages?.[setIdx];
+                            const weight = percentage ? calculateWeight(percentage, user?.maxes || {}, exercise.name) : null;
+                            const logged = isSetLogged(exIdx, setIdx);
 
-                          return (
-                            <div 
-                              key={setIdx}
-                              className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                                logged 
-                                  ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30' 
-                                  : 'bg-zinc-800/40 hover:bg-zinc-800/60'
-                              }`}
-                            >
-                              <button
-                                onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                            return (
+                              <div 
+                                key={setIdx}
+                                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
                                   logged 
-                                    ? 'bg-green-500 text-white' 
-                                    : 'bg-zinc-700 hover:bg-zinc-600'
+                                    ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30' 
+                                    : 'bg-zinc-800/40 hover:bg-zinc-800/60'
                                 }`}
                               >
-                                {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
-                              </button>
-                              <div className="flex-1">
-                                <div className="flex items-baseline gap-2">
-                                  {weight ? (
-                                    <>
-                                      <span className="text-lg font-bold">{weight} lbs</span>
-                                      <span className="text-xs text-zinc-400">@ {percentage}% 1RM</span>
-                                    </>
-                                  ) : (
-                                    <span className="text-zinc-400">Bodyweight / As prescribed</span>
-                                  )}
+                                <button
+                                  onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                                    logged 
+                                      ? 'bg-green-500 text-white' 
+                                      : 'bg-zinc-700 hover:bg-zinc-600'
+                                  }`}
+                                >
+                                  {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                                </button>
+                                <div className="flex-1">
+                                  <div className="flex items-baseline gap-2">
+                                    {weight ? (
+                                      <>
+                                        <span className="text-lg font-bold">{weight} lbs</span>
+                                        <span className="text-xs text-zinc-400">@ {percentage}% 1RM</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-zinc-400">Bodyweight / As prescribed</span>
+                                    )}
+                                  </div>
                                 </div>
+                                <span className="text-sm text-zinc-400 font-medium">{exercise.reps}</span>
                               </div>
-                              <span className="text-sm text-zinc-400 font-medium">{exercise.reps}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )
+                  ))}
+                </div>
+              )
             )}
           </>
         )}
@@ -1546,7 +1739,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               ))}
             </div>
 
-            {/* Percentage Calculator */}
             <div className="mt-8 p-5 bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl border border-orange-500/20">
               <h3 className="font-bold mb-4 flex items-center gap-2">
                 <Target className="w-5 h-5 text-orange-500" />
@@ -1572,14 +1764,13 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               <p className="text-zinc-400">Generate progressive workout programs</p>
             </div>
 
-            {/* Quick Generate Card */}
-            <div className="bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border border-purple-500/20 p-5 mb-6">
+            <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl border border-green-500/20 p-5 mb-6">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
                   <Brain className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold">Smart Programming</h3>
+                  <h3 className="font-bold">Powered by ChatGPT</h3>
                   <p className="text-sm text-zinc-400">AI builds on your last 3 weeks</p>
                 </div>
               </div>
@@ -1590,19 +1781,17 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
               <button
                 onClick={() => {
-                  // Find the next week without a program
                   let nextWeek = 1;
                   while (workoutProgram[nextWeek]) nextWeek++;
                   openAiGenerator(nextWeek);
                 }}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Zap className="w-5 h-5" />
                 Generate Next Week's Program
               </button>
             </div>
 
-            {/* Generated Weeks Overview */}
             <div className="mb-6">
               <h3 className="font-semibold mb-3 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-orange-500" />
@@ -1628,7 +1817,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                         ) : (
                           <button
                             onClick={() => openAiGenerator(weekNum)}
-                            className="p-1 hover:bg-purple-500/20 rounded text-purple-400"
+                            className="p-1 hover:bg-green-500/20 rounded text-green-400"
                           >
                             <Plus className="w-4 h-4" />
                           </button>
@@ -1646,13 +1835,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             </div>
 
-            {/* How It Works */}
             <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-5">
               <h3 className="font-semibold mb-4">How AI Generation Works</h3>
               <div className="space-y-3">
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-purple-400">1</span>
+                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-green-400">1</span>
                   </div>
                   <div>
                     <p className="font-medium text-sm">Analyzes History</p>
@@ -1669,8 +1857,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-green-400">3</span>
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-purple-400">3</span>
                   </div>
                   <div>
                     <p className="font-medium text-sm">Progressive Overload</p>
@@ -1697,8 +1885,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
               <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
                 <TrendingUp className="w-8 h-8 text-green-500 mb-3" />
-                <p className="text-3xl font-bold">{currentWeek}</p>
-                <p className="text-sm text-zinc-400">Weeks Active</p>
+                <p className="text-3xl font-bold">{Object.keys(workoutProgram).length}</p>
+                <p className="text-sm text-zinc-400">Weeks Programmed</p>
               </div>
             </div>
 
@@ -1725,7 +1913,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             </div>
 
-            {/* Saved indicator */}
             <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
               <div className="flex items-center gap-2 text-green-400">
                 <Check className="w-5 h-5" />
