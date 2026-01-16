@@ -159,7 +159,7 @@ git commit -m "Initial SwolTracker commit"
 
 Create repo on github.com, then:
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/swoltracker.git
+git remote add origin https://github.com/mattpmerrill/swoltracker.git
 git branch -M main
 git push -u origin main
 ```

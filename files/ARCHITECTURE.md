@@ -196,7 +196,7 @@ git commit -m "Initial commit"
 
 Then create repo on github.com and push:
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/swoltracker.git
+git remote add origin https://github.com/mattpmerrill/swoltracker.git
 git push -u origin main
 ```
 
