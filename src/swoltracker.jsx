@@ -1088,16 +1088,55 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <Brain className="w-5 h-5 text-purple-500" />
                 ChatGPT API Key
               </h3>
-              <input
-                type="password"
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-              />
-              <p className="text-xs text-zinc-500 mt-2">
-                Required for AI workout generation. Get your key at platform.openai.com
-              </p>
+              {openaiKey ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span className="text-sm text-green-400 flex-1">API Key saved</span>
+                    <span className="text-xs text-zinc-500 font-mono">
+                      {openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setOpenaiKey('');
+                        localStorage.removeItem('swoltracker-openai-key');
+                      }}
+                      className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Key
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newKey = prompt('Enter new OpenAI API Key:');
+                        if (newKey && newKey.trim()) {
+                          setOpenaiKey(newKey.trim());
+                          localStorage.setItem('swoltracker-openai-key', newKey.trim());
+                        }
+                      }}
+                      className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Replace Key
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="password"
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                  />
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Required for AI workout generation. Get your key at platform.openai.com
+                  </p>
+                </>
+              )}
             </div>
             
             {/* Equipment Section */}
@@ -1243,22 +1282,44 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
             {!generatedPreview ? (
               <>
-                {/* API Key Input */}
-                {showApiKeyInput && !openaiKey && (
+                {/* API Key Status/Input */}
+                {openaiKey ? (
+                  <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                      <div>
+                        <p className="text-sm text-green-400 font-medium">API Key Ready</p>
+                        <p className="text-xs text-zinc-500 font-mono">{openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowSettings(true)}
+                      className="text-xs text-zinc-400 hover:text-white"
+                    >
+                      Manage in Settings
+                    </button>
+                  </div>
+                ) : showApiKeyInput ? (
                   <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
                     <h3 className="font-semibold text-yellow-400 mb-2">OpenAI API Key Required</h3>
                     <input
                       type="password"
                       value={openaiKey}
-                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      onChange={(e) => {
+                        const newKey = e.target.value;
+                        setOpenaiKey(newKey);
+                        if (newKey.startsWith('sk-') && newKey.length > 20) {
+                          localStorage.setItem('swoltracker-openai-key', newKey);
+                        }
+                      }}
                       placeholder="sk-..."
                       className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm mb-2"
                     />
                     <p className="text-xs text-zinc-400">
-                      Get your API key at <span className="text-yellow-400">platform.openai.com</span>
+                      Get your API key at <span className="text-yellow-400">platform.openai.com</span>. Key will be saved automatically.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {/* Context Summary */}
                 <div className="space-y-4 mb-6">
