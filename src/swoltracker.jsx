@@ -2366,33 +2366,52 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   {Object.values(profiles)
                     .filter(p =>
                       p.id !== currentUser &&
-                      !user.buddies?.includes(p.id) &&
                       p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
                     )
                     .map(p => {
-                      const isPending = user.sentRequests?.some(r => r.to === p.id);
+                      const myProfile = profiles[currentUser];
+                      const isBuddy = myProfile.buddies?.includes(p.id);
+                      const isPending = myProfile.sentRequests?.some(r => r.to === p.id);
+                      const isIncoming = myProfile.receivedRequests?.some(r => r.from === p.id);
+
                       return (
                         <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
                           <div className="flex items-center gap-3">
                             <span className="text-xl">{p.avatar}</span>
                             <span className="font-medium">{p.name}</span>
                           </div>
-                          <button
-                            onClick={() => sendBuddyRequest(p.id)}
-                            disabled={isPending}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${isPending
-                              ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
-                              : 'bg-blue-500 text-white hover:bg-blue-600'
-                              }`}
-                          >
-                            {isPending ? 'Request Sent' : 'Add Buddy'}
-                          </button>
+
+                          {isBuddy ? (
+                            <button
+                              onClick={() => { setViewingBuddy(p.id); setActiveTab('workout'); }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                            >
+                              View Profile
+                            </button>
+                          ) : isPending ? (
+                            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-400 cursor-not-allowed">
+                              Request Sent
+                            </button>
+                          ) : isIncoming ? (
+                            <button
+                              onClick={() => acceptBuddyRequest(p.id)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
+                            >
+                              Accept Request
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => sendBuddyRequest(p.id)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
+                            >
+                              Add Buddy
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   {Object.values(profiles).filter(p =>
                     p.id !== currentUser &&
-                    !user.buddies?.includes(p.id) &&
                     p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
                   ).length === 0 && (
                       <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
