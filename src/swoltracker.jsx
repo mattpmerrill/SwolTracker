@@ -250,6 +250,9 @@ const defaultProfiles = {
       'Front Squat': 225,
       'Overhead Press': 165,
     },
+    buddies: [],
+    receivedRequests: [],
+    sentRequests: [],
   },
   wren: {
     id: 'wren',
@@ -265,6 +268,9 @@ const defaultProfiles = {
       'Front Squat': 185,
       'Overhead Press': 135,
     },
+    buddies: [],
+    receivedRequests: [],
+    sentRequests: [],
   },
 };
 
@@ -507,7 +513,15 @@ export default function SwolTracker() {
 
   const [selectedReferenceExercise, setSelectedReferenceExercise] = useState('Bench Press');
 
-  const user = profiles[currentUser];
+  // Buddy State
+  const [viewingBuddy, setViewingBuddy] = useState(null);
+  const [buddiesSearch, setBuddiesSearch] = useState('');
+
+  // Derived state for display (allows viewing other profiles)
+  const displayUser = viewingBuddy ? profiles[viewingBuddy] : profiles[currentUser];
+  // Ensure we fall back to current user if something breaks, but generally displayUser is what we render
+  const user = displayUser || profiles[currentUser];
+
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -636,12 +650,12 @@ export default function SwolTracker() {
     console.log(`Set ${key} completion status toggled to ${newStatus}`);
   };
 
-  const isSetLogged = (exerciseIndex, setIndex) => {
-    const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
+  const isSetLogged = (exerciseIndex, setIndex, targetUserId = currentUser) => {
+    const key = `${targetUserId}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
     return exerciseLog[key]?.completed;
   };
 
-  const getCompletionPercentage = (week, day) => {
+  const getCompletionPercentage = (week, day, targetUserId = currentUser) => {
     if (!workoutProgram[week] || !workoutProgram[week][day] || !workoutProgram[week][day].exercises) {
       return 0;
     }
@@ -651,7 +665,7 @@ export default function SwolTracker() {
     let completedSets = 0;
     workoutProgram[week][day].exercises.forEach((exercise, exerciseIndex) => {
       for (let setIndex = 0; setIndex < exercise.sets; setIndex++) {
-        const key = `${currentUser}-${week}-${day}-${exerciseIndex}-${setIndex}`;
+        const key = `${targetUserId}-${week}-${day}-${exerciseIndex}-${setIndex}`;
         if (exerciseLog[key]?.completed) {
           completedSets++;
         }
@@ -676,6 +690,9 @@ export default function SwolTracker() {
           'Deadlift': 225,
           'Overhead Press': 95,
         },
+        buddies: [],
+        receivedRequests: [],
+        sentRequests: [],
       }
     }));
     setNewUserName('');
@@ -691,6 +708,84 @@ export default function SwolTracker() {
     setProfiles(newProfiles);
     if (currentUser === userId) {
       setCurrentUser(Object.keys(newProfiles)[0]);
+    }
+  };
+
+  // Buddy Management
+  const sendBuddyRequest = (targetId) => {
+    if (targetId === currentUser || profiles[currentUser].buddies?.includes(targetId)) return;
+
+    setProfiles(prev => {
+      // Avoid duplicates
+      const existingSent = prev[currentUser].sentRequests?.find(r => r.to === targetId);
+      if (existingSent) return prev;
+
+      return {
+        ...prev,
+        [currentUser]: {
+          ...prev[currentUser],
+          sentRequests: [...(prev[currentUser].sentRequests || []), { to: targetId, timestamp: new Date().toISOString() }]
+        },
+        [targetId]: {
+          ...prev[targetId],
+          receivedRequests: [...(prev[targetId].receivedRequests || []), { from: currentUser, timestamp: new Date().toISOString() }]
+        }
+      };
+    });
+    setBuddiesSearch('');
+  };
+
+  const acceptBuddyRequest = (requesterId) => {
+    setProfiles(prev => {
+      // Remove request from both sides and add to buddies
+      const newCurrentUser = { ...prev[currentUser] };
+      newCurrentUser.receivedRequests = (newCurrentUser.receivedRequests || []).filter(r => r.from !== requesterId);
+      newCurrentUser.buddies = [...(newCurrentUser.buddies || []), requesterId];
+
+      const newRequester = { ...prev[requesterId] };
+      newRequester.sentRequests = (newRequester.sentRequests || []).filter(r => r.to !== currentUser);
+      newRequester.buddies = [...(newRequester.buddies || []), currentUser];
+
+      return {
+        ...prev,
+        [currentUser]: newCurrentUser,
+        [requesterId]: newRequester
+      };
+    });
+  };
+
+  const declineBuddyRequest = (requesterId) => {
+    setProfiles(prev => {
+      const newCurrentUser = { ...prev[currentUser] };
+      newCurrentUser.receivedRequests = (newCurrentUser.receivedRequests || []).filter(r => r.from !== requesterId);
+
+      const newRequester = { ...prev[requesterId] };
+      newRequester.sentRequests = (newRequester.sentRequests || []).filter(r => r.to !== currentUser);
+
+      return {
+        ...prev,
+        [currentUser]: newCurrentUser,
+        [requesterId]: newRequester
+      };
+    });
+  };
+
+  const removeBuddy = (buddyId) => {
+    setProfiles(prev => {
+      const newCurrentUser = { ...prev[currentUser] };
+      newCurrentUser.buddies = (newCurrentUser.buddies || []).filter(id => id !== buddyId);
+
+      const newBuddy = { ...prev[buddyId] };
+      newBuddy.buddies = (newBuddy.buddies || []).filter(id => id !== currentUser);
+
+      return {
+        ...prev,
+        [currentUser]: newCurrentUser,
+        [buddyId]: newBuddy
+      };
+    });
+    if (viewingBuddy === buddyId) {
+      setViewingBuddy(null);
     }
   };
 
@@ -935,8 +1030,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
   // Calculate completion
 
 
-  const getTotalCompletedSets = () => {
-    return Object.keys(exerciseLog).filter(k => k.startsWith(currentUser) && exerciseLog[k]?.completed).length;
+  const getTotalCompletedSets = (targetUserId = currentUser) => {
+    return Object.keys(exerciseLog).filter(k => k.startsWith(targetUserId) && exerciseLog[k]?.completed).length;
   };
 
   // Show loading screen
@@ -991,6 +1086,22 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
           </div>
         </div>
       </header>
+
+      {/* View Mode Banner */}
+      {viewingBuddy && (
+        <div className="bg-blue-600 px-4 py-2 flex items-center justify-between shadow-md relative z-30">
+          <div className="flex items-center gap-2 text-white">
+            <Users className="w-4 h-4" />
+            <span className="text-sm font-medium">Viewing {profiles[viewingBuddy]?.name}'s Profile</span>
+          </div>
+          <button
+            onClick={() => setViewingBuddy(null)}
+            className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full font-medium transition-colors"
+          >
+            Exit View
+          </button>
+        </div>
+      )}
 
       {/* Profile Switcher Modal */}
       {showProfileSwitcher && (
@@ -1618,7 +1729,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <div className="flex flex-col gap-3 max-w-xs mx-auto">
                   <button
                     onClick={() => openAiGenerator(currentWeek)}
-                    className="py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
+                    disabled={viewingBuddy}
+                    className={`py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <Brain className="w-5 h-5" />
                     Generate Week {currentWeek} with AI
@@ -1663,7 +1775,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="none" className="text-zinc-800" />
                           <circle
                             cx="32" cy="32" r="28" stroke="url(#gradient)" strokeWidth="4" fill="none"
-                            strokeDasharray={`${getCompletionPercentage(currentWeek, currentDay) * 1.76} 176`}
+                            strokeDasharray={`${getCompletionPercentage(currentWeek, currentDay, user.id) * 1.76} 176`}
                             strokeLinecap="round"
                           />
                           <defs>
@@ -1674,7 +1786,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           </defs>
                         </svg>
                         <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                          {getCompletionPercentage(currentWeek, currentDay)}%
+                          {getCompletionPercentage(currentWeek, currentDay, user.id)}%
                         </span>
                       </div>
                     )}
@@ -1720,7 +1832,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           {Array.from({ length: exercise.sets }).map((_, setIdx) => {
                             const percentage = exercise.percentages?.[setIdx];
                             const weight = percentage ? calculateWeight(percentage, user?.maxes || {}, exercise.name) : null;
-                            const logged = isSetLogged(exIdx, setIdx);
+                            const logged = isSetLogged(exIdx, setIdx, user.id);
 
                             return (
                               <div
@@ -1730,15 +1842,22 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                                   : 'bg-zinc-800/40 hover:bg-zinc-800/60'
                                   }`}
                               >
-                                <button
-                                  onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${logged
-                                    ? 'bg-green-500 text-white'
-                                    : 'bg-zinc-700 hover:bg-zinc-600'
-                                    }`}
-                                >
-                                  {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
-                                </button>
+                                {viewingBuddy ? (
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${logged ? 'bg-green-500 text-white' : 'bg-zinc-700'}`}>
+                                    {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${logged
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-zinc-700 hover:bg-zinc-600'
+                                      }`}
+                                  >
+                                    {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                                  </button>
+                                )}
+
                                 <div className="flex-1">
                                   <div className="flex items-baseline gap-2">
                                     {weight ? (
@@ -1772,12 +1891,14 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <h2 className="text-2xl font-bold mb-1">1 Rep Maxes</h2>
                 <p className="text-zinc-400">Track your strength progress</p>
               </div>
-              <button
-                onClick={() => setShowAddLift(true)}
-                className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+              {!viewingBuddy && (
+                <button
+                  onClick={() => setShowAddLift(true)}
+                  className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -1821,18 +1942,22 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           <span className="text-2xl font-bold">{weight}</span>
                           <span className="text-zinc-400 ml-1">lbs</span>
                         </div>
-                        <button
-                          onClick={() => { setEditingMax(lift); setTempMaxValue(weight.toString()); }}
-                          className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteLift(lift)}
-                          className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!viewingBuddy && (
+                          <>
+                            <button
+                              onClick={() => { setEditingMax(lift); setTempMaxValue(weight.toString()); }}
+                              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteLift(lift)}
+                              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1886,7 +2011,8 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   while (workoutProgram[nextWeek]) nextWeek++;
                   openAiGenerator(nextWeek);
                 }}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                disabled={viewingBuddy}
+                className={`w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Zap className="w-5 h-5" />
                 Generate Next Week's Program
@@ -1980,7 +2106,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl p-5 border border-orange-500/20">
                 <Flame className="w-8 h-8 text-orange-500 mb-3" />
-                <p className="text-3xl font-bold">{getTotalCompletedSets()}</p>
+                <p className="text-3xl font-bold">{getTotalCompletedSets(user.id)}</p>
                 <p className="text-sm text-zinc-400">Sets Completed</p>
               </div>
               <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
@@ -2022,6 +2148,160 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             </div>
           </>
         )}
+        {activeTab === 'buddies' && (
+          <>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">Gym Buddies</h2>
+              <p className="text-zinc-400">Train together, grow together</p>
+            </div>
+
+            {/* Friend Requests */}
+            {user.receivedRequests?.length > 0 && (
+              <div className="mb-8">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-orange-400">
+                  <UserPlus className="w-5 h-5" />
+                  Buddy Requests ({user.receivedRequests.length})
+                </h3>
+                <div className="space-y-3">
+                  {user.receivedRequests.map((req) => {
+                    const requester = profiles[req.from];
+                    if (!requester) return null;
+                    return (
+                      <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
+                            {requester.avatar}
+                          </div>
+                          <div>
+                            <p className="font-semibold">{requester.name}</p>
+                            <p className="text-xs text-zinc-400">Wants to be buddies</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => acceptBuddyRequest(req.from)}
+                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => declineBuddyRequest(req.from)}
+                            className="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* My Buddies List */}
+            <div className="mb-8">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                My Buddies
+              </h3>
+              {user.buddies?.length > 0 ? (
+                <div className="grid gap-3">
+                  {user.buddies.map(buddyId => {
+                    const buddy = profiles[buddyId];
+                    if (!buddy) return null;
+                    return (
+                      <div key={buddyId} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
+                            {buddy.avatar}
+                          </div>
+                          <div>
+                            <p className="font-bold">{buddy.name}</p>
+                            <p className="text-xs text-zinc-400">
+                              Max Bench: {buddy.maxes['Bench Press'] || 0} lbs
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setViewingBuddy(buddyId); setActiveTab('workout'); }}
+                            className="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg text-sm font-medium"
+                          >
+                            View Profile
+                          </button>
+                          <button
+                            onClick={() => { if (confirm('Remove buddy?')) removeBuddy(buddyId); }}
+                            className="p-2 text-zinc-500 hover:text-red-400"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
+                  <p className="text-zinc-500 text-sm">You haven't added any gym buddies yet.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Find Buddies */}
+            <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
+              <h3 className="font-bold mb-4">Find Buddies</h3>
+              <div className="relative mb-4">
+                <input
+                  type="text"
+                  value={buddiesSearch}
+                  onChange={(e) => setBuddiesSearch(e.target.value)}
+                  placeholder="Search by name..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
+              </div>
+
+              {buddiesSearch.trim() && (
+                <div className="space-y-2">
+                  {Object.values(profiles)
+                    .filter(p =>
+                      p.id !== currentUser &&
+                      !user.buddies?.includes(p.id) &&
+                      p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
+                    )
+                    .map(p => {
+                      const isPending = user.sentRequests?.some(r => r.to === p.id);
+                      return (
+                        <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">{p.avatar}</span>
+                            <span className="font-medium">{p.name}</span>
+                          </div>
+                          <button
+                            onClick={() => sendBuddyRequest(p.id)}
+                            disabled={isPending}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${isPending
+                              ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                              }`}
+                          >
+                            {isPending ? 'Request Sent' : 'Add Buddy'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  {Object.values(profiles).filter(p =>
+                    p.id !== currentUser &&
+                    !user.buddies?.includes(p.id) &&
+                    p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
+                  ).length === 0 && (
+                      <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
+                    )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </main>
 
       {/* Bottom Navigation */}
@@ -2030,6 +2310,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
           {[
             { id: 'workout', icon: Dumbbell, label: 'Workout' },
             { id: 'maxes', icon: Target, label: '1RM' },
+            { id: 'buddies', icon: Users, label: 'Buddies' },
             { id: 'ai', icon: Brain, label: 'AI Coach' },
             { id: 'progress', icon: BarChart3, label: 'Progress' },
           ].map(tab => (
