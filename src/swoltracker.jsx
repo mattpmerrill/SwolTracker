@@ -665,12 +665,11 @@ export default function SwolTracker() {
     };
 
     loadData();
-    loadData();
   }, [authLoading]);
 
   // Handle Confetti and Notification Clearing when visiting Buddies tab
   useEffect(() => {
-    if (activeTab === 'buddies' && user.acceptedNotifications?.length > 0) {
+    if (activeTab === 'buddies' && user?.acceptedNotifications?.length > 0) {
       // Trigger confetti for accepted requests
       confetti({
         particleCount: 150,
@@ -687,7 +686,7 @@ export default function SwolTracker() {
         }
       }));
     }
-  }, [activeTab, currentUser, user.acceptedNotifications]);
+  }, [activeTab, currentUser, user?.acceptedNotifications]);
 
   // Save data to localStorage
   useEffect(() => {
