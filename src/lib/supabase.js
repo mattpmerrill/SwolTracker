@@ -25,7 +25,7 @@ export const signInWithGoogle = async () => {
 
 export const signOut = async () => {
   if (!supabase) return
-  return await supabase.auth.signOut()
+  return await supabase.auth.signOut({ scope: 'local' })
 }
 
 export const getCurrentUser = async () => {
@@ -79,18 +79,17 @@ export const db = {
 
   async createGym(name, userId) {
     if (!supabase) return null
-    const { data: gym } = await supabase
-      .from('gyms')
-      .insert({ name, created_by: userId })
-      .select()
-      .single()
+    // Use database function to create gym and membership atomically
+    const { data, error } = await supabase
+      .rpc('create_user_gym', { user_id: userId, gym_name: name })
 
-    if (gym) {
-      await supabase
-        .from('gym_members')
-        .insert({ gym_id: gym.id, user_id: userId, role: 'owner' })
+    if (error) {
+      console.error('Error creating gym:', error)
+      return null
     }
-    return gym
+
+    // Return gym object with the ID
+    return { id: data }
   },
 
   async joinGym(inviteCode, userId) {
