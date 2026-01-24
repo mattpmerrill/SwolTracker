@@ -345,5 +345,117 @@ export const db = {
       totalSets: data?.length || 0,
       weeksActive: weeks.size
     }
+  },
+
+  // Buddy System
+  async getBuddies(userId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_buddies', { user_id: userId })
+
+    if (error) {
+      console.error('Error fetching buddies:', error)
+      return []
+    }
+    return data || []
+  },
+
+  async getReceivedRequests(userId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_received_requests', { user_id: userId })
+
+    if (error) {
+      console.error('Error fetching received requests:', error)
+      return []
+    }
+    return data || []
+  },
+
+  async getSentRequests(userId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_sent_requests', { user_id: userId })
+
+    if (error) {
+      console.error('Error fetching sent requests:', error)
+      return []
+    }
+    return data || []
+  },
+
+  async searchUsers(searchTerm, currentUserId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('search_users', { search_term: searchTerm, current_user_id: currentUserId })
+
+    if (error) {
+      console.error('Error searching users:', error)
+      return []
+    }
+    return data || []
+  },
+
+  async sendBuddyRequest(senderId, receiverId) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .from('buddy_requests')
+      .insert({ sender_id: senderId, receiver_id: receiverId })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error sending buddy request:', error)
+      return null
+    }
+    return data
+  },
+
+  async acceptBuddyRequest(requestId, userId) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('accept_buddy_request', { request_id: requestId, user_id: userId })
+
+    if (error) {
+      console.error('Error accepting buddy request:', error)
+      return false
+    }
+    return data
+  },
+
+  async declineBuddyRequest(requestId) {
+    if (!supabase) return false
+    const { error } = await supabase
+      .from('buddy_requests')
+      .delete()
+      .eq('id', requestId)
+
+    if (error) {
+      console.error('Error declining buddy request:', error)
+      return false
+    }
+    return true
+  },
+
+  async removeBuddy(userId, buddyId) {
+    if (!supabase) return false
+    // Delete the buddy request (in either direction)
+    const { error } = await supabase
+      .from('buddy_requests')
+      .delete()
+      .or(`and(sender_id.eq.${userId},receiver_id.eq.${buddyId}),and(sender_id.eq.${buddyId},receiver_id.eq.${userId})`)
+
+    if (error) {
+      console.error('Error removing buddy:', error)
+      return false
+    }
+    return true
+  },
+
+  async getBuddyProfile(buddyId) {
+    if (!supabase) return null
+    const profile = await this.getProfile(buddyId)
+    const maxes = await this.getUserMaxes(buddyId)
+    return profile ? { ...profile, maxes } : null
   }
 }

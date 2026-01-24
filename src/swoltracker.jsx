@@ -566,6 +566,13 @@ export default function SwolTracker() {
         // 1. Get or Create Profile
         let profile = await db.getProfile(userId);
 
+        // Load buddy data from Supabase
+        const [buddies, receivedRequests, sentRequests] = await Promise.all([
+          db.getBuddies(userId),
+          db.getReceivedRequests(userId),
+          db.getSentRequests(userId)
+        ]);
+
         // Merge DB profile with local structure
         const mergedProfile = {
           ...defaultProfiles.merrill, // fallback template
@@ -574,9 +581,13 @@ export default function SwolTracker() {
           avatar: authUser.user_metadata.avatar_url || '💪',
           ...profile,
           maxes: (await db.getUserMaxes(userId)) || {},
-          buddies: [],
-          receivedRequests: [],
-          sentRequests: [],
+          buddies: buddies.map(b => b.buddy_id),
+          buddyProfiles: buddies.reduce((acc, b) => {
+            acc[b.buddy_id] = { id: b.buddy_id, name: b.buddy_name, avatar: b.buddy_avatar, email: b.buddy_email };
+            return acc;
+          }, {}),
+          receivedRequests: receivedRequests.map(r => ({ id: r.request_id, from: r.sender_id, name: r.sender_name, avatar: r.sender_avatar, timestamp: r.created_at })),
+          sentRequests: sentRequests.map(r => ({ id: r.request_id, to: r.receiver_id, name: r.receiver_name, avatar: r.receiver_avatar, timestamp: r.created_at })),
           acceptedNotifications: []
         };
 
@@ -820,46 +831,50 @@ export default function SwolTracker() {
   };
 
   // Buddy Management
-  const sendBuddyRequest = (targetId) => {
-    if (targetId === currentUser || profiles[currentUser].buddies?.includes(targetId)) return;
+  const sendBuddyRequest = async (targetId, targetName = '', targetAvatar = '') => {
+    if (targetId === currentUser || profiles[currentUser]?.buddies?.includes(targetId)) return;
 
-    setProfiles(prev => {
-      // Avoid duplicates
-      const existingSent = prev[currentUser].sentRequests?.find(r => r.to === targetId);
-      if (existingSent) return prev;
+    // Check for existing sent request
+    const existingSent = profiles[currentUser]?.sentRequests?.find(r => r.to === targetId);
+    if (existingSent) return;
 
-      return {
-        ...prev,
-        [currentUser]: {
-          ...prev[currentUser],
-          sentRequests: [...(prev[currentUser].sentRequests || []), { to: targetId, timestamp: new Date().toISOString() }]
-        },
-        [targetId]: {
-          ...prev[targetId],
-          receivedRequests: [...(prev[targetId].receivedRequests || []), { from: currentUser, timestamp: new Date().toISOString() }]
-        }
-      };
-    });
+    // Save to Supabase if authenticated
+    if (!demoMode) {
+      const result = await db.sendBuddyRequest(currentUser, targetId);
+      if (!result) return;
+    }
+
+    // Optimistic update
+    setProfiles(prev => ({
+      ...prev,
+      [currentUser]: {
+        ...prev[currentUser],
+        sentRequests: [...(prev[currentUser].sentRequests || []), { to: targetId, name: targetName, avatar: targetAvatar, timestamp: new Date().toISOString() }]
+      }
+    }));
     setBuddiesSearch('');
   };
 
-  const acceptBuddyRequest = (requesterId) => {
+  const acceptBuddyRequest = async (requestId, requesterId, requesterName = '', requesterAvatar = '') => {
+    // Save to Supabase if authenticated
+    if (!demoMode) {
+      const success = await db.acceptBuddyRequest(requestId, currentUser);
+      if (!success) return;
+    }
+
+    // Optimistic update
     setProfiles(prev => {
-      // Remove request from both sides and add to buddies
       const newCurrentUser = { ...prev[currentUser] };
       newCurrentUser.receivedRequests = (newCurrentUser.receivedRequests || []).filter(r => r.from !== requesterId);
       newCurrentUser.buddies = [...(newCurrentUser.buddies || []), requesterId];
-
-      const newRequester = { ...prev[requesterId] };
-      newRequester.sentRequests = (newRequester.sentRequests || []).filter(r => r.to !== currentUser);
-      newRequester.buddies = [...(newRequester.buddies || []), currentUser];
-      // Notify requester that we accepted
-      newRequester.acceptedNotifications = [...(newRequester.acceptedNotifications || []), { from: currentUser, timestamp: new Date().toISOString() }];
+      newCurrentUser.buddyProfiles = {
+        ...(newCurrentUser.buddyProfiles || {}),
+        [requesterId]: { id: requesterId, name: requesterName, avatar: requesterAvatar }
+      };
 
       return {
         ...prev,
-        [currentUser]: newCurrentUser,
-        [requesterId]: newRequester
+        [currentUser]: newCurrentUser
       };
     });
 
@@ -871,39 +886,64 @@ export default function SwolTracker() {
     });
   };
 
-  const declineBuddyRequest = (requesterId) => {
+  const declineBuddyRequest = async (requestId, requesterId) => {
+    // Save to Supabase if authenticated
+    if (!demoMode) {
+      const success = await db.declineBuddyRequest(requestId);
+      if (!success) return;
+    }
+
+    // Optimistic update
     setProfiles(prev => {
       const newCurrentUser = { ...prev[currentUser] };
       newCurrentUser.receivedRequests = (newCurrentUser.receivedRequests || []).filter(r => r.from !== requesterId);
 
-      const newRequester = { ...prev[requesterId] };
-      newRequester.sentRequests = (newRequester.sentRequests || []).filter(r => r.to !== currentUser);
-
       return {
         ...prev,
-        [currentUser]: newCurrentUser,
-        [requesterId]: newRequester
+        [currentUser]: newCurrentUser
       };
     });
   };
 
-  const removeBuddy = (buddyId) => {
+  const removeBuddy = async (buddyId) => {
+    // Save to Supabase if authenticated
+    if (!demoMode) {
+      const success = await db.removeBuddy(currentUser, buddyId);
+      if (!success) return;
+    }
+
+    // Optimistic update
     setProfiles(prev => {
       const newCurrentUser = { ...prev[currentUser] };
       newCurrentUser.buddies = (newCurrentUser.buddies || []).filter(id => id !== buddyId);
-
-      const newBuddy = { ...prev[buddyId] };
-      newBuddy.buddies = (newBuddy.buddies || []).filter(id => id !== currentUser);
+      if (newCurrentUser.buddyProfiles) {
+        delete newCurrentUser.buddyProfiles[buddyId];
+      }
 
       return {
         ...prev,
-        [currentUser]: newCurrentUser,
-        [buddyId]: newBuddy
+        [currentUser]: newCurrentUser
       };
     });
+
     if (viewingBuddy === buddyId) {
       setViewingBuddy(null);
     }
+  };
+
+  // Search users from database
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const searchUsersInDb = async (searchTerm) => {
+    if (!searchTerm.trim() || demoMode) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    const results = await db.searchUsers(searchTerm, currentUser);
+    setSearchResults(results);
+    setSearchLoading(false);
   };
 
   // Equipment management
@@ -2393,28 +2433,29 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </h3>
                 <div className="space-y-3">
                   {user.receivedRequests.map((req) => {
-                    const requester = profiles[req.from];
-                    if (!requester) return null;
+                    // Use request data directly (from database) or fall back to profiles
+                    const requesterName = req.name || profiles[req.from]?.name || 'Unknown';
+                    const requesterAvatar = req.avatar || profiles[req.from]?.avatar || '💪';
                     return (
                       <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
-                            {requester.avatar}
+                            {requesterAvatar}
                           </div>
                           <div>
-                            <p className="font-semibold">{requester.name}</p>
+                            <p className="font-semibold">{requesterName}</p>
                             <p className="text-xs text-zinc-400">Wants to be buddies</p>
                           </div>
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => acceptBuddyRequest(req.from)}
+                            onClick={() => acceptBuddyRequest(req.id, req.from, requesterName, requesterAvatar)}
                             className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"
                           >
                             <Check className="w-5 h-5" />
                           </button>
                           <button
-                            onClick={() => declineBuddyRequest(req.from)}
+                            onClick={() => declineBuddyRequest(req.id, req.from)}
                             className="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg"
                           >
                             <X className="w-5 h-5" />
@@ -2436,18 +2477,19 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               {user.buddies?.length > 0 ? (
                 <div className="grid gap-3">
                   {user.buddies.map(buddyId => {
-                    const buddy = profiles[buddyId];
+                    // Use buddyProfiles from database or fall back to profiles
+                    const buddy = user.buddyProfiles?.[buddyId] || profiles[buddyId];
                     if (!buddy) return null;
                     return (
                       <div key={buddyId} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                            {buddy.avatar}
+                            {buddy.avatar || '💪'}
                           </div>
                           <div>
                             <p className="font-bold">{buddy.name}</p>
                             <p className="text-xs text-zinc-400">
-                              Max Bench: {buddy.maxes['Bench Press'] || 0} lbs
+                              {buddy.email || 'Gym Buddy'}
                             </p>
                           </div>
                         </div>
@@ -2483,68 +2525,79 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <input
                   type="text"
                   value={buddiesSearch}
-                  onChange={(e) => setBuddiesSearch(e.target.value)}
-                  placeholder="Search by name..."
+                  onChange={(e) => {
+                    setBuddiesSearch(e.target.value);
+                    if (e.target.value.trim()) {
+                      searchUsersInDb(e.target.value);
+                    } else {
+                      setSearchResults([]);
+                    }
+                  }}
+                  placeholder="Search by name or email..."
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
                 />
                 <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
+                {searchLoading && (
+                  <div className="absolute right-3 top-3.5">
+                    <div className="w-5 h-5 border-2 border-zinc-600 border-t-blue-500 rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
 
               {buddiesSearch.trim() && (
                 <div className="space-y-2">
-                  {Object.values(profiles)
-                    .filter(p =>
-                      p.id !== currentUser &&
-                      p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
-                    )
-                    .map(p => {
-                      const myProfile = profiles[currentUser] || {};
-                      const isBuddy = myProfile.buddies?.includes(p.id);
-                      const isPending = myProfile.sentRequests?.some(r => r.to === p.id);
-                      const isIncoming = myProfile.receivedRequests?.some(r => r.from === p.id);
+                  {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())) : searchResults).map(p => {
+                    const myProfile = profiles[currentUser] || {};
+                    const oderId = p.user_id || p.id;
+                    const userName = p.name;
+                    const userAvatar = p.avatar || '💪';
+                    const isBuddy = myProfile.buddies?.includes(oderId);
+                    const isPending = myProfile.sentRequests?.some(r => r.to === oderId);
+                    const isIncoming = myProfile.receivedRequests?.some(r => r.from === oderId);
+                    const incomingReq = myProfile.receivedRequests?.find(r => r.from === oderId);
 
-                      return (
-                        <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">{p.avatar}</span>
-                            <span className="font-medium">{p.name}</span>
+                    return (
+                      <div key={oderId} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{userAvatar}</span>
+                          <div>
+                            <span className="font-medium">{userName}</span>
+                            {p.email && <p className="text-xs text-zinc-500">{p.email}</p>}
                           </div>
-
-                          {isBuddy ? (
-                            <button
-                              onClick={() => { setViewingBuddy(p.id); setActiveTab('workout'); }}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                            >
-                              View Profile
-                            </button>
-                          ) : isPending ? (
-                            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-400 cursor-not-allowed">
-                              Request Sent
-                            </button>
-                          ) : isIncoming ? (
-                            <button
-                              onClick={() => acceptBuddyRequest(p.id)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
-                            >
-                              Accept Request
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => sendBuddyRequest(p.id)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
-                            >
-                              Add Buddy
-                            </button>
-                          )}
                         </div>
-                      );
-                    })}
-                  {Object.values(profiles).filter(p =>
-                    p.id !== currentUser &&
-                    p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
-                  ).length === 0 && (
-                      <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
-                    )}
+
+                        {isBuddy ? (
+                          <button
+                            onClick={() => { setViewingBuddy(oderId); setActiveTab('workout'); }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                          >
+                            View Profile
+                          </button>
+                        ) : isPending ? (
+                          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-400 cursor-not-allowed">
+                            Request Sent
+                          </button>
+                        ) : isIncoming ? (
+                          <button
+                            onClick={() => acceptBuddyRequest(incomingReq?.id, oderId, userName, userAvatar)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
+                          >
+                            Accept Request
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => sendBuddyRequest(oderId, userName, userAvatar)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
+                          >
+                            Add Buddy
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())).length === 0 : searchResults.length === 0 && !searchLoading) && (
+                    <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
+                  )}
                 </div>
               )}
             </div>
