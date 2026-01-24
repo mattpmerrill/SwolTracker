@@ -2500,7 +2500,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                       p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
                     )
                     .map(p => {
-                      const myProfile = profiles[currentUser];
+                      const myProfile = profiles[currentUser] || {};
                       const isBuddy = myProfile.buddies?.includes(p.id);
                       const isPending = myProfile.sentRequests?.some(r => r.to === p.id);
                       const isIncoming = myProfile.receivedRequests?.some(r => r.from === p.id);
