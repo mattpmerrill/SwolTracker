@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle } from 'lucide-react';
+import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 
 // Default workout program data (used when no database or for demo)
@@ -253,6 +254,7 @@ const defaultProfiles = {
     buddies: [],
     receivedRequests: [],
     sentRequests: [],
+    acceptedNotifications: [],
   },
   wren: {
     id: 'wren',
@@ -271,6 +273,7 @@ const defaultProfiles = {
     buddies: [],
     receivedRequests: [],
     sentRequests: [],
+    acceptedNotifications: [],
   },
 };
 
@@ -577,7 +580,29 @@ export default function SwolTracker() {
     };
 
     loadData();
+    loadData();
   }, [authLoading]);
+
+  // Handle Confetti and Notification Clearing when visiting Buddies tab
+  useEffect(() => {
+    if (activeTab === 'buddies' && user.acceptedNotifications?.length > 0) {
+      // Trigger confetti for accepted requests
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      // Clear notifications
+      setProfiles(prev => ({
+        ...prev,
+        [currentUser]: {
+          ...prev[currentUser],
+          acceptedNotifications: []
+        }
+      }));
+    }
+  }, [activeTab, currentUser, user.acceptedNotifications]);
 
   // Save data to localStorage
   useEffect(() => {
@@ -693,6 +718,7 @@ export default function SwolTracker() {
         buddies: [],
         receivedRequests: [],
         sentRequests: [],
+        acceptedNotifications: [],
       }
     }));
     setNewUserName('');
@@ -745,12 +771,21 @@ export default function SwolTracker() {
       const newRequester = { ...prev[requesterId] };
       newRequester.sentRequests = (newRequester.sentRequests || []).filter(r => r.to !== currentUser);
       newRequester.buddies = [...(newRequester.buddies || []), currentUser];
+      // Notify requester that we accepted
+      newRequester.acceptedNotifications = [...(newRequester.acceptedNotifications || []), { from: currentUser, timestamp: new Date().toISOString() }];
 
       return {
         ...prev,
         [currentUser]: newCurrentUser,
         [requesterId]: newRequester
       };
+    });
+
+    // Trigger confetti immediately for the accepting user
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 }
     });
   };
 
@@ -2431,19 +2466,36 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             { id: 'maxes', icon: Target, label: '1RM' },
             { id: 'buddies', icon: Users, label: 'Buddies' },
             { id: 'progress', icon: BarChart3, label: 'Progress' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${activeTab === tab.id
-                ? 'text-orange-500'
-                : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-            >
-              <tab.icon className="w-6 h-6" />
-              <span className="text-xs font-medium">{tab.label}</span>
-            </button>
-          ))}
+          ].map(tab => {
+            // Check for notifications
+            let notificationCount = 0;
+            if (tab.id === 'buddies' && user) {
+              const pendingRequests = user.receivedRequests?.length || 0;
+              const acceptedNotifs = user.acceptedNotifications?.length || 0;
+              notificationCount = pendingRequests + acceptedNotifs;
+            }
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all relative ${activeTab === tab.id
+                  ? 'text-orange-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+              >
+                <div className="relative">
+                  <tab.icon className="w-6 h-6" />
+                  {notificationCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-zinc-900">
+                      {notificationCount}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav >
     </div >
