@@ -1114,39 +1114,62 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {/* Profile List */}
             <div className="space-y-3">
-              {Object.entries(profiles).map(([id, profile]) => (
-                <div
-                  key={id}
-                  className={`p-4 rounded-2xl flex items-center gap-4 transition-all ${currentUser === id
-                    ? 'bg-gradient-to-r from-orange-500/20 to-red-500/20 border-2 border-orange-500/50'
-                    : 'bg-zinc-800/50 border-2 border-transparent hover:border-zinc-700'
-                    }`}
-                >
-                  <button
-                    onClick={() => { setCurrentUser(id); setShowProfileSwitcher(false); }}
-                    className="flex items-center gap-4 flex-1"
+              {Object.entries(profiles)
+                .filter(([id, _]) => id === currentUser || user.buddies?.includes(id))
+                .map(([id, profile]) => (
+                  <div
+                    key={id}
+                    className={`p-4 rounded-2xl flex items-center gap-4 transition-all ${currentUser === id
+                      ? 'bg-gradient-to-r from-orange-500/20 to-red-500/20 border-2 border-orange-500/50'
+                      : 'bg-zinc-800/50 border-2 border-transparent hover:border-zinc-700'
+                      }`}
                   >
-                    <span className="text-3xl">{profile.avatar}</span>
-                    <div className="text-left">
-                      <p className="font-semibold text-lg">{profile.name}</p>
-                      <p className="text-sm text-zinc-400">
-                        Bench: {profile.maxes['Bench Press'] || 0} lbs • Squat: {profile.maxes['Back Squat'] || 0} lbs
-                      </p>
-                    </div>
-                  </button>
-                  {currentUser === id && <Check className="w-6 h-6 text-orange-500" />}
-                  {Object.keys(profiles).length > 1 && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); deleteUser(id); }}
-                      className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
+                      onClick={() => { setCurrentUser(id); setShowProfileSwitcher(false); }}
+                      className="flex items-center gap-4 flex-1"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <span className="text-3xl">{profile.avatar}</span>
+                      <div className="text-left">
+                        <p className="font-semibold text-lg">{profile.name}</p>
+                        <p className="text-sm text-zinc-400">
+                          Bench: {profile.maxes['Bench Press'] || 0} lbs • Squat: {profile.maxes['Back Squat'] || 0} lbs
+                        </p>
+                      </div>
                     </button>
-                  )}
-                </div>
-              ))}
+                    {currentUser === id && <Check className="w-6 h-6 text-orange-500" />}
+                    {Object.keys(profiles).length > 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteUser(id); }}
+                        className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+              {/* Debug / Demo Option to see all users */}
+              <div className="pt-4 border-t border-zinc-800 mt-4">
+                <p className="text-xs text-zinc-500 mb-2">Debug Actions</p>
+                <button
+                  onClick={() => {
+                    // Demo hack: Show a prompt or simple list to switch to any user
+                    const allUsers = Object.keys(profiles).join(', ');
+                    const target = prompt(`Demo Switch: Enter username to switch to:\nAvailable: ${allUsers}`);
+                    if (target && profiles[target]) {
+                      setCurrentUser(target);
+                      setShowProfileSwitcher(false);
+                    }
+                  }}
+                  className="w-full p-3 rounded-xl bg-zinc-800/50 text-xs text-zinc-400 hover:text-white transition-colors border border-zinc-700/50 border-dashed"
+                >
+                  Force Switch Profile (Demo)
+                </button>
+              </div>
             </div>
+
             <button
               onClick={() => { setShowProfileSwitcher(false); setShowAddUser(true); }}
               className="w-full mt-4 p-4 rounded-2xl bg-zinc-800/50 border-2 border-dashed border-zinc-700 font-semibold hover:border-orange-500/50 transition-colors flex items-center justify-center gap-2"
@@ -1156,7 +1179,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             </button>
 
             {/* Logout Button */}
-            <button
+            < button
               onClick={handleLogout}
               className="w-full mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 font-semibold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 text-red-400"
             >
@@ -1228,6 +1251,45 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* AI Coach Section */}
+            <div className="mb-6 bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl border border-green-500/20 p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                  <Brain className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold">AI Coach</h3>
+                  <p className="text-xs text-zinc-400">Powered by ChatGPT</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  let nextWeek = 1;
+                  while (workoutProgram[nextWeek]) nextWeek++;
+                  openAiGenerator(nextWeek);
+                  setShowSettings(false);
+                }}
+                disabled={currentUser !== user.id}
+                className={`w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 text-sm ${currentUser !== user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Zap className="w-4 h-4" />
+                Generate Next Week's Program
+              </button>
+
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(weekNum => {
+                  const hasProgram = workoutProgram[weekNum];
+                  return (
+                    <div key={weekNum} className={`p-2 rounded-lg border text-center ${hasProgram ? 'bg-green-500/20 border-green-500/30' : 'bg-zinc-800/50 border-zinc-700'}`}>
+                      <p className="text-xs font-bold text-zinc-300">W{weekNum}</p>
+                      {hasProgram && <Check className="w-3 h-3 text-green-500 mx-auto mt-1" />}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* OpenAI API Key */}
@@ -1358,976 +1420,881 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         </div>
       )}
 
-      {/* Add Lift Modal */}
-      {showAddLift && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6">
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Add 1RM Lift</h2>
-              <button onClick={() => setShowAddLift(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">Lift Name</label>
-                <input
-                  type="text"
-                  value={newLiftName}
-                  onChange={(e) => setNewLiftName(e.target.value)}
-                  placeholder="e.g. Sumo Deadlift"
-                  className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
+      {/* Settings Modal */}
+      {
+        showSettings && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
+            <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 max-h-[80vh] overflow-y-auto">
+              <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">Settings</h2>
+                <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">1RM Weight (lbs)</label>
-                <input
-                  type="number"
-                  value={newLiftWeight}
-                  onChange={(e) => setNewLiftWeight(e.target.value)}
-                  placeholder="e.g. 315"
-                  className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
-              <button
-                onClick={addNewLift}
-                disabled={!newLiftName.trim() || !newLiftWeight}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                Add Lift
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* AI Workout Generator Modal */}
-      {showAiGenerator && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center overflow-y-auto">
-          <div className="w-full max-w-2xl bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 my-4 max-h-[90vh] overflow-y-auto">
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
-
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                  <Brain className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">AI Workout Generator</h2>
-                  <p className="text-sm text-zinc-400">Powered by ChatGPT • Week {generationWeek}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAiGenerator(false)}
-                className="p-2 hover:bg-zinc-800 rounded-lg"
-                disabled={aiLoading}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {!generatedPreview ? (
-              <>
-                {/* API Key Status/Input */}
-                {openaiKey ? (
-                  <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-sm text-green-400 font-medium">API Key Ready</p>
-                        <p className="text-xs text-zinc-500 font-mono">{openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}</p>
+              {/* Add Lift Modal */}
+              {
+                showAddLift && (
+                  <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
+                    <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6">
+                      <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
+                      <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold">Add 1RM Lift</h2>
+                        <button onClick={() => setShowAddLift(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm text-zinc-400 mb-2 block">Lift Name</label>
+                          <input
+                            type="text"
+                            value={newLiftName}
+                            onChange={(e) => setNewLiftName(e.target.value)}
+                            placeholder="e.g. Sumo Deadlift"
+                            className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-zinc-400 mb-2 block">1RM Weight (lbs)</label>
+                          <input
+                            type="number"
+                            value={newLiftWeight}
+                            onChange={(e) => setNewLiftWeight(e.target.value)}
+                            placeholder="e.g. 315"
+                            className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        <button
+                          onClick={addNewLift}
+                          disabled={!newLiftName.trim() || !newLiftWeight}
+                          className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                          Add Lift
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setShowSettings(true)}
-                      className="text-xs text-zinc-400 hover:text-white"
-                    >
-                      Manage in Settings
-                    </button>
                   </div>
-                ) : showApiKeyInput ? (
-                  <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                    <h3 className="font-semibold text-yellow-400 mb-2">OpenAI API Key Required</h3>
-                    <input
-                      type="password"
-                      value={openaiKey}
-                      onChange={(e) => {
-                        const newKey = e.target.value;
-                        setOpenaiKey(newKey);
-                        if (newKey.startsWith('sk-') && newKey.length > 20) {
-                          localStorage.setItem('swoltracker-openai-key', newKey);
-                        }
-                      }}
-                      placeholder="sk-..."
-                      className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm mb-2"
-                    />
-                    <p className="text-xs text-zinc-400">
-                      Get your API key at <span className="text-yellow-400">platform.openai.com</span>. Key will be saved automatically.
-                    </p>
-                  </div>
-                ) : null}
+                )
+              }
 
-                {/* Context Summary */}
-                <div className="space-y-4 mb-6">
-                  {/* Athletes */}
-                  <div className="bg-zinc-800/50 rounded-xl p-4">
-                    <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
-                      <User className="w-4 h-4 text-orange-500" />
-                      Athletes
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(profiles).map(([id, p]) => (
-                        <div key={id} className="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
-                          <span>{p.avatar}</span>
-                          <span className="text-sm font-medium">{p.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {/* AI Workout Generator Modal */}
+              {
+                showAiGenerator && (
+                  <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center overflow-y-auto">
+                    <div className="w-full max-w-2xl bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 my-4 max-h-[90vh] overflow-y-auto">
+                      <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
 
-                  {/* Equipment */}
-                  <div className="bg-zinc-800/50 rounded-xl p-4">
-                    <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-green-500" />
-                      Available Equipment ({equipment.length} items)
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {equipment.slice(0, 10).map(item => (
-                        <span key={item} className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                          {item}
-                        </span>
-                      ))}
-                      {equipment.length > 10 && (
-                        <span className="text-xs text-zinc-400 px-2 py-1">
-                          +{equipment.length - 10} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Previous Weeks */}
-                  <div className="bg-zinc-800/50 rounded-xl p-4">
-                    <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-blue-500" />
-                      Building From Previous Weeks
-                    </h3>
-                    <div className="flex gap-2">
-                      {[generationWeek - 3, generationWeek - 2, generationWeek - 1].map(w => (
-                        w > 0 && (
-                          <div
-                            key={w}
-                            className={`flex-1 p-3 rounded-lg text-center ${workoutProgram[w]
-                              ? 'bg-green-500/20 border border-green-500/30'
-                              : 'bg-zinc-700/30 border border-zinc-600/30'
-                              }`}
-                          >
-                            <p className="text-xs text-zinc-400">Week {w}</p>
-                            <p className="text-sm font-medium">
-                              {workoutProgram[w] ? '✓ Available' : 'No data'}
-                            </p>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                            <Brain className="w-6 h-6" />
                           </div>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                          <div>
+                            <h2 className="text-xl font-bold">AI Workout Generator</h2>
+                            <p className="text-sm text-zinc-400">Powered by ChatGPT • Week {generationWeek}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowAiGenerator(false)}
+                          className="p-2 hover:bg-zinc-800 rounded-lg"
+                          disabled={aiLoading}
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
 
-                {/* Notes Input */}
-                <div className="mb-6">
-                  <label className="text-sm font-medium text-zinc-300 mb-2 block">
-                    Special Requests or Notes for AI Coach
-                  </label>
-                  <textarea
-                    value={aiNotes}
-                    onChange={(e) => setAiNotes(e.target.value)}
-                    placeholder="Examples:
+                      {!generatedPreview ? (
+                        <>
+                          {/* API Key Status/Input */}
+                          {openaiKey ? (
+                            <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                                <div>
+                                  <p className="text-sm text-green-400 font-medium">API Key Ready</p>
+                                  <p className="text-xs text-zinc-500 font-mono">{openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => setShowSettings(true)}
+                                className="text-xs text-zinc-400 hover:text-white"
+                              >
+                                Manage in Settings
+                              </button>
+                            </div>
+                          ) : showApiKeyInput ? (
+                            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                              <h3 className="font-semibold text-yellow-400 mb-2">OpenAI API Key Required</h3>
+                              <input
+                                type="password"
+                                value={openaiKey}
+                                onChange={(e) => {
+                                  const newKey = e.target.value;
+                                  setOpenaiKey(newKey);
+                                  if (newKey.startsWith('sk-') && newKey.length > 20) {
+                                    localStorage.setItem('swoltracker-openai-key', newKey);
+                                  }
+                                }}
+                                placeholder="sk-..."
+                                className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm mb-2"
+                              />
+                              <p className="text-xs text-zinc-400">
+                                Get your API key at <span className="text-yellow-400">platform.openai.com</span>. Key will be saved automatically.
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {/* Context Summary */}
+                          <div className="space-y-4 mb-6">
+                            {/* Athletes */}
+                            <div className="bg-zinc-800/50 rounded-xl p-4">
+                              <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                                <User className="w-4 h-4 text-orange-500" />
+                                Athletes
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(profiles).map(([id, p]) => (
+                                  <div key={id} className="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
+                                    <span>{p.avatar}</span>
+                                    <span className="text-sm font-medium">{p.name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Equipment */}
+                            <div className="bg-zinc-800/50 rounded-xl p-4">
+                              <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                                <Package className="w-4 h-4 text-green-500" />
+                                Available Equipment ({equipment.length} items)
+                              </h3>
+                              <div className="flex flex-wrap gap-1.5">
+                                {equipment.slice(0, 10).map(item => (
+                                  <span key={item} className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
+                                    {item}
+                                  </span>
+                                ))}
+                                {equipment.length > 10 && (
+                                  <span className="text-xs text-zinc-400 px-2 py-1">
+                                    +{equipment.length - 10} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Previous Weeks */}
+                            <div className="bg-zinc-800/50 rounded-xl p-4">
+                              <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-blue-500" />
+                                Building From Previous Weeks
+                              </h3>
+                              <div className="flex gap-2">
+                                {[generationWeek - 3, generationWeek - 2, generationWeek - 1].map(w => (
+                                  w > 0 && (
+                                    <div
+                                      key={w}
+                                      className={`flex-1 p-3 rounded-lg text-center ${workoutProgram[w]
+                                        ? 'bg-green-500/20 border border-green-500/30'
+                                        : 'bg-zinc-700/30 border border-zinc-600/30'
+                                        }`}
+                                    >
+                                      <p className="text-xs text-zinc-400">Week {w}</p>
+                                      <p className="text-sm font-medium">
+                                        {workoutProgram[w] ? '✓ Available' : 'No data'}
+                                      </p>
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Notes Input */}
+                          <div className="mb-6">
+                            <label className="text-sm font-medium text-zinc-300 mb-2 block">
+                              Special Requests or Notes for AI Coach
+                            </label>
+                            <textarea
+                              value={aiNotes}
+                              onChange={(e) => setAiNotes(e.target.value)}
+                              placeholder="Examples:
 • Focus more on upper body this week
 • Include more Olympic lifting
 • I have a shoulder injury - avoid overhead pressing
 • Increase conditioning intensity
 • Add more core work"
-                    className="w-full h-32 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none"
-                  />
-                </div>
+                              className="w-full h-32 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none"
+                            />
+                          </div>
 
-                {/* Error Message */}
-                {aiError && (
-                  <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-red-400 text-sm">Generation Failed</p>
-                      <p className="text-sm text-red-300/80 mt-1">{aiError}</p>
-                    </div>
-                  </div>
-                )}
+                          {/* Error Message */}
+                          {aiError && (
+                            <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-start gap-3">
+                              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="font-medium text-red-400 text-sm">Generation Failed</p>
+                                <p className="text-sm text-red-300/80 mt-1">{aiError}</p>
+                              </div>
+                            </div>
+                          )}
 
-                {/* Generate Button */}
-                <button
-                  onClick={generateAiWorkout}
-                  disabled={aiLoading || !openaiKey}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
-                >
-                  {aiLoading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Generating Week {generationWeek}...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-5 h-5" />
-                      Generate Workout Program
-                    </>
-                  )}
-                </button>
+                          {/* Generate Button */}
+                          <button
+                            onClick={generateAiWorkout}
+                            disabled={aiLoading || !openaiKey}
+                            className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
+                          >
+                            {aiLoading ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                Generating Week {generationWeek}...
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-5 h-5" />
+                                Generate Workout Program
+                              </>
+                            )}
+                          </button>
 
-                <p className="text-xs text-zinc-500 text-center mt-4">
-                  Uses GPT-4o to analyze your history and create a progressive program
-                </p>
-              </>
-            ) : (
-              <>
-                {/* Preview Generated Workout */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="font-semibold text-green-400">Workout Generated Successfully!</span>
-                  </div>
+                          <p className="text-xs text-zinc-500 text-center mt-4">
+                            Uses GPT-4o to analyze your history and create a progressive program
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          {/* Preview Generated Workout */}
+                          <div className="mb-6">
+                            <div className="flex items-center gap-2 mb-4">
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                              <span className="font-semibold text-green-400">Workout Generated Successfully!</span>
+                            </div>
 
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                    {Object.entries(generatedPreview).map(([day, workout]) => (
-                      <div key={day} className="bg-zinc-800/50 rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">{day}</h4>
-                          <span className={`text-xs px-2 py-1 rounded ${workout.focus === 'Upper Body'
-                            ? 'bg-orange-500/20 text-orange-400'
-                            : workout.focus === 'Lower Body'
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-blue-500/20 text-blue-400'
-                            }`}>
-                            {workout.focus}
-                          </span>
-                        </div>
-                        {workout.exercises?.length > 0 ? (
-                          <ul className="space-y-1">
-                            {workout.exercises.map((ex, i) => (
-                              <li key={i} className="text-sm text-zinc-400">
-                                • {ex.name}: {ex.sets}×{ex.reps}
-                                {ex.percentages && <span className="text-zinc-500"> @ {ex.percentages.join('/')}%</span>}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-zinc-500">Rest and recovery</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                              {Object.entries(generatedPreview).map(([day, workout]) => (
+                                <div key={day} className="bg-zinc-800/50 rounded-xl p-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-semibold">{day}</h4>
+                                    <span className={`text-xs px-2 py-1 rounded ${workout.focus === 'Upper Body'
+                                      ? 'bg-orange-500/20 text-orange-400'
+                                      : workout.focus === 'Lower Body'
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : 'bg-blue-500/20 text-blue-400'
+                                      }`}>
+                                      {workout.focus}
+                                    </span>
+                                  </div>
+                                  {workout.exercises?.length > 0 ? (
+                                    <ul className="space-y-1">
+                                      {workout.exercises.map((ex, i) => (
+                                        <li key={i} className="text-sm text-zinc-400">
+                                          • {ex.name}: {ex.sets}×{ex.reps}
+                                          {ex.percentages && <span className="text-zinc-500"> @ {ex.percentages.join('/')}%</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-sm text-zinc-500">Rest and recovery</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setGeneratedPreview(null)}
-                    className="flex-1 py-4 rounded-xl bg-zinc-800 font-semibold hover:bg-zinc-700 transition-colors"
-                  >
-                    Regenerate
-                  </button>
-                  <button
-                    onClick={confirmGeneratedWorkout}
-                    className="flex-1 py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                  >
-                    <Check className="w-5 h-5" />
-                    Add to Program
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <main className="px-5 py-6">
-        {activeTab === 'workout' && (
-          <>
-            {/* Week Selector with Real Dates */}
-            <div className="flex items-center justify-between mb-6">
-              <button
-                onClick={() => setCurrentWeek(w => Math.max(1, w - 1))}
-                className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors disabled:opacity-30"
-                disabled={currentWeek === 1}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="text-center">
-                <span className="text-xs font-semibold text-orange-500 uppercase tracking-wider">
-                  {formatDate(weekDates.start)} - {formatDate(weekDates.end)}
-                </span>
-                <h2 className="text-2xl font-bold">Week {currentWeek}</h2>
-                {currentWeek === 4 && (
-                  <span className="text-xs text-green-400 font-medium">Current Week</span>
-                )}
-              </div>
-              <button
-                onClick={() => setCurrentWeek(w => w + 1)}
-                className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Day Selector */}
-            <div className="flex gap-2 overflow-x-auto pb-4 -mx-5 px-5 scrollbar-hide">
-              {days.map((day, idx) => {
-                const dayDate = new Date(weekDates.start);
-                dayDate.setDate(dayDate.getDate() + idx);
-                const isToday = currentWeek === 4 && day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
-
-                return (
-                  <button
-                    key={day}
-                    onClick={() => setCurrentDay(day)}
-                    className={`flex-shrink-0 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${currentDay === day
-                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/25'
-                      : isToday
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60'
-                      }`}
-                  >
-                    <div>{day.slice(0, 3)}</div>
-                    <div className="text-xs opacity-70">{dayDate.getDate()}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* No Workout Programmed State */}
-            {!hasWorkoutProgrammed && (
-              <div className="mt-8 text-center py-12">
-                <div className="relative w-32 h-32 mx-auto mb-6">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-orange-500/20 to-purple-500/20 animate-pulse" />
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-6xl animate-bounce">🏋️</div>
-                  </div>
-                  <div className="absolute -top-2 -right-2 text-2xl animate-bounce" style={{ animationDelay: '0.1s' }}>❓</div>
-                  <div className="absolute -bottom-1 -left-1 text-xl animate-bounce" style={{ animationDelay: '0.3s' }}>✨</div>
-                  <div className="absolute top-0 left-0 text-lg animate-bounce" style={{ animationDelay: '0.2s' }}>💭</div>
-                </div>
-
-                <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
-                  No Workout Planned Yet!
-                </h3>
-                <p className="text-zinc-400 max-w-sm mx-auto mb-6 leading-relaxed">
-                  Week {currentWeek} is uncharted territory! Time to flex those planning muscles.
-                  Use the AI Coach to generate a killer program for this week.
-                </p>
-
-                <div className="flex flex-col gap-3 max-w-xs mx-auto">
-                  <button
-                    onClick={() => openAiGenerator(currentWeek)}
-                    disabled={viewingBuddy}
-                    className={`py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <Brain className="w-5 h-5" />
-                    Generate Week {currentWeek} with AI
-                  </button>
-                  <button
-                    onClick={() => setCurrentWeek(4)}
-                    className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
-                  >
-                    ← Back to Current Week
-                  </button>
-                </div>
-
-                <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
-                  <p className="text-sm text-zinc-400">
-                    🎯 Your Week 4 lifts are looking strong! Keep the momentum going by planning ahead.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Today's Focus */}
-            {hasWorkoutProgrammed && todayWorkout && (
-              <div className="mt-6 mb-6">
-                <div className={`rounded-2xl p-5 ${todayWorkout.focus === 'Rest Day'
-                  ? 'bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20'
-                  : todayWorkout.focus === 'Upper Body'
-                    ? 'bg-gradient-to-br from-orange-500/10 to-yellow-500/10 border border-orange-500/20'
-                    : 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20'
-                  }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">{currentDay}</span>
-                      <h3 className="text-2xl font-bold mt-1">{todayWorkout.focus}</h3>
-                      {todayWorkout.exercises?.length > 0 && (
-                        <p className="text-sm text-zinc-400 mt-1">{todayWorkout.exercises.length} exercises</p>
+                          {/* Action Buttons */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => setGeneratedPreview(null)}
+                              className="flex-1 py-4 rounded-xl bg-zinc-800 font-semibold hover:bg-zinc-700 transition-colors"
+                            >
+                              Regenerate
+                            </button>
+                            <button
+                              onClick={confirmGeneratedWorkout}
+                              className="flex-1 py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                            >
+                              <Check className="w-5 h-5" />
+                              Add to Program
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
-                    {todayWorkout.focus !== 'Rest Day' && (
-                      <div className="relative w-16 h-16">
-                        <svg className="w-16 h-16 transform -rotate-90">
-                          <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="none" className="text-zinc-800" />
-                          <circle
-                            cx="32" cy="32" r="28" stroke="url(#gradient)" strokeWidth="4" fill="none"
-                            strokeDasharray={`${getCompletionPercentage(currentWeek, currentDay, user.id) * 1.76} 176`}
-                            strokeLinecap="round"
-                          />
-                          <defs>
-                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                              <stop offset="0%" stopColor="#f97316" />
-                              <stop offset="100%" stopColor="#ef4444" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                          {getCompletionPercentage(currentWeek, currentDay, user.id)}%
-                        </span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              </div>
-            )}
+                )
+              }
 
-            {/* Exercises */}
-            {hasWorkoutProgrammed && (
-              todayWorkout?.focus === 'Rest Day' ? (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                    <Clock className="w-10 h-10 text-blue-400" />
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">Recovery Day</h3>
-                  <p className="text-zinc-400 max-w-xs mx-auto">
-                    Rest, stretch, and prepare for tomorrow. Your muscles grow when you recover.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {todayWorkout?.exercises?.map((exercise, exIdx) => (
-                    <div key={exIdx} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 overflow-hidden">
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <h4 className="font-bold text-lg leading-tight">{exercise.name}</h4>
-                            <p className="text-sm text-zinc-400 mt-1">{exercise.muscleGroups}</p>
+              {/* Main Content */}
+              <main className="px-5 py-6">
+                {activeTab === 'workout' && (
+                  <>
+                    {/* Week Selector with Real Dates */}
+                    <div className="flex items-center justify-between mb-6">
+                      <button
+                        onClick={() => setCurrentWeek(w => Math.max(1, w - 1))}
+                        className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors disabled:opacity-30"
+                        disabled={currentWeek === 1}
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <div className="text-center">
+                        <span className="text-xs font-semibold text-orange-500 uppercase tracking-wider">
+                          {formatDate(weekDates.start)} - {formatDate(weekDates.end)}
+                        </span>
+                        <h2 className="text-2xl font-bold">Week {currentWeek}</h2>
+                        {currentWeek === 4 && (
+                          <span className="text-xs text-green-400 font-medium">Current Week</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setCurrentWeek(w => w + 1)}
+                        className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Day Selector */}
+                    <div className="flex gap-2 overflow-x-auto pb-4 -mx-5 px-5 scrollbar-hide">
+                      {days.map((day, idx) => {
+                        const dayDate = new Date(weekDates.start);
+                        dayDate.setDate(dayDate.getDate() + idx);
+                        const isToday = currentWeek === 4 && day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => setCurrentDay(day)}
+                            className={`flex-shrink-0 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${currentDay === day
+                              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/25'
+                              : isToday
+                                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60'
+                              }`}
+                          >
+                            <div>{day.slice(0, 3)}</div>
+                            <div className="text-xs opacity-70">{dayDate.getDate()}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* No Workout Programmed State */}
+                    {!hasWorkoutProgrammed && (
+                      <div className="mt-8 text-center py-12">
+                        <div className="relative w-32 h-32 mx-auto mb-6">
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-28 h-28 rounded-full bg-gradient-to-br from-orange-500/20 to-purple-500/20 animate-pulse" />
                           </div>
-                          <div className="flex items-center gap-2 bg-zinc-800/80 px-3 py-1.5 rounded-lg">
-                            <span className="text-sm font-semibold">{exercise.sets}×{exercise.reps}</span>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-6xl animate-bounce">🏋️</div>
                           </div>
+                          <div className="absolute -top-2 -right-2 text-2xl animate-bounce" style={{ animationDelay: '0.1s' }}>❓</div>
+                          <div className="absolute -bottom-1 -left-1 text-xl animate-bounce" style={{ animationDelay: '0.3s' }}>✨</div>
+                          <div className="absolute top-0 left-0 text-lg animate-bounce" style={{ animationDelay: '0.2s' }}>💭</div>
                         </div>
 
-                        {exercise.note && (
-                          <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
-                            <p className="text-xs text-zinc-400">{exercise.note}</p>
+                        <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
+                          No Workout Planned Yet!
+                        </h3>
+                        <p className="text-zinc-400 max-w-sm mx-auto mb-6 leading-relaxed">
+                          Week {currentWeek} is uncharted territory! Time to flex those planning muscles.
+                          Use the AI Coach to generate a killer program for this week.
+                        </p>
+
+                        <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                          <button
+                            onClick={() => openAiGenerator(currentWeek)}
+                            disabled={viewingBuddy}
+                            className={`py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <Brain className="w-5 h-5" />
+                            Generate Week {currentWeek} with AI
+                          </button>
+                          <button
+                            onClick={() => setCurrentWeek(4)}
+                            className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
+                          >
+                            ← Back to Current Week
+                          </button>
+                        </div>
+
+                        <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
+                          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
+                          <p className="text-sm text-zinc-400">
+                            🎯 Your Week 4 lifts are looking strong! Keep the momentum going by planning ahead.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Today's Focus */}
+                    {hasWorkoutProgrammed && todayWorkout && (
+                      <div className="mt-6 mb-6">
+                        <div className={`rounded-2xl p-5 ${todayWorkout.focus === 'Rest Day'
+                          ? 'bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20'
+                          : todayWorkout.focus === 'Upper Body'
+                            ? 'bg-gradient-to-br from-orange-500/10 to-yellow-500/10 border border-orange-500/20'
+                            : 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20'
+                          }`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">{currentDay}</span>
+                              <h3 className="text-2xl font-bold mt-1">{todayWorkout.focus}</h3>
+                              {todayWorkout.exercises?.length > 0 && (
+                                <p className="text-sm text-zinc-400 mt-1">{todayWorkout.exercises.length} exercises</p>
+                              )}
+                            </div>
+                            {todayWorkout.focus !== 'Rest Day' && (
+                              <div className="relative w-16 h-16">
+                                <svg className="w-16 h-16 transform -rotate-90">
+                                  <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="none" className="text-zinc-800" />
+                                  <circle
+                                    cx="32" cy="32" r="28" stroke="url(#gradient)" strokeWidth="4" fill="none"
+                                    strokeDasharray={`${getCompletionPercentage(currentWeek, currentDay, user.id) * 1.76} 176`}
+                                    strokeLinecap="round"
+                                  />
+                                  <defs>
+                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                      <stop offset="0%" stopColor="#f97316" />
+                                      <stop offset="100%" stopColor="#ef4444" />
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+                                  {getCompletionPercentage(currentWeek, currentDay, user.id)}%
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
+                      </div>
+                    )}
 
-                        <div className="space-y-2">
-                          {Array.from({ length: exercise.sets }).map((_, setIdx) => {
-                            const percentage = exercise.percentages?.[setIdx];
-                            const weight = percentage ? calculateWeight(percentage, user?.maxes || {}, exercise.name) : null;
-                            const logged = isSetLogged(exIdx, setIdx, user.id);
-
-                            return (
-                              <div
-                                key={setIdx}
-                                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${logged
-                                  ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30'
-                                  : 'bg-zinc-800/40 hover:bg-zinc-800/60'
-                                  }`}
-                              >
-                                {viewingBuddy ? (
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${logged ? 'bg-green-500 text-white' : 'bg-zinc-700'}`}>
-                                    {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                    {/* Exercises */}
+                    {hasWorkoutProgrammed && (
+                      todayWorkout?.focus === 'Rest Day' ? (
+                        <div className="text-center py-12">
+                          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                            <Clock className="w-10 h-10 text-blue-400" />
+                          </div>
+                          <h3 className="text-xl font-bold mb-2">Recovery Day</h3>
+                          <p className="text-zinc-400 max-w-xs mx-auto">
+                            Rest, stretch, and prepare for tomorrow. Your muscles grow when you recover.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {todayWorkout?.exercises?.map((exercise, exIdx) => (
+                            <div key={exIdx} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 overflow-hidden">
+                              <div className="p-5">
+                                <div className="flex items-start justify-between mb-4">
+                                  <div className="flex-1">
+                                    <h4 className="font-bold text-lg leading-tight">{exercise.name}</h4>
+                                    <p className="text-sm text-zinc-400 mt-1">{exercise.muscleGroups}</p>
                                   </div>
-                                ) : (
-                                  <button
-                                    onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${logged
-                                      ? 'bg-green-500 text-white'
-                                      : 'bg-zinc-700 hover:bg-zinc-600'
-                                      }`}
-                                  >
-                                    {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
-                                  </button>
-                                )}
-
-                                <div className="flex-1">
-                                  <div className="flex items-baseline gap-2">
-                                    {weight ? (
-                                      <>
-                                        <span className="text-lg font-bold">{weight} lbs</span>
-                                        <span className="text-xs text-zinc-400">@ {percentage}% 1RM</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-zinc-400">Bodyweight / As prescribed</span>
-                                    )}
+                                  <div className="flex items-center gap-2 bg-zinc-800/80 px-3 py-1.5 rounded-lg">
+                                    <span className="text-sm font-semibold">{exercise.sets}×{exercise.reps}</span>
                                   </div>
                                 </div>
-                                <span className="text-sm text-zinc-400 font-medium">{exercise.reps}</span>
+
+                                {exercise.note && (
+                                  <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
+                                    <p className="text-xs text-zinc-400">{exercise.note}</p>
+                                  </div>
+                                )}
+
+                                <div className="space-y-2">
+                                  {Array.from({ length: exercise.sets }).map((_, setIdx) => {
+                                    const percentage = exercise.percentages?.[setIdx];
+                                    const weight = percentage ? calculateWeight(percentage, user?.maxes || {}, exercise.name) : null;
+                                    const logged = isSetLogged(exIdx, setIdx, user.id);
+
+                                    return (
+                                      <div
+                                        key={setIdx}
+                                        className={`flex items-center gap-3 p-3 rounded-xl transition-all ${logged
+                                          ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30'
+                                          : 'bg-zinc-800/40 hover:bg-zinc-800/60'
+                                          }`}
+                                      >
+                                        {viewingBuddy ? (
+                                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${logged ? 'bg-green-500 text-white' : 'bg-zinc-700'}`}>
+                                            {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                                          </div>
+                                        ) : (
+                                          <button
+                                            onClick={() => logSet(exIdx, setIdx, { weight, reps: exercise.reps })}
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${logged
+                                              ? 'bg-green-500 text-white'
+                                              : 'bg-zinc-700 hover:bg-zinc-600'
+                                              }`}
+                                          >
+                                            {logged ? <Check className="w-5 h-5" /> : <span className="text-sm font-bold">{setIdx + 1}</span>}
+                                          </button>
+                                        )}
+
+                                        <div className="flex-1">
+                                          <div className="flex items-baseline gap-2">
+                                            {weight ? (
+                                              <>
+                                                <span className="text-lg font-bold">{weight} lbs</span>
+                                                <span className="text-xs text-zinc-400">@ {percentage}% 1RM</span>
+                                              </>
+                                            ) : (
+                                              <span className="text-zinc-400">Bodyweight / As prescribed</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <span className="text-sm text-zinc-400 font-medium">{exercise.reps}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'maxes' && (
+                  <>
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-2xl font-bold mb-1">1 Rep Maxes</h2>
+                        <p className="text-zinc-400">Track your strength progress</p>
+                      </div>
+                      {!viewingBuddy && (
+                        <button
+                          onClick={() => setShowAddLift(true)}
+                          className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      {Object.entries(user?.maxes || {}).map(([lift, weight]) => (
+                        <div key={lift} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-4">
+                          <div className="flex items-center justify-between">
+                            <div
+                              className={`flex-1 cursor-pointer transition-colors ${selectedReferenceExercise === lift ? 'text-orange-500' : 'text-white'}`}
+                              onClick={() => setSelectedReferenceExercise(lift)}
+                            >
+                              <h4 className="font-semibold flex items-center gap-2">
+                                {lift}
+                                {selectedReferenceExercise === lift && <CheckCircle className="w-4 h-4" />}
+                              </h4>
+                            </div>
+                            {editingMax === lift ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  value={tempMaxValue}
+                                  onChange={(e) => setTempMaxValue(e.target.value)}
+                                  className="w-24 px-3 py-2 bg-zinc-800 rounded-lg text-right font-bold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => updateMax(lift, tempMaxValue)}
+                                  className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center hover:bg-green-400"
+                                >
+                                  <Check className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingMax(null)}
+                                  className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center hover:bg-zinc-600"
+                                >
+                                  <X className="w-5 h-5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <span className="text-2xl font-bold">{weight}</span>
+                                  <span className="text-zinc-400 ml-1">lbs</span>
+                                </div>
+                                {!viewingBuddy && (
+                                  <>
+                                    <button
+                                      onClick={() => { setEditingMax(lift); setTempMaxValue(weight.toString()); }}
+                                      className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteLift(lift)}
+                                      className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-8 p-5 bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl border border-orange-500/20">
+                      <h3 className="font-bold mb-4 flex items-center gap-2">
+                        <Target className="w-5 h-5 text-orange-500" />
+                        Quick Reference ({selectedReferenceExercise})
+                      </h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[65, 70, 75, 80, 85, 90].map(pct => (
+                          <div key={pct} className="text-center p-3 bg-zinc-900/50 rounded-xl">
+                            <p className="text-xs text-zinc-400 mb-1">{pct}%</p>
+                            <p className="font-bold">{Math.round((user?.maxes?.[selectedReferenceExercise] || 0) * pct / 100 / 5) * 5}</p>
+                            <p className="text-xs text-zinc-500">lbs</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+
+
+                {activeTab === 'progress' && (
+                  <>
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-bold mb-2">Progress</h2>
+                      <p className="text-zinc-400">Track your gains over time</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl p-5 border border-orange-500/20">
+                        <Flame className="w-8 h-8 text-orange-500 mb-3" />
+                        <p className="text-3xl font-bold">{getTotalCompletedSets(user.id)}</p>
+                        <p className="text-sm text-zinc-400">Sets Completed</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
+                        <TrendingUp className="w-8 h-8 text-green-500 mb-3" />
+                        <p className="text-3xl font-bold">{Object.keys(workoutProgram).length}</p>
+                        <p className="text-sm text-zinc-400">Weeks Programmed</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-5">
+                      <h3 className="font-bold mb-4 flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-blue-400" />
+                        Strength Levels
+                      </h3>
+                      <div className="space-y-4">
+                        {['Bench Press', 'Back Squat', 'Deadlift'].map(lift => (
+                          <div key={lift}>
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-zinc-400">{lift}</span>
+                              <span className="font-semibold">{user?.maxes?.[lift] || 0} lbs</span>
+                            </div>
+                            <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-500"
+                                style={{ width: `${((user?.maxes?.[lift] || 0) / 400) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                      <div className="flex items-center gap-2 text-green-400">
+                        <Check className="w-5 h-5" />
+                        <span className="text-sm font-medium">Progress auto-saved</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-1">Your data persists between sessions</p>
+                    </div>
+                  </>
+                )}
+                {activeTab === 'buddies' && (
+                  <>
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-bold mb-2">Gym Buddies</h2>
+                      <p className="text-zinc-400">Train together, grow together</p>
+                    </div>
+
+                    {/* Friend Requests */}
+                    {user.receivedRequests?.length > 0 && (
+                      <div className="mb-8">
+                        <h3 className="font-semibold mb-3 flex items-center gap-2 text-orange-400">
+                          <UserPlus className="w-5 h-5" />
+                          Buddy Requests ({user.receivedRequests.length})
+                        </h3>
+                        <div className="space-y-3">
+                          {user.receivedRequests.map((req) => {
+                            const requester = profiles[req.from];
+                            if (!requester) return null;
+                            return (
+                              <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
+                                    {requester.avatar}
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">{requester.name}</p>
+                                    <p className="text-xs text-zinc-400">Wants to be buddies</p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => acceptBuddyRequest(req.from)}
+                                    className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"
+                                  >
+                                    <Check className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => declineBuddyRequest(req.from)}
+                                    className="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-          </>
-        )}
-
-        {activeTab === 'maxes' && (
-          <>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-1">1 Rep Maxes</h2>
-                <p className="text-zinc-400">Track your strength progress</p>
-              </div>
-              {!viewingBuddy && (
-                <button
-                  onClick={() => setShowAddLift(true)}
-                  className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              {Object.entries(user?.maxes || {}).map(([lift, weight]) => (
-                <div key={lift} className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-4">
-                  <div className="flex items-center justify-between">
-                    <div
-                      className={`flex-1 cursor-pointer transition-colors ${selectedReferenceExercise === lift ? 'text-orange-500' : 'text-white'}`}
-                      onClick={() => setSelectedReferenceExercise(lift)}
-                    >
-                      <h4 className="font-semibold flex items-center gap-2">
-                        {lift}
-                        {selectedReferenceExercise === lift && <CheckCircle className="w-4 h-4" />}
-                      </h4>
-                    </div>
-                    {editingMax === lift ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={tempMaxValue}
-                          onChange={(e) => setTempMaxValue(e.target.value)}
-                          className="w-24 px-3 py-2 bg-zinc-800 rounded-lg text-right font-bold focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => updateMax(lift, tempMaxValue)}
-                          className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center hover:bg-green-400"
-                        >
-                          <Check className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => setEditingMax(null)}
-                          className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center hover:bg-zinc-600"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">
-                          <span className="text-2xl font-bold">{weight}</span>
-                          <span className="text-zinc-400 ml-1">lbs</span>
-                        </div>
-                        {!viewingBuddy && (
-                          <>
-                            <button
-                              onClick={() => { setEditingMax(lift); setTempMaxValue(weight.toString()); }}
-                              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteLift(lift)}
-                              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
                     )}
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            <div className="mt-8 p-5 bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl border border-orange-500/20">
-              <h3 className="font-bold mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-orange-500" />
-                Quick Reference ({selectedReferenceExercise})
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
-                {[65, 70, 75, 80, 85, 90].map(pct => (
-                  <div key={pct} className="text-center p-3 bg-zinc-900/50 rounded-xl">
-                    <p className="text-xs text-zinc-400 mb-1">{pct}%</p>
-                    <p className="font-bold">{Math.round((user?.maxes?.[selectedReferenceExercise] || 0) * pct / 100 / 5) * 5}</p>
-                    <p className="text-xs text-zinc-500">lbs</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+                    {/* My Buddies List */}
+                    <div className="mb-8">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-blue-500" />
+                        My Buddies
+                      </h3>
+                      {user.buddies?.length > 0 ? (
+                        <div className="grid gap-3">
+                          {user.buddies.map(buddyId => {
+                            const buddy = profiles[buddyId];
+                            if (!buddy) return null;
+                            return (
+                              <div key={buddyId} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
+                                    {buddy.avatar}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold">{buddy.name}</p>
+                                    <p className="text-xs text-zinc-400">
+                                      Max Bench: {buddy.maxes['Bench Press'] || 0} lbs
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => { setViewingBuddy(buddyId); setActiveTab('workout'); }}
+                                    className="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg text-sm font-medium"
+                                  >
+                                    View Profile
+                                  </button>
+                                  <button
+                                    onClick={() => { if (confirm('Remove buddy?')) removeBuddy(buddyId); }}
+                                    className="p-2 text-zinc-500 hover:text-red-400"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
+                          <p className="text-zinc-500 text-sm">You haven't added any gym buddies yet.</p>
+                        </div>
+                      )}
+                    </div>
 
-        {activeTab === 'ai' && (
-          <>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">AI Coach</h2>
-              <p className="text-zinc-400">Generate progressive workout programs</p>
-            </div>
+                    {/* Find Buddies */}
+                    <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
+                      <h3 className="font-bold mb-4">Find Buddies</h3>
+                      <div className="relative mb-4">
+                        <input
+                          type="text"
+                          value={buddiesSearch}
+                          onChange={(e) => setBuddiesSearch(e.target.value)}
+                          placeholder="Search by name..."
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                        <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
+                      </div>
 
-            <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl border border-green-500/20 p-5 mb-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                  <Brain className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-bold">Powered by ChatGPT</h3>
-                  <p className="text-sm text-zinc-400">AI builds on your last 3 weeks</p>
-                </div>
-              </div>
+                      {buddiesSearch.trim() && (
+                        <div className="space-y-2">
+                          {Object.values(profiles)
+                            .filter(p =>
+                              p.id !== currentUser &&
+                              !user.buddies?.includes(p.id) &&
+                              p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
+                            )
+                            .map(p => {
+                              const isPending = user.sentRequests?.some(r => r.to === p.id);
+                              return (
+                                <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xl">{p.avatar}</span>
+                                    <span className="font-medium">{p.name}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => sendBuddyRequest(p.id)}
+                                    disabled={isPending}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${isPending
+                                      ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
+                                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                                      }`}
+                                  >
+                                    {isPending ? 'Request Sent' : 'Add Buddy'}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          {Object.values(profiles).filter(p =>
+                            p.id !== currentUser &&
+                            !user.buddies?.includes(p.id) &&
+                            p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
+                          ).length === 0 && (
+                              <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
+                            )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </main>
 
-              <p className="text-sm text-zinc-400 mb-4">
-                The AI Coach analyzes your recent workouts, logged progress, available equipment, and 1RM maxes to create a periodized program tailored to your goals.
-              </p>
-
-              <button
-                onClick={() => {
-                  let nextWeek = 1;
-                  while (workoutProgram[nextWeek]) nextWeek++;
-                  openAiGenerator(nextWeek);
-                }}
-                disabled={viewingBuddy}
-                className={`w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Zap className="w-5 h-5" />
-                Generate Next Week's Program
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-orange-500" />
-                Program Overview
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(weekNum => {
-                  const hasProgram = workoutProgram[weekNum];
-                  const weekDate = getWeekDates(programStartDate, weekNum);
-                  return (
-                    <div
-                      key={weekNum}
-                      className={`p-4 rounded-xl border transition-all ${hasProgram
-                        ? 'bg-green-500/10 border-green-500/30 hover:border-green-500/50'
-                        : 'bg-zinc-800/30 border-zinc-700/30 hover:border-zinc-600/50'
+              {/* Bottom Navigation */}
+              < nav className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/50 px-6 py-3" >
+                <div className="flex justify-around max-w-lg mx-auto">
+                  {[
+                    { id: 'workout', icon: Dumbbell, label: 'Workout' },
+                    { id: 'maxes', icon: Target, label: '1RM' },
+                    { id: 'buddies', icon: Users, label: 'Buddies' },
+                    { id: 'progress', icon: BarChart3, label: 'Progress' },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${activeTab === tab.id
+                        ? 'text-orange-500'
+                        : 'text-zinc-500 hover:text-zinc-300'
                         }`}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold">Week {weekNum}</span>
-                        {hasProgram ? (
-                          <Check className="w-4 h-4 text-green-500" />
-                        ) : (
-                          <button
-                            onClick={() => openAiGenerator(weekNum)}
-                            className="p-1 hover:bg-green-500/20 rounded text-green-400"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-500">
-                        {formatDate(weekDate.start)} - {formatDate(weekDate.end)}
-                      </p>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        {hasProgram ? '6 workouts ready' : 'Not generated'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-5">
-              <h3 className="font-semibold mb-4">How AI Generation Works</h3>
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-green-400">1</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Analyzes History</p>
-                    <p className="text-xs text-zinc-500">Reviews your last 3 weeks of workouts and logged progress</p>
-                  </div>
+                      <tab.icon className="w-6 h-6" />
+                      <span className="text-xs font-medium">{tab.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-blue-400">2</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Considers Equipment</p>
-                    <p className="text-xs text-zinc-500">Only uses exercises possible with your gym setup</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-purple-400">3</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">Progressive Overload</p>
-                    <p className="text-xs text-zinc-500">Calculates weights based on your current 1RM maxes</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {activeTab === 'progress' && (
-          <>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">Progress</h2>
-              <p className="text-zinc-400">Track your gains over time</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-2xl p-5 border border-orange-500/20">
-                <Flame className="w-8 h-8 text-orange-500 mb-3" />
-                <p className="text-3xl font-bold">{getTotalCompletedSets(user.id)}</p>
-                <p className="text-sm text-zinc-400">Sets Completed</p>
-              </div>
-              <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-5 border border-green-500/20">
-                <TrendingUp className="w-8 h-8 text-green-500 mb-3" />
-                <p className="text-3xl font-bold">{Object.keys(workoutProgram).length}</p>
-                <p className="text-sm text-zinc-400">Weeks Programmed</p>
-              </div>
-            </div>
-
-            <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/50 p-5">
-              <h3 className="font-bold mb-4 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-blue-400" />
-                Strength Levels
-              </h3>
-              <div className="space-y-4">
-                {['Bench Press', 'Back Squat', 'Deadlift'].map(lift => (
-                  <div key={lift}>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-zinc-400">{lift}</span>
-                      <span className="font-semibold">{user?.maxes?.[lift] || 0} lbs</span>
-                    </div>
-                    <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-500"
-                        style={{ width: `${((user?.maxes?.[lift] || 0) / 400) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-              <div className="flex items-center gap-2 text-green-400">
-                <Check className="w-5 h-5" />
-                <span className="text-sm font-medium">Progress auto-saved</span>
-              </div>
-              <p className="text-xs text-zinc-400 mt-1">Your data persists between sessions</p>
-            </div>
-          </>
-        )}
-        {activeTab === 'buddies' && (
-          <>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">Gym Buddies</h2>
-              <p className="text-zinc-400">Train together, grow together</p>
-            </div>
-
-            {/* Friend Requests */}
-            {user.receivedRequests?.length > 0 && (
-              <div className="mb-8">
-                <h3 className="font-semibold mb-3 flex items-center gap-2 text-orange-400">
-                  <UserPlus className="w-5 h-5" />
-                  Buddy Requests ({user.receivedRequests.length})
-                </h3>
-                <div className="space-y-3">
-                  {user.receivedRequests.map((req) => {
-                    const requester = profiles[req.from];
-                    if (!requester) return null;
-                    return (
-                      <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
-                            {requester.avatar}
-                          </div>
-                          <div>
-                            <p className="font-semibold">{requester.name}</p>
-                            <p className="text-xs text-zinc-400">Wants to be buddies</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => acceptBuddyRequest(req.from)}
-                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"
-                          >
-                            <Check className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => declineBuddyRequest(req.from)}
-                            className="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* My Buddies List */}
-            <div className="mb-8">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-500" />
-                My Buddies
-              </h3>
-              {user.buddies?.length > 0 ? (
-                <div className="grid gap-3">
-                  {user.buddies.map(buddyId => {
-                    const buddy = profiles[buddyId];
-                    if (!buddy) return null;
-                    return (
-                      <div key={buddyId} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                            {buddy.avatar}
-                          </div>
-                          <div>
-                            <p className="font-bold">{buddy.name}</p>
-                            <p className="text-xs text-zinc-400">
-                              Max Bench: {buddy.maxes['Bench Press'] || 0} lbs
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setViewingBuddy(buddyId); setActiveTab('workout'); }}
-                            className="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg text-sm font-medium"
-                          >
-                            View Profile
-                          </button>
-                          <button
-                            onClick={() => { if (confirm('Remove buddy?')) removeBuddy(buddyId); }}
-                            className="p-2 text-zinc-500 hover:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
-                  <p className="text-zinc-500 text-sm">You haven't added any gym buddies yet.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Find Buddies */}
-            <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
-              <h3 className="font-bold mb-4">Find Buddies</h3>
-              <div className="relative mb-4">
-                <input
-                  type="text"
-                  value={buddiesSearch}
-                  onChange={(e) => setBuddiesSearch(e.target.value)}
-                  placeholder="Search by name..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
-              </div>
-
-              {buddiesSearch.trim() && (
-                <div className="space-y-2">
-                  {Object.values(profiles)
-                    .filter(p =>
-                      p.id !== currentUser &&
-                      !user.buddies?.includes(p.id) &&
-                      p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
-                    )
-                    .map(p => {
-                      const isPending = user.sentRequests?.some(r => r.to === p.id);
-                      return (
-                        <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">{p.avatar}</span>
-                            <span className="font-medium">{p.name}</span>
-                          </div>
-                          <button
-                            onClick={() => sendBuddyRequest(p.id)}
-                            disabled={isPending}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${isPending
-                              ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
-                              : 'bg-blue-500 text-white hover:bg-blue-600'
-                              }`}
-                          >
-                            {isPending ? 'Request Sent' : 'Add Buddy'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  {Object.values(profiles).filter(p =>
-                    p.id !== currentUser &&
-                    !user.buddies?.includes(p.id) &&
-                    p.name.toLowerCase().includes(buddiesSearch.toLowerCase())
-                  ).length === 0 && (
-                      <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
-                    )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </main>
-
-      {/* Bottom Navigation */}
-      < nav className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/50 px-6 py-3" >
-        <div className="flex justify-around max-w-lg mx-auto">
-          {[
-            { id: 'workout', icon: Dumbbell, label: 'Workout' },
-            { id: 'maxes', icon: Target, label: '1RM' },
-            { id: 'buddies', icon: Users, label: 'Buddies' },
-            { id: 'ai', icon: Brain, label: 'AI Coach' },
-            { id: 'progress', icon: BarChart3, label: 'Progress' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${activeTab === tab.id
-                ? 'text-orange-500'
-                : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-            >
-              <tab.icon className="w-6 h-6" />
-              <span className="text-xs font-medium">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav >
-    </div >
-  );
+              </nav >
+            </div >
+            );
 }
