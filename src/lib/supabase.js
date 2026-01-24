@@ -7,14 +7,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Running in demo mode.')
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey 
+export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null
 
 // Auth helpers
 export const signInWithGoogle = async () => {
   if (!supabase) return { error: { message: 'Supabase not configured' } }
-  
+
   return await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -84,7 +84,7 @@ export const db = {
       .insert({ name, created_by: userId })
       .select()
       .single()
-    
+
     if (gym) {
       await supabase
         .from('gym_members')
@@ -100,13 +100,13 @@ export const db = {
       .select('id')
       .eq('invite_code', inviteCode)
       .single()
-    
+
     if (!gym) return { error: 'Invalid invite code' }
-    
+
     const { error } = await supabase
       .from('gym_members')
       .insert({ gym_id: gym.id, user_id: userId, role: 'member' })
-    
+
     return { gym, error }
   },
 
@@ -164,7 +164,7 @@ export const db = {
       .from('current_user_maxes')
       .select('*')
       .eq('user_id', userId)
-    
+
     const maxes = {}
     data?.forEach(m => { maxes[m.exercise_name] = m.weight_lbs })
     return maxes
@@ -174,7 +174,7 @@ export const db = {
     if (!supabase) return {}
     const members = await this.getGymMembers(gymId)
     const result = {}
-    
+
     for (const member of members) {
       result[member.id] = {
         profile: member,
@@ -228,7 +228,7 @@ export const db = {
       .select('*')
       .eq('gym_id', gymId)
       .order('week_number')
-    
+
     const programs = {}
     data?.forEach(p => { programs[p.week_number] = p.program_data })
     return programs
@@ -268,7 +268,7 @@ export const db = {
         prescribed_reps: data.prescribedReps,
         actual_weight: data.actualWeight || data.prescribedWeight,
         actual_reps: data.actualReps,
-        completed: true
+        completed: data.completed !== undefined ? data.completed : true
       })
       .select()
       .single()
@@ -282,11 +282,11 @@ export const db = {
       .select('*')
       .eq('gym_id', gymId)
       .eq('week_number', weekNumber)
-    
+
     if (dayName) {
       query = query.eq('day_name', dayName)
     }
-    
+
     const { data } = await query
     return data || []
   },
@@ -298,11 +298,11 @@ export const db = {
       .select('*')
       .eq('user_id', userId)
       .eq('week_number', weekNumber)
-    
+
     if (dayName) {
       query = query.eq('day_name', dayName)
     }
-    
+
     const { data } = await query
     return data || []
   },
@@ -315,7 +315,7 @@ export const db = {
       .select('week_number')
       .eq('user_id', userId)
       .eq('completed', true)
-    
+
     const weeks = new Set(data?.map(l => l.week_number) || [])
     return {
       totalSets: data?.length || 0,
