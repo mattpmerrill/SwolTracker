@@ -254,7 +254,7 @@ export const db = {
   // Workout Logs
   async logSet(userId, gymId, weekNumber, dayName, exerciseIndex, setIndex, exerciseName, data) {
     if (!supabase) return null
-    const { data: log } = await supabase
+    const { data: log, error } = await supabase
       .from('workout_logs')
       .upsert({
         user_id: userId,
@@ -269,9 +269,15 @@ export const db = {
         actual_weight: data.actualWeight || data.prescribedWeight,
         actual_reps: data.actualReps,
         completed: data.completed !== undefined ? data.completed : true
+      }, {
+        onConflict: 'user_id,gym_id,week_number,day_name,exercise_index,set_index'
       })
       .select()
       .single()
+
+    if (error) {
+      console.error('Error logging set:', error)
+    }
     return log
   },
 
@@ -287,7 +293,10 @@ export const db = {
       query = query.eq('day_name', dayName)
     }
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) {
+      console.error('Error fetching workout logs:', error)
+    }
     return data || []
   },
 
@@ -303,7 +312,23 @@ export const db = {
       query = query.eq('day_name', dayName)
     }
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) {
+      console.error('Error fetching user workout logs:', error)
+    }
+    return data || []
+  },
+
+  async getAllWorkoutLogs(gymId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .from('workout_logs')
+      .select('*')
+      .eq('gym_id', gymId)
+
+    if (error) {
+      console.error('Error fetching all workout logs:', error)
+    }
     return data || []
   },
 

@@ -604,15 +604,9 @@ export default function SwolTracker() {
             setWorkoutProgram(programs);
           }
 
-          // 5. Load logs (All history for current week to start, ideally we want all)
-          // For the sake of the requirement "go back and see all old workouts",
-          // and since we populate exerciseLog, we need to load logs.
-          // Since we don't have a database wrapper for "getAllLogs", we rely on
-          // lazy loading or just load current week for now, and rely on 
-          // switching weeks to trigger a load if we implement that.
-          // BUT, to fulfill "visualize progress" charts, we usually need more data.
-          // For this steps, let's load current week.
-          const logs = await db.getWorkoutLogs(activeGymId, currentWeek);
+          // 5. Load ALL workout logs for this gym (not just current week)
+          // This ensures logs persist across week navigation and page reloads
+          const logs = await db.getAllWorkoutLogs(activeGymId);
 
           // Convert DB logs to state format
           const newLog = {};
@@ -635,7 +629,7 @@ export default function SwolTracker() {
     };
 
     loadSupabaseData();
-  }, [authUser, currentWeek]); // Re-load if week changes (for logs)
+  }, [authUser]); // Only re-load when auth changes, not when week changes
 
   // Load data from localStorage (Legacy / Demo)
   useEffect(() => {
@@ -722,7 +716,6 @@ export default function SwolTracker() {
   };
 
   // Log a set completion
-  // Log a set completion
   const logSet = async (exerciseIndex, setIndex, data) => {
     // Generate key
     const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
@@ -743,7 +736,7 @@ export default function SwolTracker() {
 
     // Persist to Supabase
     if (gymId) {
-      await db.logSet(
+      const result = await db.logSet(
         currentUser,
         gymId,
         currentWeek,
@@ -756,6 +749,11 @@ export default function SwolTracker() {
           completed: newStatus
         }
       );
+      if (!result) {
+        console.error('Failed to save workout log to database');
+      }
+    } else {
+      console.warn('Cannot save workout log: gymId is not set');
     }
   };
 
