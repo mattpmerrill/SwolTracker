@@ -487,6 +487,7 @@ export default function SwolTracker() {
     return days[new Date().getDay()];
   });
   const [activeTab, setActiveTab] = useState('workout');
+  const [gymId, setGymId] = useState(null);
 
   // Modal states
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
@@ -552,9 +553,93 @@ export default function SwolTracker() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load data from localStorage (works for both demo and logged-in users)
+  // Load data from Supabase when authUser changes
   useEffect(() => {
-    if (authLoading) return;
+    if (!authUser) return;
+
+    const loadSupabaseData = async () => {
+      setIsLoading(true);
+      try {
+        const userId = authUser.id;
+        setCurrentUser(userId);
+
+        // 1. Get or Create Profile
+        let profile = await db.getProfile(userId);
+
+        // Merge DB profile with local structure
+        const mergedProfile = {
+          ...defaultProfiles.merrill, // fallback template
+          id: userId,
+          name: authUser.user_metadata.full_name || authUser.email.split('@')[0],
+          avatar: authUser.user_metadata.avatar_url || '💪',
+          ...profile,
+          maxes: (await db.getUserMaxes(userId)) || {},
+          buddies: [],
+          receivedRequests: [],
+          sentRequests: [],
+          acceptedNotifications: []
+        };
+
+        setProfiles({ [userId]: mergedProfile });
+
+        // 2. Get or Create Gym
+        const gyms = await db.getMyGyms(userId);
+        let activeGymId;
+        if (gyms.length === 0) {
+          const newGym = await db.createGym('Personal Gym', userId);
+          activeGymId = newGym?.id;
+        } else {
+          activeGymId = gyms[0].id;
+        }
+        setGymId(activeGymId);
+
+        // 3. Load Equipment
+        if (activeGymId) {
+          const eq = await db.getGymEquipment(activeGymId);
+          if (eq.length > 0) setEquipment(eq);
+
+          // 4. Load Workout Programs
+          const programs = await db.getAllWorkoutPrograms(activeGymId);
+          if (Object.keys(programs).length > 0) {
+            setWorkoutProgram(programs);
+          }
+
+          // 5. Load logs (All history for current week to start, ideally we want all)
+          // For the sake of the requirement "go back and see all old workouts",
+          // and since we populate exerciseLog, we need to load logs.
+          // Since we don't have a database wrapper for "getAllLogs", we rely on
+          // lazy loading or just load current week for now, and rely on 
+          // switching weeks to trigger a load if we implement that.
+          // BUT, to fulfill "visualize progress" charts, we usually need more data.
+          // For this steps, let's load current week.
+          const logs = await db.getWorkoutLogs(activeGymId, currentWeek);
+
+          // Convert DB logs to state format
+          const newLog = {};
+          logs.forEach(l => {
+            const key = `${l.user_id}-${l.week_number}-${l.day_name}-${l.exercise_index}-${l.set_index}`;
+            newLog[key] = {
+              completed: l.completed,
+              actualWeight: l.actual_weight,
+              actualReps: l.actual_reps
+            };
+          });
+          setExerciseLog(newLog);
+        }
+
+      } catch (e) {
+        console.error("Error loading Supabase data:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSupabaseData();
+  }, [authUser, currentWeek]); // Re-load if week changes (for logs)
+
+  // Load data from localStorage (Legacy / Demo)
+  useEffect(() => {
+    if (authLoading || authUser) return;
 
     const loadData = async () => {
       try {
@@ -638,24 +723,9 @@ export default function SwolTracker() {
   };
 
   // Log a set completion
+  // Log a set completion
   const logSet = async (exerciseIndex, setIndex, data) => {
-    if (demoMode) {
-      const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
-      const wasCompleted = exerciseLog[key]?.completed || false;
-      const newStatus = !wasCompleted;
-
-      const newLog = {
-        ...exerciseLog,
-        [key]: {
-          ...data,
-          completed: newStatus
-        }
-      };
-      setExerciseLog(newLog);
-      return;
-    }
-
-    // Logic for logged in users (simplified as db/supabase integration is not in this file)
+    // Generate key
     const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
     const wasCompleted = exerciseLog[key]?.completed || false;
     const newStatus = !wasCompleted;
@@ -670,9 +740,24 @@ export default function SwolTracker() {
     };
     setExerciseLog(newLog);
 
-    // In a real app, you would call a backend service here.
-    // For this example, we'll just log to console if not in demo mode.
-    console.log(`Set ${key} completion status toggled to ${newStatus}`);
+    if (demoMode) return;
+
+    // Persist to Supabase
+    if (gymId) {
+      await db.logSet(
+        currentUser,
+        gymId,
+        currentWeek,
+        currentDay,
+        exerciseIndex,
+        setIndex,
+        data.exerciseName || `Exercise ${exerciseIndex + 1}`,
+        {
+          ...data,
+          completed: newStatus
+        }
+      );
+    }
   };
 
   const isSetLogged = (exerciseIndex, setIndex, targetUserId = currentUser) => {
@@ -1049,13 +1134,25 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
     }
   };
 
-  const confirmGeneratedWorkout = () => {
+  const confirmGeneratedWorkout = async () => {
     if (!generatedPreview || !generationWeek) return;
 
     setWorkoutProgram(prev => ({
       ...prev,
       [generationWeek]: generatedPreview
     }));
+
+    // Persist to Supabase
+    if (gymId) {
+      await db.saveWorkoutProgram(
+        gymId,
+        generationWeek,
+        generatedPreview,
+        currentUser,
+        true, // aiGenerated
+        aiNotes
+      );
+    }
 
     setShowAiGenerator(false);
     setGeneratedPreview(null);
