@@ -499,5 +499,42 @@ export const db = {
     if (!supabase) return true // Assume completed in demo mode
     const profile = await this.getProfile(userId)
     return profile?.onboarding_completed === true
+  },
+
+  // LLM API Key
+  async saveLlmApiKey(userId, apiKey) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('save_llm_api_key', { p_user_id: userId, p_api_key: apiKey })
+
+    if (error) {
+      console.error('Error saving LLM API key:', error)
+      return false
+    }
+    return data
+  },
+
+  async getLlmApiKey(userId) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_llm_api_key', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error getting LLM API key:', error)
+      return null
+    }
+    return data
+  },
+
+  async deleteLlmApiKey(userId) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('save_llm_api_key', { p_user_id: userId, p_api_key: null })
+
+    if (error) {
+      console.error('Error deleting LLM API key:', error)
+      return false
+    }
+    return data
   }
 }

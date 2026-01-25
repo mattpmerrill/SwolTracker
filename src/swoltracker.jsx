@@ -648,6 +648,12 @@ export default function SwolTracker() {
           setExerciseLog(newLog);
         }
 
+        // 6. Load LLM API Key from database
+        const savedApiKey = await db.getLlmApiKey(userId);
+        if (savedApiKey) {
+          setOpenaiKey(savedApiKey);
+        }
+
       } catch (e) {
         console.error("Error loading Supabase data:", e);
       } finally {
@@ -709,7 +715,7 @@ export default function SwolTracker() {
     }
   }, [activeTab, currentUser, user?.acceptedNotifications]);
 
-  // Save data to localStorage
+  // Save data to localStorage (for demo mode / legacy)
   useEffect(() => {
     if (isLoading || authLoading) return;
 
@@ -720,11 +726,11 @@ export default function SwolTracker() {
       localStorage.setItem('swoltracker-program', JSON.stringify(workoutProgram));
       localStorage.setItem('swoltracker-startdate', programStartDate);
       localStorage.setItem('swoltracker-currentuser', currentUser);
-      if (openaiKey) localStorage.setItem('swoltracker-openai-key', openaiKey);
+      // Note: openaiKey is saved to database for authenticated users, localStorage only for demo mode
     } catch (error) {
       console.error('Error saving data:', error);
     }
-  }, [profiles, equipment, exerciseLog, workoutProgram, programStartDate, currentUser, openaiKey, isLoading, authLoading]);
+  }, [profiles, equipment, exerciseLog, workoutProgram, programStartDate, currentUser, isLoading, authLoading]);
 
   // Handle login
   const handleLogin = (options) => {
@@ -1668,9 +1674,13 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenaiKey('');
-                        localStorage.removeItem('swoltracker-openai-key');
+                        if (authUser && !demoMode) {
+                          await db.deleteLlmApiKey(authUser.id);
+                        } else {
+                          localStorage.removeItem('swoltracker-openai-key');
+                        }
                       }}
                       className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2"
                     >
@@ -1678,11 +1688,15 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                       Delete Key
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const newKey = prompt('Enter new OpenAI API Key:');
                         if (newKey && newKey.trim()) {
                           setOpenaiKey(newKey.trim());
-                          localStorage.setItem('swoltracker-openai-key', newKey.trim());
+                          if (authUser && !demoMode) {
+                            await db.saveLlmApiKey(authUser.id, newKey.trim());
+                          } else {
+                            localStorage.setItem('swoltracker-openai-key', newKey.trim());
+                          }
                         }
                       }}
                       className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
@@ -1694,13 +1708,30 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </div>
               ) : (
                 <>
-                  <input
-                    type="password"
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={openaiKey}
+                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="flex-1 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (openaiKey && openaiKey.startsWith('sk-')) {
+                          if (authUser && !demoMode) {
+                            await db.saveLlmApiKey(authUser.id, openaiKey);
+                          } else {
+                            localStorage.setItem('swoltracker-openai-key', openaiKey);
+                          }
+                        }
+                      }}
+                      disabled={!openaiKey || !openaiKey.startsWith('sk-')}
+                      className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Save
+                    </button>
+                  </div>
                   <p className="text-xs text-zinc-500 mt-2">
                     Required for AI workout generation. Get your key at platform.openai.com
                   </p>
@@ -1847,9 +1878,13 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setOpenaiKey('');
-                        localStorage.removeItem('swoltracker-openai-key');
+                        if (authUser && !demoMode) {
+                          await db.deleteLlmApiKey(authUser.id);
+                        } else {
+                          localStorage.removeItem('swoltracker-openai-key');
+                        }
                       }}
                       className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2"
                     >
@@ -1857,11 +1892,15 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                       Delete Key
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const newKey = prompt('Enter new OpenAI API Key:');
                         if (newKey && newKey.trim()) {
                           setOpenaiKey(newKey.trim());
-                          localStorage.setItem('swoltracker-openai-key', newKey.trim());
+                          if (authUser && !demoMode) {
+                            await db.saveLlmApiKey(authUser.id, newKey.trim());
+                          } else {
+                            localStorage.setItem('swoltracker-openai-key', newKey.trim());
+                          }
                         }
                       }}
                       className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
@@ -1873,13 +1912,30 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </div>
               ) : (
                 <>
-                  <input
-                    type="password"
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={openaiKey}
+                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="flex-1 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (openaiKey && openaiKey.startsWith('sk-')) {
+                          if (authUser && !demoMode) {
+                            await db.saveLlmApiKey(authUser.id, openaiKey);
+                          } else {
+                            localStorage.setItem('swoltracker-openai-key', openaiKey);
+                          }
+                        }
+                      }}
+                      disabled={!openaiKey || !openaiKey.startsWith('sk-')}
+                      className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Save
+                    </button>
+                  </div>
                   <p className="text-xs text-zinc-500 mt-2">
                     Required for AI workout generation. Get your key at platform.openai.com
                   </p>
@@ -2022,11 +2078,15 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <input
                       type="password"
                       value={openaiKey}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const newKey = e.target.value;
                         setOpenaiKey(newKey);
                         if (newKey.startsWith('sk-') && newKey.length > 20) {
-                          localStorage.setItem('swoltracker-openai-key', newKey);
+                          if (authUser && !demoMode) {
+                            await db.saveLlmApiKey(authUser.id, newKey);
+                          } else {
+                            localStorage.setItem('swoltracker-openai-key', newKey);
+                          }
                         }
                       }}
                       placeholder="sk-..."
