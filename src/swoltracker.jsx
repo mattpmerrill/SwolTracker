@@ -526,6 +526,12 @@ export default function SwolTracker() {
   const [viewingBuddy, setViewingBuddy] = useState(null);
   const [buddiesSearch, setBuddiesSearch] = useState('');
 
+  // Group State (workout sharing)
+  const [groupRole, setGroupRole] = useState('independent'); // 'leader', 'member', 'independent'
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [groupLeader, setGroupLeader] = useState(null);
+  const [leaderGymId, setLeaderGymId] = useState(null);
+
   // Admin State
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -586,12 +592,26 @@ export default function SwolTracker() {
           return; // Don't load rest of data until onboarding is complete
         }
 
-        // Load buddy data from Supabase
-        const [buddies, receivedRequests, sentRequests] = await Promise.all([
+        // Load buddy data and group role from Supabase
+        const [buddies, receivedRequests, sentRequests, groupRoleData] = await Promise.all([
           db.getBuddies(userId),
           db.getReceivedRequests(userId),
-          db.getSentRequests(userId)
+          db.getSentRequests(userId),
+          db.getGroupRole(userId)
         ]);
+
+        // Set group state
+        setGroupRole(groupRoleData.role);
+        if (groupRoleData.role === 'member' && groupRoleData.leader_id) {
+          setGroupLeader({
+            id: groupRoleData.leader_id,
+            name: groupRoleData.leader_name,
+            avatar: groupRoleData.leader_avatar
+          });
+        } else if (groupRoleData.role === 'leader' && groupRoleData.member_count > 0) {
+          const members = await db.getGroupMembers(userId);
+          setGroupMembers(members);
+        }
 
         // Merge DB profile with local structure
         const mergedProfile = {
@@ -630,13 +650,24 @@ export default function SwolTracker() {
           if (eq.length > 0) setEquipment(eq);
 
           // 4. Load Workout Programs
-          const programs = await db.getAllWorkoutPrograms(activeGymId);
+          // If user is a member of a group, load from leader's gym instead
+          let programGymId = activeGymId;
+          if (groupRoleData.role === 'member') {
+            const leaderGym = await db.getLeaderGymId(userId);
+            if (leaderGym) {
+              programGymId = leaderGym;
+              setLeaderGymId(leaderGym);
+            }
+          }
+
+          const programs = await db.getAllWorkoutPrograms(programGymId);
           if (Object.keys(programs).length > 0) {
             setWorkoutProgram(programs);
           }
 
           // 5. Load ALL workout logs for this gym (not just current week)
           // This ensures logs persist across week navigation and page reloads
+          // Note: Logs are always from user's own gym (they log their own sets)
           const logs = await db.getAllWorkoutLogs(activeGymId);
 
           // Convert DB logs to state format
@@ -1035,9 +1066,26 @@ Return JSON only with this structure:
   const acceptBuddyRequest = async (requestId, requesterId, requesterName = '', requesterAvatar = '') => {
     // Save to Supabase if authenticated
     if (!demoMode) {
-      const success = await db.acceptBuddyRequest(requestId, currentUser);
+      const success = await db.acceptGroupInvite(requestId, currentUser);
       if (!success) return;
+
+      // Get leader's gym for loading workouts
+      const leaderGym = await db.getLeaderGymId(currentUser);
+      if (leaderGym) {
+        setLeaderGymId(leaderGym);
+        // Load leader's workout program
+        const programs = await db.getAllWorkoutPrograms(leaderGym);
+        if (programs.length > 0) {
+          // Find the active program
+          const active = programs.find(p => p.is_active) || programs[0];
+          setWorkoutProgram(active.program_data || {});
+        }
+      }
     }
+
+    // Set group state - user is now a member following the leader
+    setGroupRole('member');
+    setGroupLeader({ id: requesterId, name: requesterName, avatar: requesterAvatar });
 
     // Optimistic update
     setProfiles(prev => {
@@ -1105,6 +1153,72 @@ Return JSON only with this structure:
 
     if (viewingBuddy === buddyId) {
       setViewingBuddy(null);
+    }
+  };
+
+  // Leave workout group (for members)
+  const leaveWorkoutGroup = async () => {
+    if (!confirm('Are you sure you want to leave the group? You will lose access to the current workout program and need to generate your own.')) {
+      return;
+    }
+
+    if (!demoMode) {
+      const success = await db.leaveWorkoutGroup(currentUser);
+      if (!success) return;
+    }
+
+    // Reset group state
+    setGroupRole('independent');
+    setGroupLeader(null);
+    setLeaderGymId(null);
+    setWorkoutProgram({});
+
+    // Remove the leader from buddies list
+    setProfiles(prev => {
+      const newCurrentUser = { ...prev[currentUser] };
+      if (groupLeader) {
+        newCurrentUser.buddies = (newCurrentUser.buddies || []).filter(id => id !== groupLeader.id);
+        if (newCurrentUser.buddyProfiles) {
+          delete newCurrentUser.buddyProfiles[groupLeader.id];
+        }
+      }
+      return {
+        ...prev,
+        [currentUser]: newCurrentUser
+      };
+    });
+  };
+
+  // Remove a member from group (for leaders)
+  const removeGroupMember = async (memberId, memberName) => {
+    if (!confirm(`Are you sure you want to remove ${memberName} from your group?`)) {
+      return;
+    }
+
+    if (!demoMode) {
+      const success = await db.removeGroupMember(currentUser, memberId);
+      if (!success) return;
+    }
+
+    // Update group members list
+    setGroupMembers(prev => prev.filter(m => m.id !== memberId));
+
+    // Update buddies list
+    setProfiles(prev => {
+      const newCurrentUser = { ...prev[currentUser] };
+      newCurrentUser.buddies = (newCurrentUser.buddies || []).filter(id => id !== memberId);
+      if (newCurrentUser.buddyProfiles) {
+        delete newCurrentUser.buddyProfiles[memberId];
+      }
+      return {
+        ...prev,
+        [currentUser]: newCurrentUser
+      };
+    });
+
+    // Update group role if no more members
+    if (groupMembers.length <= 1) {
+      setGroupRole('independent');
     }
   };
 
@@ -1604,23 +1718,32 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </div>
                 <div>
                   <h3 className="font-bold">AI Coach</h3>
-                  <p className="text-xs text-zinc-400">Powered by ChatGPT</p>
+                  <p className="text-xs text-zinc-400">
+                    {groupRole === 'member' ? `Following ${groupLeader?.name}'s workouts` : 'Powered by ChatGPT'}
+                  </p>
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  let nextWeek = 1;
-                  while (workoutProgram[nextWeek]) nextWeek++;
-                  openAiGenerator(nextWeek);
-                  setShowSettings(false);
-                }}
-                disabled={currentUser !== user.id}
-                className={`w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 text-sm ${currentUser !== user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Zap className="w-4 h-4" />
-                Generate Next Week's Program
-              </button>
+              {groupRole === 'member' ? (
+                <div className="w-full py-3 rounded-xl bg-blue-500/20 border border-blue-500/30 text-center">
+                  <p className="text-sm text-blue-400 font-medium">Following {groupLeader?.name}'s Program</p>
+                  <p className="text-xs text-zinc-500 mt-1">Leave the group to generate your own workouts</p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    let nextWeek = 1;
+                    while (workoutProgram[nextWeek]) nextWeek++;
+                    openAiGenerator(nextWeek);
+                    setShowSettings(false);
+                  }}
+                  disabled={currentUser !== user.id}
+                  className={`w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 text-sm ${currentUser !== user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Zap className="w-4 h-4" />
+                  Generate Next Week's Program
+                </button>
+              )}
 
               <div className="mt-4 grid grid-cols-4 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(weekNum => {
@@ -1742,23 +1865,32 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </div>
                 <div>
                   <h3 className="font-bold">AI Coach</h3>
-                  <p className="text-xs text-zinc-400">Powered by ChatGPT</p>
+                  <p className="text-xs text-zinc-400">
+                    {groupRole === 'member' ? `Following ${groupLeader?.name}'s workouts` : 'Powered by ChatGPT'}
+                  </p>
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  let nextWeek = 1;
-                  while (workoutProgram[nextWeek]) nextWeek++;
-                  openAiGenerator(nextWeek);
-                  setShowSettings(false);
-                }}
-                disabled={currentUser !== user.id}
-                className={`w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 text-sm ${currentUser !== user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Zap className="w-4 h-4" />
-                Generate Next Week's Program
-              </button>
+              {groupRole === 'member' ? (
+                <div className="w-full py-3 rounded-xl bg-blue-500/20 border border-blue-500/30 text-center">
+                  <p className="text-sm text-blue-400 font-medium">Following {groupLeader?.name}'s Program</p>
+                  <p className="text-xs text-zinc-500 mt-1">Leave the group to generate your own workouts</p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    let nextWeek = 1;
+                    while (workoutProgram[nextWeek]) nextWeek++;
+                    openAiGenerator(nextWeek);
+                    setShowSettings(false);
+                  }}
+                  disabled={currentUser !== user.id}
+                  className={`w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 text-sm ${currentUser !== user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Zap className="w-4 h-4" />
+                  Generate Next Week's Program
+                </button>
+              )}
 
               <div className="mt-4 grid grid-cols-4 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(weekNum => {
@@ -2159,34 +2291,55 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
                   No Workout Planned Yet!
                 </h3>
-                <p className="text-zinc-400 max-w-sm mx-auto mb-6 leading-relaxed">
-                  Week {currentWeek} is uncharted territory! Time to flex those planning muscles.
-                  Use the AI Coach to generate a killer program for this week.
-                </p>
 
-                <div className="flex flex-col gap-3 max-w-xs mx-auto">
-                  <button
-                    onClick={() => openAiGenerator(currentWeek)}
-                    disabled={viewingBuddy}
-                    className={`py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <Brain className="w-5 h-5" />
-                    Generate Week {currentWeek} with AI
-                  </button>
-                  <button
-                    onClick={() => setCurrentWeek(4)}
-                    className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
-                  >
-                    ← Back to Current Week
-                  </button>
-                </div>
-
-                <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
-                  <p className="text-sm text-zinc-400">
-                    🎯 Your Week 4 lifts are looking strong! Keep the momentum going by planning ahead.
-                  </p>
-                </div>
+                {groupRole === 'member' ? (
+                  <>
+                    <p className="text-zinc-400 max-w-sm mx-auto mb-6 leading-relaxed">
+                      Week {currentWeek} hasn't been generated yet. Waiting for {groupLeader?.name} to create this week's program.
+                    </p>
+                    <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                      <div className="py-4 px-6 rounded-xl bg-blue-500/20 border border-blue-500/30 text-center">
+                        <p className="text-sm text-blue-400 font-medium">Following {groupLeader?.name}'s Program</p>
+                        <p className="text-xs text-zinc-500 mt-1">Check back later or ask them to generate this week</p>
+                      </div>
+                      <button
+                        onClick={() => setCurrentWeek(4)}
+                        className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
+                      >
+                        ← Back to Current Week
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-zinc-400 max-w-sm mx-auto mb-6 leading-relaxed">
+                      Week {currentWeek} is uncharted territory! Time to flex those planning muscles.
+                      Use the AI Coach to generate a killer program for this week.
+                    </p>
+                    <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                      <button
+                        onClick={() => openAiGenerator(currentWeek)}
+                        disabled={viewingBuddy}
+                        className={`py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25 ${viewingBuddy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <Brain className="w-5 h-5" />
+                        Generate Week {currentWeek} with AI
+                      </button>
+                      <button
+                        onClick={() => setCurrentWeek(4)}
+                        className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
+                      >
+                        ← Back to Current Week
+                      </button>
+                    </div>
+                    <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
+                      <p className="text-sm text-zinc-400">
+                        🎯 Your Week 4 lifts are looking strong! Keep the momentum going by planning ahead.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -2478,47 +2631,142 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         {activeTab === 'buddies' && (
           <>
             <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">Gym Buddies</h2>
+              <h2 className="text-2xl font-bold mb-2">Workout Group</h2>
               <p className="text-zinc-400">Train together, grow together</p>
             </div>
 
-            {/* Friend Requests */}
+            {/* Member Status Banner */}
+            {groupRole === 'member' && groupLeader && (
+              <div className="mb-6 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl border border-blue-500/30 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center text-2xl">
+                      {groupLeader.avatar || '👤'}
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-400 uppercase tracking-wider">Following</p>
+                      <p className="font-bold text-lg">{groupLeader.name}'s Workouts</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={leaveWorkoutGroup}
+                    className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm font-medium"
+                  >
+                    Leave Group
+                  </button>
+                </div>
+                <p className="text-sm text-zinc-400 mt-3">
+                  You're following {groupLeader.name}'s workout program. Complete your sets and log your progress!
+                </p>
+              </div>
+            )}
+
+            {/* Leader Status Banner */}
+            {groupRole === 'leader' && (
+              <div className="mb-6 bg-gradient-to-br from-orange-500/20 to-yellow-500/20 rounded-2xl border border-orange-500/30 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center">
+                    <Dumbbell className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-orange-400 uppercase tracking-wider">Group Leader</p>
+                    <p className="font-bold text-lg">You lead {groupMembers.length} member{groupMembers.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+                <p className="text-sm text-zinc-400">
+                  Your AI-generated workouts are shared with your group members.
+                </p>
+              </div>
+            )}
+
+            {/* Group Members List (for leaders) */}
+            {groupRole === 'leader' && groupMembers.length > 0 && (
+              <div className="mb-8">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-500" />
+                  Group Members
+                </h3>
+                <div className="grid gap-3">
+                  {groupMembers.map(member => (
+                    <div key={member.member_id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
+                          {member.member_avatar || '💪'}
+                        </div>
+                        <div>
+                          <p className="font-bold">{member.member_name}</p>
+                          <p className="text-xs text-zinc-400">{member.member_email}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { if (confirm(`Remove ${member.member_name} from your group?`)) removeGroupMember(member.member_id); }}
+                        className="p-2 text-zinc-500 hover:text-red-400"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Group Invites (with warnings) */}
             {user.receivedRequests?.length > 0 && (
               <div className="mb-8">
                 <h3 className="font-semibold mb-3 flex items-center gap-2 text-orange-400">
                   <UserPlus className="w-5 h-5" />
-                  Buddy Requests ({user.receivedRequests.length})
+                  Group Invites ({user.receivedRequests.length})
                 </h3>
                 <div className="space-y-3">
                   {user.receivedRequests.map((req) => {
-                    // Use request data directly (from database) or fall back to profiles
                     const requesterName = req.name || profiles[req.from]?.name || 'Unknown';
                     const requesterAvatar = req.avatar || profiles[req.from]?.avatar || '💪';
+                    const canAccept = groupRole === 'independent';
                     return (
-                      <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
-                            {requesterAvatar}
-                          </div>
-                          <div>
-                            <p className="font-semibold">{requesterName}</p>
-                            <p className="text-xs text-zinc-400">Wants to be buddies</p>
+                      <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
+                              {requesterAvatar}
+                            </div>
+                            <div>
+                              <p className="font-semibold">{requesterName}</p>
+                              <p className="text-xs text-zinc-400">Wants you to follow their workouts</p>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Warning message */}
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-3">
+                          <p className="text-xs text-yellow-400">
+                            <AlertCircle className="w-4 h-4 inline mr-1" />
+                            Accepting will replace your workouts with {requesterName}'s program. You won't be able to generate your own workouts until you leave the group.
+                          </p>
+                        </div>
+
                         <div className="flex gap-2">
                           <button
                             onClick={() => acceptBuddyRequest(req.id, req.from, requesterName, requesterAvatar)}
-                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"
+                            disabled={!canAccept}
+                            className={`flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium ${!canAccept ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            <Check className="w-5 h-5" />
+                            Accept & Follow
                           </button>
                           <button
                             onClick={() => declineBuddyRequest(req.id, req.from)}
-                            className="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg"
+                            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg"
                           >
-                            <X className="w-5 h-5" />
+                            Decline
                           </button>
                         </div>
+
+                        {!canAccept && (
+                          <p className="text-xs text-red-400 mt-2">
+                            {groupRole === 'leader'
+                              ? 'You have followers. Remove them first to join another group.'
+                              : 'You are already following someone. Leave that group first.'}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -2526,16 +2774,15 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             )}
 
-            {/* My Buddies List */}
-            <div className="mb-8">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-500" />
-                My Buddies
-              </h3>
-              {user.buddies?.length > 0 ? (
+            {/* My Buddies List (backward compatibility - show existing buddies) */}
+            {user.buddies?.length > 0 && groupRole === 'independent' && (
+              <div className="mb-8">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-500" />
+                  My Buddies
+                </h3>
                 <div className="grid gap-3">
                   {user.buddies.map(buddyId => {
-                    // Use buddyProfiles from database or fall back to profiles
                     const buddy = user.buddyProfiles?.[buddyId] || profiles[buddyId];
                     if (!buddy) return null;
                     return (
@@ -2546,9 +2793,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           </div>
                           <div>
                             <p className="font-bold">{buddy.name}</p>
-                            <p className="text-xs text-zinc-400">
-                              {buddy.email || 'Gym Buddy'}
-                            </p>
+                            <p className="text-xs text-zinc-400">{buddy.email || 'Gym Buddy'}</p>
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -2569,96 +2814,105 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     );
                   })}
                 </div>
-              ) : (
-                <div className="text-center py-8 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
-                  <p className="text-zinc-500 text-sm">You haven't added any gym buddies yet.</p>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Find Buddies */}
-            <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
-              <h3 className="font-bold mb-4">Find Buddies</h3>
-              <div className="relative mb-4">
-                <input
-                  type="text"
-                  value={buddiesSearch}
-                  onChange={(e) => {
-                    setBuddiesSearch(e.target.value);
-                    if (e.target.value.trim()) {
-                      searchUsersInDb(e.target.value);
-                    } else {
-                      setSearchResults([]);
-                    }
-                  }}
-                  placeholder="Search by name or email..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
-                {searchLoading && (
-                  <div className="absolute right-3 top-3.5">
-                    <div className="w-5 h-5 border-2 border-zinc-600 border-t-blue-500 rounded-full animate-spin" />
+            {/* Independent state - empty group */}
+            {groupRole === 'independent' && !user.buddies?.length && !user.receivedRequests?.length && (
+              <div className="mb-8 text-center py-8 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
+                <p className="text-zinc-500 text-sm mb-2">You're not in a workout group yet.</p>
+                <p className="text-zinc-600 text-xs">Send invites below to share your AI-generated workouts with others.</p>
+              </div>
+            )}
+
+            {/* Invite to Group (only for leaders/independent users) */}
+            {groupRole !== 'member' && (
+              <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
+                <h3 className="font-bold mb-2">Invite to Your Group</h3>
+                <p className="text-xs text-zinc-400 mb-4">
+                  Send invites to share your AI-generated workouts with others
+                </p>
+                <div className="relative mb-4">
+                  <input
+                    type="text"
+                    value={buddiesSearch}
+                    onChange={(e) => {
+                      setBuddiesSearch(e.target.value);
+                      if (e.target.value.trim()) {
+                        searchUsersInDb(e.target.value);
+                      } else {
+                        setSearchResults([]);
+                      }
+                    }}
+                    placeholder="Search by name or email..."
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-10 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <Users className="w-5 h-5 text-zinc-500 absolute left-3 top-3.5" />
+                  {searchLoading && (
+                    <div className="absolute right-3 top-3.5">
+                      <div className="w-5 h-5 border-2 border-zinc-600 border-t-blue-500 rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {buddiesSearch.trim() && (
+                  <div className="space-y-2">
+                    {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())) : searchResults).map(p => {
+                      const myProfile = profiles[currentUser] || {};
+                      const oderId = p.user_id || p.id;
+                      const userName = p.name;
+                      const userAvatar = p.avatar || '💪';
+                      const isBuddy = myProfile.buddies?.includes(oderId);
+                      const isPending = myProfile.sentRequests?.some(r => r.to === oderId);
+                      const isIncoming = myProfile.receivedRequests?.some(r => r.from === oderId);
+                      const incomingReq = myProfile.receivedRequests?.find(r => r.from === oderId);
+
+                      return (
+                        <div key={oderId} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">{userAvatar}</span>
+                            <div>
+                              <span className="font-medium">{userName}</span>
+                              {p.email && <p className="text-xs text-zinc-500">{p.email}</p>}
+                            </div>
+                          </div>
+
+                          {isBuddy ? (
+                            <button
+                              onClick={() => { setViewingBuddy(oderId); setActiveTab('workout'); }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                            >
+                              View Profile
+                            </button>
+                          ) : isPending ? (
+                            <button disabled className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-400 cursor-not-allowed">
+                              Invite Sent
+                            </button>
+                          ) : isIncoming ? (
+                            <button
+                              onClick={() => acceptBuddyRequest(incomingReq?.id, oderId, userName, userAvatar)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
+                            >
+                              Accept Request
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => sendBuddyRequest(oderId, userName, userAvatar)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
+                            >
+                              Send Invite
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())).length === 0 : searchResults.length === 0 && !searchLoading) && (
+                      <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
+                    )}
                   </div>
                 )}
               </div>
-
-              {buddiesSearch.trim() && (
-                <div className="space-y-2">
-                  {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())) : searchResults).map(p => {
-                    const myProfile = profiles[currentUser] || {};
-                    const oderId = p.user_id || p.id;
-                    const userName = p.name;
-                    const userAvatar = p.avatar || '💪';
-                    const isBuddy = myProfile.buddies?.includes(oderId);
-                    const isPending = myProfile.sentRequests?.some(r => r.to === oderId);
-                    const isIncoming = myProfile.receivedRequests?.some(r => r.from === oderId);
-                    const incomingReq = myProfile.receivedRequests?.find(r => r.from === oderId);
-
-                    return (
-                      <div key={oderId} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">{userAvatar}</span>
-                          <div>
-                            <span className="font-medium">{userName}</span>
-                            {p.email && <p className="text-xs text-zinc-500">{p.email}</p>}
-                          </div>
-                        </div>
-
-                        {isBuddy ? (
-                          <button
-                            onClick={() => { setViewingBuddy(oderId); setActiveTab('workout'); }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                          >
-                            View Profile
-                          </button>
-                        ) : isPending ? (
-                          <button disabled className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-400 cursor-not-allowed">
-                            Request Sent
-                          </button>
-                        ) : isIncoming ? (
-                          <button
-                            onClick={() => acceptBuddyRequest(incomingReq?.id, oderId, userName, userAvatar)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
-                          >
-                            Accept Request
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => sendBuddyRequest(oderId, userName, userAvatar)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
-                          >
-                            Add Buddy
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {(demoMode ? Object.values(profiles).filter(p => p.id !== currentUser && p.name.toLowerCase().includes(buddiesSearch.toLowerCase())).length === 0 : searchResults.length === 0 && !searchLoading) && (
-                    <p className="text-center text-sm text-zinc-500 py-2">No users found.</p>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
           </>
         )}
       </main>

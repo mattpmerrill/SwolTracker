@@ -398,9 +398,10 @@ export const db = {
 
   async sendBuddyRequest(senderId, receiverId) {
     if (!supabase) return null
+    // Now uses leader_id/member_id - sender becomes leader, receiver becomes member
     const { data, error } = await supabase
       .from('buddy_requests')
-      .insert({ sender_id: senderId, receiver_id: receiverId })
+      .insert({ leader_id: senderId, member_id: receiverId })
       .select()
       .single()
 
@@ -439,11 +440,11 @@ export const db = {
 
   async removeBuddy(userId, buddyId) {
     if (!supabase) return false
-    // Delete the buddy request (in either direction)
+    // Delete the buddy request (in either direction) - now uses leader_id/member_id
     const { error } = await supabase
       .from('buddy_requests')
       .delete()
-      .or(`and(sender_id.eq.${userId},receiver_id.eq.${buddyId}),and(sender_id.eq.${buddyId},receiver_id.eq.${userId})`)
+      .or(`and(leader_id.eq.${userId},member_id.eq.${buddyId}),and(leader_id.eq.${buddyId},member_id.eq.${userId})`)
 
     if (error) {
       console.error('Error removing buddy:', error)
@@ -457,6 +458,115 @@ export const db = {
     const profile = await this.getProfile(buddyId)
     const maxes = await this.getUserMaxes(buddyId)
     return profile ? { ...profile, maxes } : null
+  },
+
+  // ============================================
+  // WORKOUT GROUP FUNCTIONS
+  // ============================================
+
+  // Get user's group role (leader, member, or independent)
+  async getGroupRole(userId) {
+    if (!supabase) return { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+    const { data, error } = await supabase
+      .rpc('get_group_role', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error getting group role:', error)
+      return { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+    }
+    // Returns single row, but rpc returns array
+    return data?.[0] || { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+  },
+
+  // Get all members following a leader
+  async getGroupMembers(leaderId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_group_members', { p_leader_id: leaderId })
+
+    if (error) {
+      console.error('Error getting group members:', error)
+      return []
+    }
+    return data || []
+  },
+
+  // Get leader's gym ID (for members to load workouts)
+  async getLeaderGymId(memberId) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_leader_gym_id', { p_member_id: memberId })
+
+    if (error) {
+      console.error('Error getting leader gym ID:', error)
+      return null
+    }
+    return data
+  },
+
+  // Accept group invite with validation
+  async acceptGroupInvite(requestId, userId) {
+    if (!supabase) return { success: false, error: 'Not configured' }
+    const { data, error } = await supabase
+      .rpc('accept_group_invite', { p_request_id: requestId, p_user_id: userId })
+
+    if (error) {
+      console.error('Error accepting group invite:', error)
+      return { success: false, error: error.message }
+    }
+    return data || { success: false, error: 'Unknown error' }
+  },
+
+  // Leave workout group (for members)
+  async leaveWorkoutGroup(memberId) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('leave_workout_group', { p_member_id: memberId })
+
+    if (error) {
+      console.error('Error leaving workout group:', error)
+      return false
+    }
+    return data
+  },
+
+  // Remove a member from group (for leaders)
+  async removeGroupMember(leaderId, memberId) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('remove_group_member', { p_leader_id: leaderId, p_member_id: memberId })
+
+    if (error) {
+      console.error('Error removing group member:', error)
+      return false
+    }
+    return data
+  },
+
+  // Check if user can send invite (can be leader)
+  async canSendInvite(userId) {
+    if (!supabase) return true
+    const { data, error } = await supabase
+      .rpc('can_be_leader', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error checking can be leader:', error)
+      return false
+    }
+    return data
+  },
+
+  // Check if user can accept invite (can be member)
+  async canAcceptInvite(userId) {
+    if (!supabase) return true
+    const { data, error } = await supabase
+      .rpc('can_be_member', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error checking can be member:', error)
+      return false
+    }
+    return data
   },
 
   // Onboarding
