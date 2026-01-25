@@ -518,6 +518,7 @@ export default function SwolTracker() {
   const [generatedPreview, setGeneratedPreview] = useState(null);
   const [generationWeek, setGenerationWeek] = useState(null);
   const [openaiKey, setOpenaiKey] = useState('');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   const [selectedReferenceExercise, setSelectedReferenceExercise] = useState('Bench Press');
@@ -652,6 +653,7 @@ export default function SwolTracker() {
         const savedApiKey = await db.getLlmApiKey(userId);
         if (savedApiKey) {
           setOpenaiKey(savedApiKey);
+          setApiKeySaved(true);
         }
 
       } catch (e) {
@@ -684,7 +686,10 @@ export default function SwolTracker() {
         if (savedProgram) setWorkoutProgram(JSON.parse(savedProgram));
         if (savedStartDate) setProgramStartDate(savedStartDate);
         if (savedCurrentUser) setCurrentUser(savedCurrentUser);
-        if (savedOpenaiKey) setOpenaiKey(savedOpenaiKey);
+        if (savedOpenaiKey) {
+          setOpenaiKey(savedOpenaiKey);
+          setApiKeySaved(true);
+        }
       } catch (error) {
         console.log('Error loading data:', error);
       }
@@ -1663,7 +1668,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <Brain className="w-5 h-5 text-purple-500" />
                 ChatGPT API Key
               </h3>
-              {openaiKey ? (
+              {apiKeySaved && openaiKey ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
                     <CheckCircle className="w-5 h-5 text-green-500" />
@@ -1676,6 +1681,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <button
                       onClick={async () => {
                         setOpenaiKey('');
+                        setApiKeySaved(false);
                         if (authUser && !demoMode) {
                           await db.deleteLlmApiKey(authUser.id);
                         } else {
@@ -1697,6 +1703,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           } else {
                             localStorage.setItem('swoltracker-openai-key', newKey.trim());
                           }
+                          setApiKeySaved(true);
                         }
                       }}
                       className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
@@ -1718,15 +1725,19 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     />
                     <button
                       onClick={async () => {
-                        if (openaiKey && openaiKey.startsWith('sk-')) {
+                        if (openaiKey && openaiKey.length > 20) {
                           if (authUser && !demoMode) {
-                            await db.saveLlmApiKey(authUser.id, openaiKey);
+                            const saved = await db.saveLlmApiKey(authUser.id, openaiKey);
+                            if (saved) {
+                              setApiKeySaved(true);
+                            }
                           } else {
                             localStorage.setItem('swoltracker-openai-key', openaiKey);
+                            setApiKeySaved(true);
                           }
                         }
                       }}
-                      disabled={!openaiKey || !openaiKey.startsWith('sk-')}
+                      disabled={!openaiKey || openaiKey.length < 20}
                       className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Save
@@ -1867,7 +1878,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <Brain className="w-5 h-5 text-purple-500" />
                 ChatGPT API Key
               </h3>
-              {openaiKey ? (
+              {apiKeySaved && openaiKey ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
                     <CheckCircle className="w-5 h-5 text-green-500" />
@@ -1880,6 +1891,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <button
                       onClick={async () => {
                         setOpenaiKey('');
+                        setApiKeySaved(false);
                         if (authUser && !demoMode) {
                           await db.deleteLlmApiKey(authUser.id);
                         } else {
@@ -1901,6 +1913,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           } else {
                             localStorage.setItem('swoltracker-openai-key', newKey.trim());
                           }
+                          setApiKeySaved(true);
                         }
                       }}
                       className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
@@ -1922,15 +1935,19 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     />
                     <button
                       onClick={async () => {
-                        if (openaiKey && openaiKey.startsWith('sk-')) {
+                        if (openaiKey && openaiKey.length > 20) {
                           if (authUser && !demoMode) {
-                            await db.saveLlmApiKey(authUser.id, openaiKey);
+                            const saved = await db.saveLlmApiKey(authUser.id, openaiKey);
+                            if (saved) {
+                              setApiKeySaved(true);
+                            }
                           } else {
                             localStorage.setItem('swoltracker-openai-key', openaiKey);
+                            setApiKeySaved(true);
                           }
                         }
                       }}
-                      disabled={!openaiKey || !openaiKey.startsWith('sk-')}
+                      disabled={!openaiKey || openaiKey.length < 20}
                       className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Save
@@ -2056,7 +2073,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
             {!generatedPreview ? (
               <>
                 {/* API Key Status/Input */}
-                {openaiKey ? (
+                {apiKeySaved && openaiKey ? (
                   <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-500" />
@@ -2087,6 +2104,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           } else {
                             localStorage.setItem('swoltracker-openai-key', newKey);
                           }
+                          setApiKeySaved(true);
                         }
                       }}
                       placeholder="sk-..."
