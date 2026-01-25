@@ -351,7 +351,7 @@ export const db = {
   async getBuddies(userId) {
     if (!supabase) return []
     const { data, error } = await supabase
-      .rpc('get_buddies', { user_id: userId })
+      .rpc('get_buddies', { p_user_id: userId })
 
     if (error) {
       console.error('Error fetching buddies:', error)
@@ -363,7 +363,7 @@ export const db = {
   async getReceivedRequests(userId) {
     if (!supabase) return []
     const { data, error } = await supabase
-      .rpc('get_received_requests', { user_id: userId })
+      .rpc('get_received_requests', { p_user_id: userId })
 
     if (error) {
       console.error('Error fetching received requests:', error)
@@ -375,7 +375,7 @@ export const db = {
   async getSentRequests(userId) {
     if (!supabase) return []
     const { data, error } = await supabase
-      .rpc('get_sent_requests', { user_id: userId })
+      .rpc('get_sent_requests', { p_user_id: userId })
 
     if (error) {
       console.error('Error fetching sent requests:', error)
