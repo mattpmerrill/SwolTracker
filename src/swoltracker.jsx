@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
+import Onboarding from './components/Onboarding';
 
 // Default workout program data (used when no database or for demo)
 const defaultWorkoutProgram = {
@@ -467,6 +468,10 @@ export default function SwolTracker() {
   const [authLoading, setAuthLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
 
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingData, setOnboardingData] = useState(null);
+
   // App state
   const [isLoading, setIsLoading] = useState(true);
   const [profiles, setProfiles] = useState(defaultProfiles);
@@ -565,6 +570,17 @@ export default function SwolTracker() {
 
         // 1. Get or Create Profile
         let profile = await db.getProfile(userId);
+
+        // Check if onboarding is needed
+        if (!profile?.onboarding_completed) {
+          setShowOnboarding(true);
+          setOnboardingData({
+            name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || '',
+            email: authUser.email
+          });
+          setIsLoading(false);
+          return; // Don't load rest of data until onboarding is complete
+        }
 
         // Load buddy data from Supabase
         const [buddies, receivedRequests, sentRequests] = await Promise.all([
@@ -724,6 +740,169 @@ export default function SwolTracker() {
     }
     setDemoMode(false);
     setAuthUser(null);
+  };
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    // Reload data after onboarding
+    if (authUser) {
+      window.location.reload(); // Simple reload to fetch all new data
+    }
+  };
+
+  // Handle onboarding workout generation
+  const handleOnboardingGenerateWorkout = async (data) => {
+    try {
+      const userId = authUser.id;
+
+      // 1. Save onboarding data to profile
+      await db.completeOnboarding(userId, data);
+
+      // 2. Create gym if needed
+      let activeGymId = gymId;
+      if (!activeGymId) {
+        const gyms = await db.getMyGyms(userId);
+        if (gyms.length === 0) {
+          const newGym = await db.createGym('Personal Gym', userId);
+          activeGymId = newGym?.id;
+        } else {
+          activeGymId = gyms[0].id;
+        }
+        setGymId(activeGymId);
+      }
+
+      // 3. Get the prompt template and build the prompt
+      let promptTemplate = await db.getPromptTemplate('onboarding_workout_generator');
+
+      if (!promptTemplate) {
+        // Fallback prompt if template not found
+        promptTemplate = `You are a fitness coach. Create a 4-week workout program for a user with these details:
+Name: {{display_name}}, Gender: {{gender}}, Age: {{age}}, Weight: {{weight_lbs}}lbs
+Goals: {{fitness_goals}}
+Days: {{workout_days}}, Duration: {{workout_duration}}, Location: {{workout_location}}
+Equipment: {{equipment}}
+
+Return JSON only with this structure:
+{"week1": {"DayName": {"focus": "description", "exercises": [{"name": "Exercise", "sets": 3, "reps": "8-10", "notes": "optional"}]}}}`;
+      }
+
+      // 4. Replace placeholders in the prompt
+      const prompt = promptTemplate
+        .replace('{{display_name}}', data.displayName)
+        .replace('{{gender}}', data.gender)
+        .replace('{{age}}', data.age.toString())
+        .replace('{{weight_lbs}}', data.weightLbs.toString())
+        .replace('{{fitness_goals}}', data.fitnessGoals.join(', '))
+        .replace('{{workout_days}}', data.workoutDays.join(', '))
+        .replace('{{workout_duration}}', data.workoutDuration)
+        .replace('{{workout_location}}', data.workoutLocation)
+        .replace('{{equipment}}', data.equipment.join(', '));
+
+      // 5. Call OpenAI API if key is available
+      const apiKey = openaiKey || localStorage.getItem('swoltracker-openai-key');
+
+      if (!apiKey) {
+        console.log('No OpenAI key - using default workout program');
+        // Save default program for each week user selected
+        for (let week = 1; week <= 4; week++) {
+          const weekProgram = {};
+          data.workoutDays.forEach(day => {
+            weekProgram[day] = defaultWorkoutProgram[1]?.[day] || defaultWorkoutProgram[1]?.Monday || {
+              focus: 'Full Body',
+              exercises: [
+                { name: 'Push-Ups', sets: 3, reps: '10-15', muscleGroups: 'Chest, Triceps' },
+                { name: 'Squats', sets: 3, reps: '10-15', muscleGroups: 'Legs, Glutes' },
+                { name: 'Plank', sets: 3, reps: '30-60 sec', muscleGroups: 'Core' }
+              ]
+            };
+          });
+          await db.saveWorkoutProgram(activeGymId, week, weekProgram, userId, false, 'Default program');
+        }
+        setWorkoutProgram(prev => ({ ...prev, 1: defaultWorkoutProgram[1] }));
+        return true;
+      }
+
+      // 6. Generate workout with AI
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are a fitness coach AI. Always respond with valid JSON only, no markdown or explanations.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate workout');
+      }
+
+      const result = await response.json();
+      const content = result.choices[0].message.content;
+
+      // 7. Parse the generated program
+      let generatedProgram;
+      try {
+        // Try to extract JSON from the response
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          generatedProgram = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', parseError);
+        // Fall back to default
+        generatedProgram = { week1: defaultWorkoutProgram[1] };
+      }
+
+      // 8. Save each week to the database
+      const weekKeys = Object.keys(generatedProgram).filter(k => k.startsWith('week'));
+      for (let i = 0; i < weekKeys.length; i++) {
+        const weekKey = weekKeys[i];
+        const weekNum = parseInt(weekKey.replace('week', '')) || (i + 1);
+        const weekData = generatedProgram[weekKey];
+
+        // Convert to our format if needed
+        const formattedWeek = {};
+        Object.entries(weekData).forEach(([day, dayData]) => {
+          formattedWeek[day] = {
+            focus: dayData.focus || 'Workout',
+            exercises: (dayData.exercises || []).map(ex => ({
+              name: ex.name,
+              sets: ex.sets || 3,
+              reps: ex.reps || '8-10',
+              muscleGroups: ex.muscleGroups || ex.notes || '',
+              note: ex.notes
+            }))
+          };
+        });
+
+        await db.saveWorkoutProgram(activeGymId, weekNum, formattedWeek, userId, true, `Generated for ${data.displayName}'s ${data.fitnessGoals.join(', ')} goals`);
+      }
+
+      // 9. Update local state
+      const newProgram = {};
+      weekKeys.forEach((weekKey, i) => {
+        const weekNum = parseInt(weekKey.replace('week', '')) || (i + 1);
+        newProgram[weekNum] = generatedProgram[weekKey];
+      });
+      setWorkoutProgram(prev => ({ ...prev, ...newProgram }));
+      setCurrentWeek(1);
+
+      return true;
+    } catch (error) {
+      console.error('Error during onboarding workout generation:', error);
+      return false;
+    }
   };
 
   // Log a set completion
@@ -1218,6 +1397,17 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
   // Show login page if not authenticated
   if (!authUser && !demoMode) {
     return <LoginPage onLogin={handleLogin} isLoading={authLoading} />;
+  }
+
+  // Show onboarding for new users
+  if (showOnboarding && !demoMode) {
+    return (
+      <Onboarding
+        user={onboardingData}
+        onComplete={handleOnboardingComplete}
+        onGenerateWorkout={handleOnboardingGenerateWorkout}
+      />
+    );
   }
 
   // Main App

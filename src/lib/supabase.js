@@ -457,5 +457,47 @@ export const db = {
     const profile = await this.getProfile(buddyId)
     const maxes = await this.getUserMaxes(buddyId)
     return profile ? { ...profile, maxes } : null
+  },
+
+  // Onboarding
+  async completeOnboarding(userId, onboardingData) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('complete_onboarding', {
+        p_user_id: userId,
+        p_display_name: onboardingData.displayName,
+        p_gender: onboardingData.gender,
+        p_age: onboardingData.age,
+        p_weight_lbs: onboardingData.weightLbs,
+        p_fitness_goals: onboardingData.fitnessGoals,
+        p_workout_days: onboardingData.workoutDays,
+        p_workout_duration: onboardingData.workoutDuration,
+        p_workout_location: onboardingData.workoutLocation,
+        p_equipment: onboardingData.equipment
+      })
+
+    if (error) {
+      console.error('Error completing onboarding:', error)
+      return false
+    }
+    return data
+  },
+
+  async getPromptTemplate(templateName) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_prompt_template', { template_name: templateName })
+
+    if (error) {
+      console.error('Error fetching prompt template:', error)
+      return null
+    }
+    return data
+  },
+
+  async isOnboardingCompleted(userId) {
+    if (!supabase) return true // Assume completed in demo mode
+    const profile = await this.getProfile(userId)
+    return profile?.onboarding_completed === true
   }
 }
