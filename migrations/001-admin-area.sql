@@ -29,7 +29,10 @@ CREATE POLICY "app_settings_select" ON app_settings
 
 -- Insert default settings
 INSERT INTO app_settings (key, value, description) VALUES
-  ('llm_api_key', NULL, 'Global OpenAI API key for all AI features'),
+  ('llm_provider', 'openai', 'Active LLM provider: openai, claude, or gemini'),
+  ('llm_api_key_openai', NULL, 'OpenAI API key'),
+  ('llm_api_key_claude', NULL, 'Anthropic Claude API key'),
+  ('llm_api_key_gemini', NULL, 'Google Gemini API key'),
   ('llm_model_onboarding', 'gpt-4o-mini', 'Model for onboarding workout generation'),
   ('llm_model_weekly', 'gpt-4o', 'Model for weekly workout generation'),
   ('admin_email', NULL, 'Email address of the admin user')
@@ -95,17 +98,50 @@ GRANT EXECUTE ON FUNCTION is_admin TO authenticated;
 -- ============================================
 -- 4. GLOBAL API KEY FUNCTIONS
 -- ============================================
--- Get the global LLM API key (any authenticated user can call this)
-CREATE OR REPLACE FUNCTION get_global_llm_api_key()
+-- Get the active LLM provider
+CREATE OR REPLACE FUNCTION get_llm_provider()
 RETURNS TEXT
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT value FROM app_settings WHERE key = 'llm_api_key';
+  SELECT COALESCE(value, 'openai') FROM app_settings WHERE key = 'llm_provider';
+$$;
+
+GRANT EXECUTE ON FUNCTION get_llm_provider TO authenticated;
+
+-- Get the global LLM API key for the active provider (any authenticated user can call this)
+CREATE OR REPLACE FUNCTION get_global_llm_api_key()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_provider TEXT;
+  v_key TEXT;
+BEGIN
+  SELECT COALESCE(value, 'openai') INTO v_provider FROM app_settings WHERE key = 'llm_provider';
+
+  SELECT value INTO v_key FROM app_settings WHERE key = 'llm_api_key_' || v_provider;
+
+  RETURN v_key;
+END;
 $$;
 
 GRANT EXECUTE ON FUNCTION get_global_llm_api_key TO authenticated;
+
+-- Get API key for a specific provider
+CREATE OR REPLACE FUNCTION get_llm_api_key_for_provider(p_provider TEXT)
+RETURNS TEXT
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT value FROM app_settings WHERE key = 'llm_api_key_' || p_provider;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_llm_api_key_for_provider TO authenticated;
 
 -- ============================================
 -- 5. APP SETTINGS FUNCTIONS
@@ -191,10 +227,12 @@ DECLARE
 BEGIN
   v_total_tokens := COALESCE(p_prompt_tokens, 0) + COALESCE(p_completion_tokens, 0);
 
-  -- Estimate cost based on model (prices as of 2024)
-  -- GPT-4o: $5/1M input, $15/1M output
-  -- GPT-4o-mini: $0.15/1M input, $0.60/1M output
+  -- Estimate cost based on model (prices as of 2024-2025)
+  -- OpenAI: GPT-4o: $5/1M input, $15/1M output; GPT-4o-mini: $0.15/1M input, $0.60/1M output
+  -- Claude: claude-3-5-sonnet: $3/1M input, $15/1M output; claude-3-haiku: $0.25/1M input, $1.25/1M output
+  -- Gemini: gemini-1.5-pro: $3.50/1M input, $10.50/1M output; gemini-1.5-flash: $0.075/1M input, $0.30/1M output
   v_cost := CASE
+    -- OpenAI models
     WHEN p_model LIKE 'gpt-4o-mini%' THEN
       (COALESCE(p_prompt_tokens, 0) * 0.00000015 + COALESCE(p_completion_tokens, 0) * 0.0000006)
     WHEN p_model LIKE 'gpt-4o%' THEN
@@ -203,6 +241,18 @@ BEGIN
       (COALESCE(p_prompt_tokens, 0) * 0.00003 + COALESCE(p_completion_tokens, 0) * 0.00006)
     WHEN p_model LIKE 'gpt-3.5%' THEN
       (COALESCE(p_prompt_tokens, 0) * 0.0000005 + COALESCE(p_completion_tokens, 0) * 0.0000015)
+    -- Claude models
+    WHEN p_model LIKE 'claude-3-5-sonnet%' OR p_model LIKE 'claude-3-sonnet%' THEN
+      (COALESCE(p_prompt_tokens, 0) * 0.000003 + COALESCE(p_completion_tokens, 0) * 0.000015)
+    WHEN p_model LIKE 'claude-3-haiku%' THEN
+      (COALESCE(p_prompt_tokens, 0) * 0.00000025 + COALESCE(p_completion_tokens, 0) * 0.00000125)
+    WHEN p_model LIKE 'claude-3-opus%' THEN
+      (COALESCE(p_prompt_tokens, 0) * 0.000015 + COALESCE(p_completion_tokens, 0) * 0.000075)
+    -- Gemini models
+    WHEN p_model LIKE 'gemini-1.5-pro%' OR p_model LIKE 'gemini-pro%' THEN
+      (COALESCE(p_prompt_tokens, 0) * 0.0000035 + COALESCE(p_completion_tokens, 0) * 0.0000105)
+    WHEN p_model LIKE 'gemini-1.5-flash%' OR p_model LIKE 'gemini-flash%' THEN
+      (COALESCE(p_prompt_tokens, 0) * 0.000000075 + COALESCE(p_completion_tokens, 0) * 0.0000003)
     ELSE 0
   END;
 

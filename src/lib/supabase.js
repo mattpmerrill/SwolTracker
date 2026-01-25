@@ -505,7 +505,20 @@ export const db = {
   // ADMIN FUNCTIONS
   // ============================================
 
-  // Get the global LLM API key
+  // Get the active LLM provider
+  async getLlmProvider() {
+    if (!supabase) return 'openai'
+    const { data, error } = await supabase
+      .rpc('get_llm_provider')
+
+    if (error) {
+      console.error('Error getting LLM provider:', error)
+      return 'openai'
+    }
+    return data || 'openai'
+  },
+
+  // Get the global LLM API key for the active provider
   async getGlobalApiKey() {
     if (!supabase) return null
     const { data, error } = await supabase
@@ -513,6 +526,19 @@ export const db = {
 
     if (error) {
       console.error('Error getting global API key:', error)
+      return null
+    }
+    return data
+  },
+
+  // Get API key for a specific provider
+  async getApiKeyForProvider(provider) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_llm_api_key_for_provider', { p_provider: provider })
+
+    if (error) {
+      console.error('Error getting API key for provider:', error)
       return null
     }
     return data

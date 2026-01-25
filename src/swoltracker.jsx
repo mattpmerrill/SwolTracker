@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell, Shield } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
+import { callLlmProvider } from './lib/llm';
 import Onboarding from './components/Onboarding';
 import AdminArea from './components/admin/AdminArea';
 
@@ -803,9 +804,9 @@ Return JSON only with this structure:
         .replace('{{workout_location}}', data.workoutLocation)
         .replace('{{equipment}}', data.equipment.join(', '));
 
-      // 5. Get the global API key
+      // 5. Get the LLM provider and API key
+      const provider = await db.getLlmProvider();
       const apiKey = await db.getGlobalApiKey();
-      const model = 'gpt-4o-mini';
 
       if (!apiKey) {
         console.log('No global API key configured - using default workout program');
@@ -829,36 +830,21 @@ Return JSON only with this structure:
       }
 
       // 6. Generate workout with AI
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: 'You are a fitness coach AI. Always respond with valid JSON only, no markdown or explanations.' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
-        })
-      });
+      const systemPrompt = 'You are a fitness coach AI. Always respond with valid JSON only, no markdown or explanations.';
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+      let result;
+      try {
+        result = await callLlmProvider(provider, apiKey, systemPrompt, prompt, 'onboarding');
+      } catch (error) {
         // Log failed API call
-        await db.logApiUsage(userId, 'onboarding_generation', model, null, null, false, errorData.error?.message || `API request failed: ${response.status}`);
+        await db.logApiUsage(userId, 'onboarding_generation', result?.model || provider, null, null, false, error.message);
         throw new Error('Failed to generate workout');
       }
 
-      const result = await response.json();
-      const content = result.choices[0].message.content;
+      const content = result.content;
 
       // Log successful API usage
-      const usage = result.usage || {};
-      await db.logApiUsage(userId, 'onboarding_generation', model, usage.prompt_tokens, usage.completion_tokens, true, null);
+      await db.logApiUsage(userId, 'onboarding_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
       // 7. Parse the generated program
       let generatedProgram;
@@ -1228,10 +1214,9 @@ Return JSON only with this structure:
     setAiError('');
     setGeneratedPreview(null);
 
-    const model = 'gpt-4o';
-
     try {
-      // Get the global API key
+      // Get the LLM provider and API key
+      const provider = await db.getLlmProvider();
       const apiKey = await db.getGlobalApiKey();
       if (!apiKey) {
         setAiError('No API key configured. Please contact the administrator.');
@@ -1315,39 +1300,20 @@ Respond with ONLY valid JSON in this exact structure (no markdown, no explanatio
 
 For exercises without percentage-based loading (bodyweight, conditioning, etc.), set "percentages": null.`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+      let result;
+      try {
+        result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly');
+      } catch (error) {
         // Log failed API call
-        await db.logApiUsage(currentUser, 'weekly_generation', model, null, null, false, errorData.error?.message || `API request failed: ${response.status}`);
-        throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
+        await db.logApiUsage(currentUser, 'weekly_generation', provider, null, null, false, error.message);
+        throw error;
       }
 
-      const data = await response.json();
-      const responseText = data.choices[0]?.message?.content || '';
-
       // Log successful API usage
-      const usage = data.usage || {};
-      await db.logApiUsage(currentUser, 'weekly_generation', model, usage.prompt_tokens, usage.completion_tokens, true, null);
+      await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
       // Parse the JSON response
-      const cleanedResponse = responseText.replace(/```json|```/g, '').trim();
+      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
       const generatedProgram = JSON.parse(cleanedResponse);
 
       // Validate structure
