@@ -501,38 +501,159 @@ export const db = {
     return profile?.onboarding_completed === true
   },
 
-  // LLM API Key
-  async saveLlmApiKey(userId, apiKey) {
-    if (!supabase) return false
-    const { data, error } = await supabase
-      .rpc('save_llm_api_key', { p_user_id: userId, p_api_key: apiKey })
+  // ============================================
+  // ADMIN FUNCTIONS
+  // ============================================
 
-    if (error) {
-      console.error('Error saving LLM API key:', error)
-      return false
-    }
-    return data
-  },
-
-  async getLlmApiKey(userId) {
+  // Get the global LLM API key
+  async getGlobalApiKey() {
     if (!supabase) return null
     const { data, error } = await supabase
-      .rpc('get_llm_api_key', { p_user_id: userId })
+      .rpc('get_global_llm_api_key')
 
     if (error) {
-      console.error('Error getting LLM API key:', error)
+      console.error('Error getting global API key:', error)
       return null
     }
     return data
   },
 
-  async deleteLlmApiKey(userId) {
-    if (!supabase) return false
+  // Check if a user is admin (by comparing email to env var)
+  isAdmin(userEmail) {
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
+    if (!adminEmail || !userEmail) return false
+    return userEmail.toLowerCase() === adminEmail.toLowerCase()
+  },
+
+  // Get a single app setting
+  async getAppSetting(key) {
+    if (!supabase) return null
     const { data, error } = await supabase
-      .rpc('save_llm_api_key', { p_user_id: userId, p_api_key: null })
+      .rpc('get_app_setting', { p_key: key })
 
     if (error) {
-      console.error('Error deleting LLM API key:', error)
+      console.error('Error getting app setting:', error)
+      return null
+    }
+    return data
+  },
+
+  // Save an app setting (admin only)
+  async saveAppSetting(key, value) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('save_app_setting', { p_key: key, p_value: value })
+
+    if (error) {
+      console.error('Error saving app setting:', error)
+      return false
+    }
+    return data
+  },
+
+  // Get all app settings (admin only)
+  async getAllAppSettings() {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_all_app_settings')
+
+    if (error) {
+      console.error('Error getting all app settings:', error)
+      return []
+    }
+    return data || []
+  },
+
+  // Get admin dashboard stats
+  async getAdminDashboardStats() {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_admin_dashboard_stats')
+
+    if (error) {
+      console.error('Error getting admin stats:', error)
+      return null
+    }
+    return data
+  },
+
+  // Log API usage
+  async logApiUsage(userId, requestType, model, promptTokens, completionTokens, success = true, errorMessage = null) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('log_api_usage', {
+        p_user_id: userId,
+        p_request_type: requestType,
+        p_model: model,
+        p_prompt_tokens: promptTokens,
+        p_completion_tokens: completionTokens,
+        p_success: success,
+        p_error_message: errorMessage
+      })
+
+    if (error) {
+      console.error('Error logging API usage:', error)
+      return null
+    }
+    return data
+  },
+
+  // Get all prompt templates
+  async getAllPromptTemplates() {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_all_prompt_templates')
+
+    if (error) {
+      console.error('Error getting prompt templates:', error)
+      return []
+    }
+    return data || []
+  },
+
+  // Create a new prompt template (admin only)
+  async createPromptTemplate(name, description, template) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('create_prompt_template', {
+        p_name: name,
+        p_description: description,
+        p_template: template
+      })
+
+    if (error) {
+      console.error('Error creating prompt template:', error)
+      return null
+    }
+    return data
+  },
+
+  // Update a prompt template (admin only)
+  async updatePromptTemplate(id, name, description, template) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('update_prompt_template', {
+        p_id: id,
+        p_name: name,
+        p_description: description,
+        p_template: template
+      })
+
+    if (error) {
+      console.error('Error updating prompt template:', error)
+      return false
+    }
+    return data
+  },
+
+  // Delete a prompt template (admin only)
+  async deletePromptTemplate(id) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('delete_prompt_template', { p_id: id })
+
+    if (error) {
+      console.error('Error deleting prompt template:', error)
       return false
     }
     return data

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell } from 'lucide-react';
+import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell, Shield } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 import Onboarding from './components/Onboarding';
+import AdminArea from './components/admin/AdminArea';
 
 // Default workout program data (used when no database or for demo)
 const defaultWorkoutProgram = {
@@ -517,15 +518,16 @@ export default function SwolTracker() {
   const [aiError, setAiError] = useState('');
   const [generatedPreview, setGeneratedPreview] = useState(null);
   const [generationWeek, setGenerationWeek] = useState(null);
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [apiKeySaved, setApiKeySaved] = useState(false);
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   const [selectedReferenceExercise, setSelectedReferenceExercise] = useState('Bench Press');
 
   // Buddy State
   const [viewingBuddy, setViewingBuddy] = useState(null);
   const [buddiesSearch, setBuddiesSearch] = useState('');
+
+  // Admin State
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   // Derived state for display (allows viewing other profiles)
   const displayUser = viewingBuddy ? profiles[viewingBuddy] : profiles[currentUser];
@@ -649,12 +651,9 @@ export default function SwolTracker() {
           setExerciseLog(newLog);
         }
 
-        // 6. Load LLM API Key from database
-        const savedApiKey = await db.getLlmApiKey(userId);
-        if (savedApiKey) {
-          setOpenaiKey(savedApiKey);
-          setApiKeySaved(true);
-        }
+        // Check if user is admin
+        const adminStatus = db.isAdmin(authUser.email);
+        setIsAdmin(adminStatus);
 
       } catch (e) {
         console.error("Error loading Supabase data:", e);
@@ -678,7 +677,6 @@ export default function SwolTracker() {
         const savedProgram = localStorage.getItem('swoltracker-program');
         const savedStartDate = localStorage.getItem('swoltracker-startdate');
         const savedCurrentUser = localStorage.getItem('swoltracker-currentuser');
-        const savedOpenaiKey = localStorage.getItem('swoltracker-openai-key');
 
         if (savedProfiles) setProfiles(JSON.parse(savedProfiles));
         if (savedEquipment) setEquipment(JSON.parse(savedEquipment));
@@ -686,10 +684,6 @@ export default function SwolTracker() {
         if (savedProgram) setWorkoutProgram(JSON.parse(savedProgram));
         if (savedStartDate) setProgramStartDate(savedStartDate);
         if (savedCurrentUser) setCurrentUser(savedCurrentUser);
-        if (savedOpenaiKey) {
-          setOpenaiKey(savedOpenaiKey);
-          setApiKeySaved(true);
-        }
       } catch (error) {
         console.log('Error loading data:', error);
       }
@@ -731,7 +725,6 @@ export default function SwolTracker() {
       localStorage.setItem('swoltracker-program', JSON.stringify(workoutProgram));
       localStorage.setItem('swoltracker-startdate', programStartDate);
       localStorage.setItem('swoltracker-currentuser', currentUser);
-      // Note: openaiKey is saved to database for authenticated users, localStorage only for demo mode
     } catch (error) {
       console.error('Error saving data:', error);
     }
@@ -810,11 +803,12 @@ Return JSON only with this structure:
         .replace('{{workout_location}}', data.workoutLocation)
         .replace('{{equipment}}', data.equipment.join(', '));
 
-      // 5. Call OpenAI API if key is available
-      const apiKey = openaiKey || localStorage.getItem('swoltracker-openai-key');
+      // 5. Get the global API key
+      const apiKey = await db.getGlobalApiKey();
+      const model = 'gpt-4o-mini';
 
       if (!apiKey) {
-        console.log('No OpenAI key - using default workout program');
+        console.log('No global API key configured - using default workout program');
         // Save default program for each week user selected
         for (let week = 1; week <= 4; week++) {
           const weekProgram = {};
@@ -842,7 +836,7 @@ Return JSON only with this structure:
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: model,
           messages: [
             { role: 'system', content: 'You are a fitness coach AI. Always respond with valid JSON only, no markdown or explanations.' },
             { role: 'user', content: prompt }
@@ -853,11 +847,18 @@ Return JSON only with this structure:
       });
 
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // Log failed API call
+        await db.logApiUsage(userId, 'onboarding_generation', model, null, null, false, errorData.error?.message || `API request failed: ${response.status}`);
         throw new Error('Failed to generate workout');
       }
 
       const result = await response.json();
       const content = result.choices[0].message.content;
+
+      // Log successful API usage
+      const usage = result.usage || {};
+      await db.logApiUsage(userId, 'onboarding_generation', model, usage.prompt_tokens, usage.completion_tokens, true, null);
 
       // 7. Parse the generated program
       let generatedProgram;
@@ -1220,24 +1221,24 @@ Return JSON only with this structure:
     setAiError('');
     setGeneratedPreview(null);
     setShowAiGenerator(true);
-
-    if (!openaiKey) {
-      setShowApiKeyInput(true);
-    }
   };
 
   const generateAiWorkout = async () => {
-    if (!openaiKey) {
-      setAiError('Please enter your OpenAI API key');
-      setShowApiKeyInput(true);
-      return;
-    }
-
     setAiLoading(true);
     setAiError('');
     setGeneratedPreview(null);
 
+    const model = 'gpt-4o';
+
     try {
+      // Get the global API key
+      const apiKey = await db.getGlobalApiKey();
+      if (!apiKey) {
+        setAiError('No API key configured. Please contact the administrator.');
+        setAiLoading(false);
+        return;
+      }
+
       const recentWeeks = getRecentWeeksContext(generationWeek);
       const progressData = getProgressForWeeks(recentWeeks);
 
@@ -1245,7 +1246,7 @@ Return JSON only with this structure:
 
 Your philosophy:
 - Progressive overload is key but must be balanced with recovery
-- Exercise variety prevents plateaus and keeps athletes engaged  
+- Exercise variety prevents plateaus and keeps athletes engaged
 - Compound movements form the foundation, accessory work fills gaps
 - Conditioning should complement strength work, not detract from it
 - Every workout should have purpose and build toward long-term goals
@@ -1318,10 +1319,10 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiKey}`
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: model,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -1332,12 +1333,18 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        // Log failed API call
+        await db.logApiUsage(currentUser, 'weekly_generation', model, null, null, false, errorData.error?.message || `API request failed: ${response.status}`);
         throw new Error(errorData.error?.message || `API request failed: ${response.status}`);
       }
 
       const data = await response.json();
       const responseText = data.choices[0]?.message?.content || '';
+
+      // Log successful API usage
+      const usage = data.usage || {};
+      await db.logApiUsage(currentUser, 'weekly_generation', model, usage.prompt_tokens, usage.completion_tokens, true, null);
 
       // Parse the JSON response
       const cleanedResponse = responseText.replace(/```json|```/g, '').trim();
@@ -1662,93 +1669,21 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             </div>
 
-            {/* OpenAI API Key */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Brain className="w-5 h-5 text-purple-500" />
-                ChatGPT API Key
-              </h3>
-              {apiKeySaved && openaiKey ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="text-sm text-green-400 flex-1">API Key saved</span>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      {openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        setOpenaiKey('');
-                        setApiKeySaved(false);
-                        if (authUser && !demoMode) {
-                          await db.deleteLlmApiKey(authUser.id);
-                        } else {
-                          localStorage.removeItem('swoltracker-openai-key');
-                        }
-                      }}
-                      className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete Key
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const newKey = prompt('Enter new OpenAI API Key:');
-                        if (newKey && newKey.trim()) {
-                          setOpenaiKey(newKey.trim());
-                          if (authUser && !demoMode) {
-                            await db.saveLlmApiKey(authUser.id, newKey.trim());
-                          } else {
-                            localStorage.setItem('swoltracker-openai-key', newKey.trim());
-                          }
-                          setApiKeySaved(true);
-                        }
-                      }}
-                      className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Replace Key
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={openaiKey}
-                      onChange={(e) => setOpenaiKey(e.target.value)}
-                      placeholder="sk-..."
-                      className="flex-1 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (openaiKey && openaiKey.length > 20) {
-                          if (authUser && !demoMode) {
-                            const saved = await db.saveLlmApiKey(authUser.id, openaiKey);
-                            if (saved) {
-                              setApiKeySaved(true);
-                            }
-                          } else {
-                            localStorage.setItem('swoltracker-openai-key', openaiKey);
-                            setApiKeySaved(true);
-                          }
-                        }
-                      }}
-                      disabled={!openaiKey || openaiKey.length < 20}
-                      className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Save
-                    </button>
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    Required for AI workout generation. Get your key at platform.openai.com
-                  </p>
-                </>
-              )}
-            </div>
+            {/* Admin Section - Only visible to admins */}
+            {isAdmin && (
+              <div className="mb-6">
+                <button
+                  onClick={() => {
+                    setShowSettings(false);
+                    setShowAdmin(true);
+                  }}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl text-purple-400 font-medium hover:from-purple-500/30 hover:to-pink-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <Shield className="w-5 h-5" />
+                  Open Admin Area
+                </button>
+              </div>
+            )}
 
             {/* Equipment Section */}
             <div className="mb-6">
@@ -1872,93 +1807,21 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             </div>
 
-            {/* OpenAI API Key */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Brain className="w-5 h-5 text-purple-500" />
-                ChatGPT API Key
-              </h3>
-              {apiKeySaved && openaiKey ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="text-sm text-green-400 flex-1">API Key saved</span>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      {openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        setOpenaiKey('');
-                        setApiKeySaved(false);
-                        if (authUser && !demoMode) {
-                          await db.deleteLlmApiKey(authUser.id);
-                        } else {
-                          localStorage.removeItem('swoltracker-openai-key');
-                        }
-                      }}
-                      className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete Key
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const newKey = prompt('Enter new OpenAI API Key:');
-                        if (newKey && newKey.trim()) {
-                          setOpenaiKey(newKey.trim());
-                          if (authUser && !demoMode) {
-                            await db.saveLlmApiKey(authUser.id, newKey.trim());
-                          } else {
-                            localStorage.setItem('swoltracker-openai-key', newKey.trim());
-                          }
-                          setApiKeySaved(true);
-                        }
-                      }}
-                      className="flex-1 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-xl text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Replace Key
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={openaiKey}
-                      onChange={(e) => setOpenaiKey(e.target.value)}
-                      placeholder="sk-..."
-                      className="flex-1 px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (openaiKey && openaiKey.length > 20) {
-                          if (authUser && !demoMode) {
-                            const saved = await db.saveLlmApiKey(authUser.id, openaiKey);
-                            if (saved) {
-                              setApiKeySaved(true);
-                            }
-                          } else {
-                            localStorage.setItem('swoltracker-openai-key', openaiKey);
-                            setApiKeySaved(true);
-                          }
-                        }
-                      }}
-                      disabled={!openaiKey || openaiKey.length < 20}
-                      className="px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Save
-                    </button>
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    Required for AI workout generation. Get your key at platform.openai.com
-                  </p>
-                </>
-              )}
-            </div>
+            {/* Admin Section - Only visible to admins */}
+            {isAdmin && (
+              <div className="mb-6">
+                <button
+                  onClick={() => {
+                    setShowSettings(false);
+                    setShowAdmin(true);
+                  }}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl text-purple-400 font-medium hover:from-purple-500/30 hover:to-pink-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <Shield className="w-5 h-5" />
+                  Open Admin Area
+                </button>
+              </div>
+            )}
 
             {/* Equipment Section */}
             <div className="mb-6">
@@ -2044,6 +1907,11 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         </div>
       )}
 
+      {/* Admin Area */}
+      {showAdmin && (
+        <AdminArea onClose={() => setShowAdmin(false)} db={db} />
+      )}
+
       {/* AI Workout Generator Modal */}
       {showAiGenerator && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center overflow-y-auto">
@@ -2072,50 +1940,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
             {!generatedPreview ? (
               <>
-                {/* API Key Status/Input */}
-                {apiKeySaved && openaiKey ? (
-                  <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-sm text-green-400 font-medium">API Key Ready</p>
-                        <p className="text-xs text-zinc-500 font-mono">{openaiKey.slice(0, 7)}...{openaiKey.slice(-4)}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowSettings(true)}
-                      className="text-xs text-zinc-400 hover:text-white"
-                    >
-                      Manage in Settings
-                    </button>
-                  </div>
-                ) : showApiKeyInput ? (
-                  <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                    <h3 className="font-semibold text-yellow-400 mb-2">OpenAI API Key Required</h3>
-                    <input
-                      type="password"
-                      value={openaiKey}
-                      onChange={async (e) => {
-                        const newKey = e.target.value;
-                        setOpenaiKey(newKey);
-                        if (newKey.startsWith('sk-') && newKey.length > 20) {
-                          if (authUser && !demoMode) {
-                            await db.saveLlmApiKey(authUser.id, newKey);
-                          } else {
-                            localStorage.setItem('swoltracker-openai-key', newKey);
-                          }
-                          setApiKeySaved(true);
-                        }
-                      }}
-                      placeholder="sk-..."
-                      className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm mb-2"
-                    />
-                    <p className="text-xs text-zinc-400">
-                      Get your API key at <span className="text-yellow-400">platform.openai.com</span>. Key will be saved automatically.
-                    </p>
-                  </div>
-                ) : null}
-
                 {/* Context Summary */}
                 <div className="space-y-4 mb-6">
                   {/* Athletes */}
@@ -2213,7 +2037,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 {/* Generate Button */}
                 <button
                   onClick={generateAiWorkout}
-                  disabled={aiLoading || !openaiKey}
+                  disabled={aiLoading}
                   className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
                 >
                   {aiLoading ? (
