@@ -47,8 +47,8 @@ BEGIN
   ELSE
     -- Check if user is a leader (has followers)
     SELECT COUNT(*)::INT INTO v_member_count
-    FROM buddy_requests
-    WHERE leader_id = p_user_id AND status = 'accepted';
+    FROM buddy_requests br2
+    WHERE br2.leader_id = p_user_id AND br2.status = 'accepted';
 
     IF v_member_count > 0 THEN
       v_role := 'leader';
