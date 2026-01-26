@@ -842,7 +842,15 @@ Return JSON only with this structure:
 {"week1": {"DayName": {"focus": "description", "exercises": [{"name": "Exercise", "sets": 3, "reps": "8-10", "notes": "optional"}]}}}`;
       }
 
-      // 4. Replace placeholders in the prompt
+      // 4. Fetch user's 1RM maxes to pass to the AI
+      const userMaxes = await db.getUserMaxes(userId);
+      const userMaxesFormatted = Object.keys(userMaxes).length > 0
+        ? Object.entries(userMaxes)
+            .map(([exercise, weight]) => `- ${exercise}: ${weight} lbs`)
+            .join('\n')
+        : 'No 1RM data logged yet. Prescribe percentages for main compound lifts - the app will prompt the user to log their maxes.';
+
+      // 5. Replace placeholders in the prompt
       const prompt = promptTemplate
         .replace('{{display_name}}', data.displayName)
         .replace('{{gender}}', data.gender)
@@ -852,9 +860,10 @@ Return JSON only with this structure:
         .replace('{{workout_days}}', data.workoutDays.join(', '))
         .replace('{{workout_duration}}', data.workoutDuration)
         .replace('{{workout_location}}', data.workoutLocation)
-        .replace('{{equipment}}', data.equipment.join(', '));
+        .replace('{{equipment}}', data.equipment.join(', '))
+        .replace('{{user_maxes}}', userMaxesFormatted);
 
-      // 5. Get the LLM provider and API key
+      // 6. Get the LLM provider and API key
       const provider = await db.getLlmProvider();
       const apiKey = await db.getGlobalApiKey();
 
@@ -879,7 +888,7 @@ Return JSON only with this structure:
         return true;
       }
 
-      // 6. Generate workout with AI
+      // 7. Generate workout with AI
       const systemPrompt = 'You are a fitness coach AI. Always respond with valid JSON only, no markdown or explanations.';
 
       let result;
@@ -896,7 +905,7 @@ Return JSON only with this structure:
       // Log successful API usage
       await db.logApiUsage(userId, 'onboarding_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
-      // 7. Parse the generated program
+      // 8. Parse the generated program
       let generatedProgram;
       try {
         // Try to extract JSON from the response
@@ -912,14 +921,14 @@ Return JSON only with this structure:
         generatedProgram = { week1: defaultWorkoutProgram[1] };
       }
 
-      // 8. Save each week to the database
+      // 9. Save each week to the database
       const weekKeys = Object.keys(generatedProgram).filter(k => k.startsWith('week'));
       for (let i = 0; i < weekKeys.length; i++) {
         const weekKey = weekKeys[i];
         const weekNum = parseInt(weekKey.replace('week', '')) || (i + 1);
         const weekData = generatedProgram[weekKey];
 
-        // Convert to our format if needed
+        // Convert to our format if needed, preserving percentages for weight calculation
         const formattedWeek = {};
         Object.entries(weekData).forEach(([day, dayData]) => {
           formattedWeek[day] = {
@@ -928,8 +937,9 @@ Return JSON only with this structure:
               name: ex.name,
               sets: ex.sets || 3,
               reps: ex.reps || '8-10',
+              percentages: ex.percentages || null,
               muscleGroups: ex.muscleGroups || ex.notes || '',
-              note: ex.notes
+              note: ex.note || ex.notes
             }))
           };
         });
@@ -937,7 +947,7 @@ Return JSON only with this structure:
         await db.saveWorkoutProgram(activeGymId, weekNum, formattedWeek, userId, true, `Generated for ${data.displayName}'s ${data.fitnessGoals.join(', ')} goals`);
       }
 
-      // 9. Update local state
+      // 10. Update local state
       const newProgram = {};
       weekKeys.forEach((weekKey, i) => {
         const weekNum = parseInt(weekKey.replace('week', '')) || (i + 1);
@@ -1302,6 +1312,16 @@ Return JSON only with this structure:
     setNewLiftWeight('');
     setShowAddLift(false);
     await db.updateMax(currentUser, newLiftName.trim(), weight);
+  };
+
+  // Quick-add 1RM from workout view - pre-fills exercise name
+  const openQuickAddMax = (exerciseName) => {
+    // Try to find a canonical name for the exercise (e.g., "Incline Bench Press" -> "Bench Press")
+    const maxKey = findMaxKey(exerciseName, user?.maxes || {});
+    // Use the canonical name if found, otherwise use the exercise name as-is
+    setNewLiftName(maxKey || exerciseName);
+    setNewLiftWeight('');
+    setShowAddLift(true);
   };
 
   const deleteLift = async (lift) => {
@@ -2486,6 +2506,18 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                                         <span className="text-lg font-bold">{weight} lbs</span>
                                         <span className="text-xs text-zinc-400">@ {percentage}% 1RM</span>
                                       </>
+                                    ) : percentage ? (
+                                      // Has percentage but no 1RM logged - prompt user to add
+                                      <button
+                                        onClick={() => !viewingBuddy && openQuickAddMax(exercise.name)}
+                                        className={`flex items-baseline gap-2 ${!viewingBuddy ? 'hover:text-orange-400 transition-colors' : ''}`}
+                                        disabled={viewingBuddy}
+                                      >
+                                        <span className="text-zinc-400">{percentage}% of 1RM</span>
+                                        {!viewingBuddy && (
+                                          <span className="text-xs text-orange-500 font-medium">+ Add Max</span>
+                                        )}
+                                      </button>
                                     ) : (
                                       <span className="text-zinc-400">Bodyweight / As prescribed</span>
                                     )}
