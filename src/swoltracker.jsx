@@ -748,19 +748,49 @@ export default function SwolTracker() {
     setHasUnreadMessages(false);
   };
 
-  // Send a chat message
+  // Send a chat message with optimistic update
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !currentUser) return;
 
     const content = chatInput.trim();
-    setChatInput('');
+    const userProfile = profiles[currentUser] || {};
 
+    // Create optimistic message with temp ID
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage = {
+      id: tempId,
+      sender_id: currentUser,
+      sender_name: userProfile.name || 'You',
+      sender_avatar: userProfile.avatar,
+      sender_avatar_url: userProfile.avatar_url,
+      content: content,
+      message_created_at: new Date().toISOString(),
+      _optimistic: true,
+      _realId: null
+    };
+
+    // Immediately add to state and clear input
+    setChatInput('');
+    setChatMessages(prev => [...prev, optimisticMessage]);
+
+    // Scroll to bottom immediately
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+
+    // Send to server
     const result = await db.sendGroupMessage(currentUser, content);
     if (!result?.success) {
+      // Remove optimistic message on failure
+      setChatMessages(prev => prev.filter(msg => msg.id !== tempId));
       toast.error(result?.error || 'Failed to send message');
       setChatInput(content); // Restore input on failure
+    } else if (result?.data?.id) {
+      // Store real message ID for deduplication
+      setChatMessages(prev => prev.map(msg =>
+        msg.id === tempId ? { ...msg, _realId: result.data.id } : msg
+      ));
     }
-    // Message will appear via real-time subscription
   };
 
   // Check for unread messages when group role changes
@@ -799,12 +829,40 @@ export default function SwolTracker() {
             // Fetch the full message with sender info
             const messages = await db.getGroupMessages(currentUser, 1);
             if (messages.length > 0) {
-              setChatMessages(prev => [...prev, messages[0]]);
+              const newMessage = messages[0];
+
+              setChatMessages(prev => {
+                // Check for duplicate by ID first (real-time may fire multiple times)
+                if (prev.some(msg => msg.id === newMessage.id)) {
+                  return prev;
+                }
+
+                // If message is from current user, check for matching optimistic message
+                if (newMessage.sender_id === currentUser) {
+                  const optimisticIndex = prev.findIndex(msg =>
+                    msg._optimistic &&
+                    msg.sender_id === currentUser &&
+                    (msg._realId === newMessage.id ||  // Match by confirmed ID
+                      (msg.content === newMessage.content &&  // Or content + time match
+                        Math.abs(new Date(msg.message_created_at) - new Date(newMessage.message_created_at)) < 30000))
+                  );
+
+                  if (optimisticIndex !== -1) {
+                    // Replace optimistic message with real message
+                    const updated = [...prev];
+                    updated[optimisticIndex] = newMessage;
+                    return updated;
+                  }
+                }
+
+                // Message is from someone else or no matching optimistic - append
+                return [...prev, newMessage];
+              });
 
               // If chat is open and message is from someone else, mark as read
-              if (showChat && messages[0].sender_id !== currentUser) {
+              if (showChat && newMessage.sender_id !== currentUser) {
                 await db.markMessagesRead(currentUser);
-              } else if (!showChat && messages[0].sender_id !== currentUser) {
+              } else if (!showChat && newMessage.sender_id !== currentUser) {
                 // If chat is closed and message is from someone else, show unread indicator
                 setHasUnreadMessages(true);
               }
@@ -2920,7 +2978,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                           {chatMessages.map((msg) => (
                             <div
                               key={msg.id}
-                              className={`flex gap-3 ${msg.sender_id === currentUser ? 'flex-row-reverse' : ''}`}
+                              className={`flex gap-3 ${msg.sender_id === currentUser ? 'flex-row-reverse' : ''} ${msg._optimistic ? 'opacity-70' : ''}`}
                             >
                               <AvatarDisplay
                                 user={{
@@ -2942,7 +3000,11 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                                 </p>
                                 <p className="text-sm break-words">{msg.content}</p>
                                 <p className="text-[10px] text-zinc-500 mt-1">
-                                  {new Date(msg.message_created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  {msg._optimistic ? (
+                                    <span className="italic">Sending...</span>
+                                  ) : (
+                                    new Date(msg.message_created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  )}
                                 </p>
                               </div>
                             </div>
