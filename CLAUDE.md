@@ -19,20 +19,23 @@ SwolTracker helps users track their workouts, log 1RM (one-rep max) lifts, and g
 
 ```
 src/
-├── App.jsx              # Root component, renders SwolTracker
+├── App.jsx              # Root component, wraps with ToastProvider
 ├── main.jsx             # React entry point
 ├── swoltracker.jsx      # Main app (~3500 lines, contains most UI components)
 ├── index.css            # Tailwind imports + base styles
 ├── lib/
 │   ├── supabase.js      # Supabase client + all database helpers (db.*)
-│   └── llm.js           # Multi-provider LLM calling (OpenAI, Claude, Gemini)
+│   ├── llm.js           # Multi-provider LLM calling with timeout/retry
+│   └── errorService.js  # Error handling utilities + user-friendly messages
 └── components/
     ├── Onboarding.jsx   # New user onboarding flow
+    ├── Toast.jsx        # Toast notification system (ToastProvider + useToast)
     └── admin/
-        ├── AdminArea.jsx          # Admin route wrapper
+        ├── AdminArea.jsx          # Admin route wrapper with tabs
         ├── AdminDashboard.jsx     # Usage stats
         ├── AdminApiSettings.jsx   # API key + provider config
-        └── AdminPromptEditor.jsx  # Edit AI prompt templates
+        ├── AdminPromptEditor.jsx  # Edit AI prompt templates
+        └── AdminErrorLogs.jsx     # Error log viewer for admins
 
 migrations/              # SQL migrations for Supabase
 supabase/               # Supabase local dev config
@@ -105,6 +108,7 @@ Key tables (see `swoltracker-schema.sql` for full schema):
 - `workout_programs` - Weekly workout programs (JSON)
 - `workout_logs` - Individual set logs
 - `buddy_requests` - Buddy/group relationships
+- `error_logs` - Application error tracking (see migrations/009-error-logging.sql)
 
 ## AI Integration
 
@@ -122,3 +126,87 @@ The app calculates the current week based on `program_start_date` in the user's 
 const weeksSinceStart = Math.floor((today - startDate) / (7 * 24 * 60 * 60 * 1000));
 const currentWeek = (weeksSinceStart % 4) + 1;  // Cycles through weeks 1-4
 ```
+
+## Error Handling Framework
+
+The app has a centralized error handling system for logging, user notifications, and admin visibility.
+
+### Key Files
+- `src/lib/errorService.js` - Error utilities, categories, user-friendly messages
+- `src/components/Toast.jsx` - Toast notification system (ToastProvider + useToast hook)
+- `src/components/admin/AdminErrorLogs.jsx` - Admin panel for viewing/resolving errors
+- `migrations/009-error-logging.sql` - Database schema for error_logs table
+
+### Error Categories
+Use these categories when logging errors:
+```javascript
+import { ErrorCategory, ErrorSeverity } from './lib/errorService';
+
+// Categories: llm, database, parsing, avatar, auth, network, unknown
+// Severities: warning, error, critical
+```
+
+### Logging Errors
+```javascript
+import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
+
+await logError(db, {
+  category: ErrorCategory.LLM,        // or DATABASE, PARSING, AVATAR, NETWORK, AUTH
+  message: 'Human-readable error description',
+  severity: ErrorSeverity.ERROR,      // or WARNING, CRITICAL
+  userId: currentUser,                // optional
+  component: 'swoltracker.jsx',       // file where error occurred
+  operation: 'generateAiWorkout',     // function/operation name
+  originalError: error,               // the caught error object
+  context: { /* additional data */ }  // optional metadata
+});
+```
+
+### Toast Notifications
+Show user-friendly notifications:
+```javascript
+import { useToast } from './components/Toast';
+
+const toast = useToast();
+toast.success('Workout saved!');
+toast.error('Failed to generate workout. Please try again.');
+toast.warning('You are offline');
+toast.info('New feature available');
+```
+
+### LLM Error Handling
+The LLM service (`src/lib/llm.js`) has built-in:
+- **60-second timeout** - Prevents hanging requests
+- **Retry logic** - 2 retries with exponential backoff
+- **Automatic error logging** - Pass `db` and `userId` to enable
+- **User-friendly messages** - Errors are translated to helpful messages
+
+```javascript
+// Pass db and userId to enable automatic error logging
+const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
+```
+
+### Admin Error Viewer
+Admins can view errors at **Admin → Error Logs**:
+- Filter by category, severity, resolved status
+- View stack traces and context
+- Mark errors as resolved
+- Cleanup old resolved errors (30+ days)
+
+### Database Helpers
+```javascript
+await db.logError(category, message, severity, userId, component, operation, stackTrace, context);
+await db.getErrorLogs({ limit, offset, category, severity, resolved });
+await db.getErrorStats();
+await db.resolveError(errorId, notes);
+await db.cleanupOldErrors();
+```
+
+### When to Log Errors
+- LLM API failures (automatic if db/userId passed)
+- JSON parsing failures from AI responses
+- Database operation failures (critical operations)
+- File upload failures (avatars)
+- Authentication/session issues
+
+Keep error handling focused on the top failure points - don't over-engineer by adding try/catch everywhere.
