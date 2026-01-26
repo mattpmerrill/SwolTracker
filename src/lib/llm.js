@@ -1,4 +1,10 @@
 // LLM provider configurations and API calling utilities
+import { logError, ErrorCategory, ErrorSeverity, getUserFriendlyMessage, categorizeError, createUserFriendlyError } from './errorService';
+
+// Configuration
+const TIMEOUT_MS = 60000; // 60 seconds
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
 
 const PROVIDER_CONFIGS = {
   openai: {
@@ -28,15 +34,109 @@ const PROVIDER_CONFIGS = {
 };
 
 /**
- * Call the appropriate LLM provider API
+ * Fetch with timeout using AbortController
+ * @param {string} url - The URL to fetch
+ * @param {Object} options - Fetch options
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @returns {Promise<Response>} Fetch response
+ */
+async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. The AI service is taking too long to respond.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Retry wrapper with exponential backoff
+ * @param {Function} fn - Async function to retry
+ * @param {number} maxRetries - Maximum number of retries
+ * @param {number} delayMs - Initial delay in milliseconds
+ * @returns {Promise<any>} Result of the function
+ */
+async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const message = error.message?.toLowerCase() || '';
+
+      // Don't retry on certain errors - they won't succeed on retry
+      if (
+        message.includes('invalid api key') ||
+        message.includes('unauthorized') ||
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('invalid_api_key')
+      ) {
+        throw error;
+      }
+
+      // Wait before retrying (with exponential backoff)
+      if (attempt < maxRetries) {
+        const waitTime = delayMs * Math.pow(2, attempt);
+        console.log(`LLM request failed, retrying in ${waitTime}ms... (attempt ${attempt + 1}/${maxRetries + 1})`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Categorize LLM-specific errors for user-friendly messages
+ * @param {Error} error - The error object
+ * @param {string} provider - The LLM provider name
+ * @returns {Object} { type: string, severity: string }
+ */
+function categorizeLlmError(error, provider) {
+  const message = error.message?.toLowerCase() || '';
+
+  if (message.includes('timeout') || message.includes('abort') || error.name === 'AbortError') {
+    return { type: 'timeout', severity: ErrorSeverity.WARNING };
+  }
+  if (message.includes('rate limit') || message.includes('429') || message.includes('too many')) {
+    return { type: 'rate_limit', severity: ErrorSeverity.WARNING };
+  }
+  if (message.includes('api key') || message.includes('unauthorized') || message.includes('401') || message.includes('403')) {
+    return { type: 'invalid_key', severity: ErrorSeverity.CRITICAL };
+  }
+  if (message.includes('500') || message.includes('503') || message.includes('server') || message.includes('unavailable')) {
+    return { type: 'server_error', severity: ErrorSeverity.ERROR };
+  }
+
+  return { type: 'default', severity: ErrorSeverity.ERROR };
+}
+
+/**
+ * Call the appropriate LLM provider API with timeout, retry, and error handling
  * @param {string} provider - 'openai', 'claude', or 'gemini'
  * @param {string} apiKey - The API key for the provider
  * @param {string} systemPrompt - The system message
  * @param {string} userPrompt - The user message
  * @param {string} requestType - 'onboarding' or 'weekly' to select appropriate model
- * @returns {Promise<{content: string, usage: {prompt_tokens: number, completion_tokens: number}}>}
+ * @param {Object} db - Optional database helper for error logging
+ * @param {string} userId - Optional user ID for error context
+ * @returns {Promise<{content: string, usage: {prompt_tokens: number, completion_tokens: number}, model: string}>}
  */
-export async function callLlmProvider(provider, apiKey, systemPrompt, userPrompt, requestType = 'weekly') {
+export async function callLlmProvider(provider, apiKey, systemPrompt, userPrompt, requestType = 'weekly', db = null, userId = null) {
   const config = PROVIDER_CONFIGS[provider];
   if (!config) {
     throw new Error(`Unknown provider: ${provider}`);
@@ -44,20 +144,48 @@ export async function callLlmProvider(provider, apiKey, systemPrompt, userPrompt
 
   const model = config.models[requestType] || config.defaultModel;
 
-  switch (provider) {
-    case 'openai':
-      return await callOpenAI(apiKey, systemPrompt, userPrompt, model);
-    case 'claude':
-      return await callClaude(apiKey, systemPrompt, userPrompt, model);
-    case 'gemini':
-      return await callGemini(apiKey, systemPrompt, userPrompt, model);
-    default:
-      throw new Error(`Provider ${provider} not implemented`);
+  try {
+    return await withRetry(async () => {
+      switch (provider) {
+        case 'openai':
+          return await callOpenAI(apiKey, systemPrompt, userPrompt, model);
+        case 'claude':
+          return await callClaude(apiKey, systemPrompt, userPrompt, model);
+        case 'gemini':
+          return await callGemini(apiKey, systemPrompt, userPrompt, model);
+        default:
+          throw new Error(`Provider ${provider} not implemented`);
+      }
+    });
+  } catch (error) {
+    // Log error if db is available
+    const { type, severity } = categorizeLlmError(error, provider);
+
+    if (db) {
+      await logError(db, {
+        category: ErrorCategory.LLM,
+        message: error.message,
+        severity,
+        userId,
+        component: 'llm.js',
+        operation: `callLlmProvider.${provider}`,
+        originalError: error,
+        context: { provider, requestType, model }
+      });
+    }
+
+    // Throw with user-friendly message
+    const userMessage = getUserFriendlyMessage(ErrorCategory.LLM, type);
+    const enhancedError = new Error(userMessage);
+    enhancedError.originalError = error;
+    enhancedError.category = ErrorCategory.LLM;
+    enhancedError.errorType = type;
+    throw enhancedError;
   }
 }
 
 async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -76,7 +204,11 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `OpenAI API request failed: ${response.status}`);
+    const statusText = response.status === 401 ? 'Invalid API key' :
+                       response.status === 429 ? 'Rate limit exceeded' :
+                       response.status === 503 ? 'Service temporarily unavailable' :
+                       `API request failed: ${response.status}`;
+    throw new Error(errorData.error?.message || statusText);
   }
 
   const data = await response.json();
@@ -91,7 +223,7 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
 }
 
 async function callClaude(apiKey, systemPrompt, userPrompt, model) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -111,7 +243,11 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `Claude API request failed: ${response.status}`);
+    const statusText = response.status === 401 ? 'Invalid API key' :
+                       response.status === 429 ? 'Rate limit exceeded' :
+                       response.status === 503 ? 'Service temporarily unavailable' :
+                       `API request failed: ${response.status}`;
+    throw new Error(errorData.error?.message || statusText);
   }
 
   const data = await response.json();
@@ -128,7 +264,7 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model) {
 async function callGemini(apiKey, systemPrompt, userPrompt, model) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -149,7 +285,11 @@ async function callGemini(apiKey, systemPrompt, userPrompt, model) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `Gemini API request failed: ${response.status}`);
+    const statusText = response.status === 401 || response.status === 403 ? 'Invalid API key' :
+                       response.status === 429 ? 'Rate limit exceeded' :
+                       response.status === 503 ? 'Service temporarily unavailable' :
+                       `API request failed: ${response.status}`;
+    throw new Error(errorData.error?.message || statusText);
   }
 
   const data = await response.json();

@@ -3,6 +3,8 @@ import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLe
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 import { callLlmProvider } from './lib/llm';
+import { useToast } from './components/Toast';
+import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
 import Onboarding from './components/Onboarding';
 import AdminArea from './components/admin/AdminArea';
 import ProfileArea from './components/Profile/ProfileArea';
@@ -458,6 +460,9 @@ function LoginPage({ onLogin, isLoading }) {
 // MAIN APP COMPONENT
 // ============================================
 export default function SwolTracker() {
+  // Toast notifications
+  const toast = useToast();
+
   // Auth state
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -941,11 +946,11 @@ Return JSON only. You MUST include all 4 weeks (week1, week2, week3, week4) with
 
       let result;
       try {
-        result = await callLlmProvider(provider, apiKey, systemPrompt, prompt, 'onboarding');
+        result = await callLlmProvider(provider, apiKey, systemPrompt, prompt, 'onboarding', db, userId);
       } catch (error) {
-        // Log failed API call
-        await db.logApiUsage(userId, 'onboarding_generation', result?.model || provider, null, null, false, error.message);
-        throw new Error('Failed to generate workout');
+        // Log failed API call (error already logged by LLM service)
+        await db.logApiUsage(userId, 'onboarding_generation', provider, null, null, false, error.message);
+        throw error; // Re-throw with user-friendly message from LLM service
       }
 
       const content = result.content;
@@ -1476,11 +1481,11 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
       let result;
       try {
-        result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly');
+        result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
       } catch (error) {
-        // Log failed API call
+        // Log failed API call (error already logged by LLM service)
         await db.logApiUsage(currentUser, 'weekly_generation', provider, null, null, false, error.message);
-        throw error;
+        throw error; // Re-throw with user-friendly message from LLM service
       }
 
       // Log successful API usage
@@ -1488,7 +1493,23 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
       // Parse the JSON response
       const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
-      const generatedProgram = JSON.parse(cleanedResponse);
+      let generatedProgram;
+      try {
+        generatedProgram = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        // Log parsing error with context
+        await logError(db, {
+          category: ErrorCategory.PARSING,
+          message: 'Failed to parse AI workout response',
+          severity: ErrorSeverity.ERROR,
+          userId: currentUser,
+          component: 'swoltracker.jsx',
+          operation: 'generateAiWorkout.parseJson',
+          originalError: parseError,
+          context: { responseSnippet: cleanedResponse.substring(0, 500) }
+        });
+        throw new Error('The AI response was in an unexpected format. Please try again.');
+      }
 
       // Validate structure
       const requiredDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1502,7 +1523,9 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
     } catch (error) {
       console.error('AI Generation Error:', error);
-      setAiError(error.message || 'Failed to generate workout. Please try again.');
+      const errorMessage = error.message || 'Failed to generate workout. Please try again.';
+      setAiError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setAiLoading(false);
     }

@@ -1,7 +1,12 @@
 import SwolTracker from './swoltracker'
+import { ToastProvider } from './components/Toast'
 
 function App() {
-  return <SwolTracker />
+  return (
+    <ToastProvider>
+      <SwolTracker />
+    </ToastProvider>
+  )
 }
 
 export default App
