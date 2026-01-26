@@ -1250,38 +1250,43 @@ Return JSON only with this structure:
   };
 
   // 1RM management
-  const updateMax = (lift, value) => {
+  const updateMax = async (lift, value) => {
+    const weight = parseInt(value) || 0;
     setProfiles(prev => ({
       ...prev,
       [currentUser]: {
         ...prev[currentUser],
-        maxes: { ...prev[currentUser].maxes, [lift]: parseInt(value) || 0 }
+        maxes: { ...prev[currentUser].maxes, [lift]: weight }
       }
     }));
     setEditingMax(null);
+    await db.updateMax(currentUser, lift, weight);
   };
 
-  const addNewLift = () => {
+  const addNewLift = async () => {
     if (!newLiftName.trim() || !newLiftWeight) return;
+    const weight = parseInt(newLiftWeight);
     setProfiles(prev => ({
       ...prev,
       [currentUser]: {
         ...prev[currentUser],
-        maxes: { ...prev[currentUser].maxes, [newLiftName]: parseInt(newLiftWeight) }
+        maxes: { ...prev[currentUser].maxes, [newLiftName]: weight }
       }
     }));
     setNewLiftName('');
     setNewLiftWeight('');
     setShowAddLift(false);
+    await db.updateMax(currentUser, newLiftName.trim(), weight);
   };
 
-  const deleteLift = (lift) => {
+  const deleteLift = async (lift) => {
     const newMaxes = { ...profiles[currentUser].maxes };
     delete newMaxes[lift];
     setProfiles(prev => ({
       ...prev,
       [currentUser]: { ...prev[currentUser], maxes: newMaxes }
     }));
+    await db.deleteMax(currentUser, lift);
   };
 
   // AI workout generation with ChatGPT

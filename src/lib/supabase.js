@@ -208,6 +208,16 @@ export const db = {
     return data || []
   },
 
+  async deleteMax(userId, exerciseName) {
+    if (!supabase) return false
+    const { error } = await supabase
+      .from('user_maxes')
+      .delete()
+      .eq('user_id', userId)
+      .eq('exercise_name', exerciseName)
+    return !error
+  },
+
   // Workout Programs
   async getWorkoutProgram(gymId, weekNumber) {
     if (!supabase) return null
