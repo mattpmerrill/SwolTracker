@@ -492,6 +492,19 @@ export const db = {
     return data
   },
 
+  // Send invite as a group member (on behalf of leader)
+  async sendMemberInvite(inviterId, targetId) {
+    if (!supabase) return { success: false, error: 'Not configured' }
+    const { data, error } = await supabase
+      .rpc('send_member_invite', { p_inviter_id: inviterId, p_target_id: targetId })
+
+    if (error) {
+      console.error('Error sending member invite:', error)
+      return { success: false, error: error.message }
+    }
+    return data
+  },
+
   async acceptBuddyRequest(requestId, userId) {
     if (!supabase) return false
     const { data, error } = await supabase
@@ -647,6 +660,80 @@ export const db = {
       return false
     }
     return data
+  },
+
+  // ============================================
+  // GROUP CHAT
+  // ============================================
+
+  // Get group messages
+  async getGroupMessages(userId, limit = 50, beforeId = null) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_group_messages', {
+        p_user_id: userId,
+        p_limit: limit,
+        p_before_id: beforeId
+      })
+
+    if (error) {
+      console.error('Error getting group messages:', error)
+      return []
+    }
+    return data || []
+  },
+
+  // Send a group message
+  async sendGroupMessage(userId, content) {
+    if (!supabase) return { success: false, error: 'Not configured' }
+    const { data, error } = await supabase
+      .rpc('send_group_message', {
+        p_user_id: userId,
+        p_content: content
+      })
+
+    if (error) {
+      console.error('Error sending group message:', error)
+      return { success: false, error: error.message }
+    }
+    return data
+  },
+
+  // Get the group leader ID for a user (for real-time subscription)
+  async getGroupLeaderId(userId) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .rpc('get_user_group_leader_id', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error getting group leader id:', error)
+      return null
+    }
+    return data
+  },
+
+  // Check if user has unread messages
+  async hasUnreadMessages(userId) {
+    if (!supabase) return false
+    const { data, error } = await supabase
+      .rpc('has_unread_messages', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error checking unread messages:', error)
+      return false
+    }
+    return data
+  },
+
+  // Mark messages as read
+  async markMessagesRead(userId) {
+    if (!supabase) return
+    const { error } = await supabase
+      .rpc('mark_messages_read', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error marking messages read:', error)
+    }
   },
 
   // Onboarding

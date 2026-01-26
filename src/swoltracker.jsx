@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, UserPlus, Package, Loader2, Trash2, AlertCircle, Users, CheckCircle, Shield } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, UserPlus, Package, Loader2, Trash2, AlertCircle, Users, CheckCircle, Shield, MessageCircle, Send } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 import { callLlmProvider } from './lib/llm';
@@ -523,6 +523,16 @@ export default function SwolTracker() {
   const [groupMembers, setGroupMembers] = useState([]);
   const [groupLeader, setGroupLeader] = useState(null);
   const [leaderGymId, setLeaderGymId] = useState(null);
+  const [groupName, setGroupName] = useState('');
+  const [editingGroupName, setEditingGroupName] = useState(false);
+
+  // Group Chat State
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [showChat, setShowChat] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const chatEndRef = useRef(null);
 
   // Admin State
   const [isAdmin, setIsAdmin] = useState(false);
@@ -603,11 +613,14 @@ export default function SwolTracker() {
 
         // Set group state
         setGroupRole(groupRoleData.role);
+        setGroupName(groupRoleData.group_name || '');
         if (groupRoleData.role === 'member' && groupRoleData.leader_id) {
           setGroupLeader({
             id: groupRoleData.leader_id,
             name: groupRoleData.leader_name,
-            avatar: groupRoleData.leader_avatar
+            avatar: groupRoleData.leader_avatar,
+            avatar_url: groupRoleData.leader_avatar_url,
+            group_name: groupRoleData.group_name
           });
         } else if (groupRoleData.role === 'leader' && groupRoleData.member_count > 0) {
           const members = await db.getGroupMembers(userId);
@@ -710,6 +723,126 @@ export default function SwolTracker() {
 
     loadSupabaseData();
   }, [authUser]); // Only re-load when auth changes, not when week changes
+
+  // ============================================
+  // GROUP CHAT REAL-TIME SUBSCRIPTION
+  // ============================================
+
+  // Check for unread messages
+  const checkUnreadMessages = async () => {
+    if (!currentUser || groupRole === 'independent' || demoMode) return;
+    const hasUnread = await db.hasUnreadMessages(currentUser);
+    setHasUnreadMessages(hasUnread);
+  };
+
+  // Load chat messages and mark as read
+  const loadChatMessages = async () => {
+    if (!currentUser || groupRole === 'independent') return;
+    setChatLoading(true);
+    const messages = await db.getGroupMessages(currentUser, 50);
+    setChatMessages(messages.reverse()); // Reverse to show oldest first
+    setChatLoading(false);
+
+    // Mark messages as read
+    await db.markMessagesRead(currentUser);
+    setHasUnreadMessages(false);
+  };
+
+  // Send a chat message
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !currentUser) return;
+
+    const content = chatInput.trim();
+    setChatInput('');
+
+    const result = await db.sendGroupMessage(currentUser, content);
+    if (!result?.success) {
+      toast.error(result?.error || 'Failed to send message');
+      setChatInput(content); // Restore input on failure
+    }
+    // Message will appear via real-time subscription
+  };
+
+  // Check for unread messages when group role changes
+  useEffect(() => {
+    if (groupRole !== 'independent') {
+      checkUnreadMessages();
+    }
+  }, [groupRole, currentUser]);
+
+  // Subscribe to new chat messages
+  useEffect(() => {
+    if (!supabase || !currentUser || groupRole === 'independent' || demoMode) return;
+
+    // Get the leader ID for this user's group
+    const setupSubscription = async () => {
+      const leaderId = groupRole === 'leader' ? currentUser : groupLeader?.id;
+      if (!leaderId) return;
+
+      // Load initial messages when chat is opened
+      if (showChat && chatMessages.length === 0) {
+        loadChatMessages();
+      }
+
+      // Subscribe to new messages
+      const channel = supabase
+        .channel(`group_chat_${leaderId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'group_messages',
+            filter: `leader_id=eq.${leaderId}`
+          },
+          async (payload) => {
+            // Fetch the full message with sender info
+            const messages = await db.getGroupMessages(currentUser, 1);
+            if (messages.length > 0) {
+              setChatMessages(prev => [...prev, messages[0]]);
+
+              // If chat is open and message is from someone else, mark as read
+              if (showChat && messages[0].sender_id !== currentUser) {
+                await db.markMessagesRead(currentUser);
+              } else if (!showChat && messages[0].sender_id !== currentUser) {
+                // If chat is closed and message is from someone else, show unread indicator
+                setHasUnreadMessages(true);
+              }
+
+              // Scroll to bottom
+              setTimeout(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+
+    const cleanup = setupSubscription();
+    return () => {
+      cleanup?.then(fn => fn?.());
+    };
+  }, [currentUser, groupRole, groupLeader?.id, showChat, demoMode]);
+
+  // Scroll to bottom and mark as read when chat opens
+  useEffect(() => {
+    if (showChat && chatMessages.length > 0) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+
+      // Mark as read when chat opens
+      if (hasUnreadMessages && currentUser) {
+        db.markMessagesRead(currentUser);
+        setHasUnreadMessages(false);
+      }
+    }
+  }, [showChat]);
 
   // Load data from localStorage (Legacy / Demo)
   useEffect(() => {
@@ -1097,9 +1230,13 @@ Return JSON only. You MUST include all 4 weeks (week1, week2, week3, week4) with
     if (existingSent) return;
 
     // Save to Supabase if authenticated
+    // Uses sendMemberInvite which works for both leaders and members
     if (!demoMode) {
-      const result = await db.sendBuddyRequest(currentUser, targetId);
-      if (!result) return;
+      const result = await db.sendMemberInvite(currentUser, targetId);
+      if (!result?.success) {
+        toast.error(result?.error || 'Failed to send invite');
+        return;
+      }
     }
 
     // Optimistic update
@@ -2623,7 +2760,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <AvatarDisplay user={groupLeader} size="lg" />
                     <div>
                       <p className="text-xs text-blue-400 uppercase tracking-wider">Following</p>
-                      <p className="font-bold text-lg">{groupLeader.name}'s Workouts</p>
+                      <p className="font-bold text-lg">{groupLeader.group_name || `${groupLeader.name}'s Group`}</p>
                     </div>
                   </div>
                   <button
@@ -2646,9 +2783,54 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center">
                     <Dumbbell className="w-6 h-6 text-white" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <p className="text-xs text-orange-400 uppercase tracking-wider">Group Leader</p>
-                    <p className="font-bold text-lg">You lead {groupMembers.length} member{groupMembers.length !== 1 ? 's' : ''}</p>
+                    {editingGroupName ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={groupName}
+                          onChange={(e) => setGroupName(e.target.value)}
+                          placeholder="Enter group name..."
+                          className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1 text-sm focus:outline-none focus:border-orange-500"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              db.updateProfile(currentUser, { group_name: groupName });
+                              setEditingGroupName(false);
+                            } else if (e.key === 'Escape') {
+                              setEditingGroupName(false);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            db.updateProfile(currentUser, { group_name: groupName });
+                            setEditingGroupName(false);
+                          }}
+                          className="p-1 text-green-500 hover:text-green-400"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingGroupName(false)}
+                          className="p-1 text-zinc-500 hover:text-zinc-400"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-lg">{groupName || 'Your Group'}</p>
+                        <button
+                          onClick={() => setEditingGroupName(true)}
+                          className="p-1 text-zinc-500 hover:text-orange-400"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                    <p className="text-sm text-zinc-400">{groupMembers.length} member{groupMembers.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
                 <p className="text-sm text-zinc-400">
@@ -2668,9 +2850,14 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   {groupMembers.map(member => (
                     <div key={member.member_id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                          {member.member_avatar || '💪'}
-                        </div>
+                        <AvatarDisplay
+                          user={{
+                            avatar: member.member_avatar,
+                            avatar_url: member.member_avatar_url,
+                            name: member.member_name
+                          }}
+                          size="lg"
+                        />
                         <div>
                           <p className="font-bold">{member.member_name}</p>
                           <p className="text-xs text-zinc-400">{member.member_email}</p>
@@ -2685,6 +2872,117 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Group Chat (for leaders and members) */}
+            {groupRole !== 'independent' && (
+              <div className="mb-8">
+                <button
+                  onClick={() => {
+                    setShowChat(!showChat);
+                    if (!showChat && chatMessages.length === 0) {
+                      loadChatMessages();
+                    }
+                  }}
+                  className="w-full flex items-center justify-between p-4 bg-zinc-900/80 rounded-2xl border border-zinc-800 hover:border-zinc-700 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                      <MessageCircle className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-semibold">Group Chat</p>
+                      <p className="text-xs text-zinc-400">
+                        {chatMessages.length > 0
+                          ? `${chatMessages.length} messages`
+                          : 'Send encouragement to your group'}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className={`w-5 h-5 text-zinc-500 transition-transform ${showChat ? 'rotate-90' : ''}`} />
+                </button>
+
+                {showChat && (
+                  <div className="mt-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
+                    {/* Messages Area */}
+                    <div className="h-64 overflow-y-auto p-4 space-y-3">
+                      {chatLoading ? (
+                        <div className="flex items-center justify-center h-full">
+                          <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
+                        </div>
+                      ) : chatMessages.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
+                          No messages yet. Start the conversation!
+                        </div>
+                      ) : (
+                        <>
+                          {chatMessages.map((msg) => (
+                            <div
+                              key={msg.id}
+                              className={`flex gap-3 ${msg.sender_id === currentUser ? 'flex-row-reverse' : ''}`}
+                            >
+                              <AvatarDisplay
+                                user={{
+                                  avatar: msg.sender_avatar,
+                                  avatar_url: msg.sender_avatar_url,
+                                  name: msg.sender_name
+                                }}
+                                size="sm"
+                              />
+                              <div
+                                className={`max-w-[70%] ${
+                                  msg.sender_id === currentUser
+                                    ? 'bg-blue-500/20 border-blue-500/30'
+                                    : 'bg-zinc-800 border-zinc-700'
+                                } border rounded-xl p-3`}
+                              >
+                                <p className="text-xs text-zinc-400 mb-1">
+                                  {msg.sender_id === currentUser ? 'You' : msg.sender_name}
+                                </p>
+                                <p className="text-sm break-words">{msg.content}</p>
+                                <p className="text-[10px] text-zinc-500 mt-1">
+                                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                          <div ref={chatEndRef} />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="p-4 border-t border-zinc-800">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              sendChatMessage();
+                            }
+                          }}
+                          placeholder="Type a message..."
+                          maxLength={500}
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-4 focus:outline-none focus:border-blue-500 transition-colors text-sm"
+                        />
+                        <button
+                          onClick={sendChatMessage}
+                          disabled={!chatInput.trim()}
+                          className="px-4 py-2 bg-blue-500 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-2 text-right">
+                        {chatInput.length}/500
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2799,13 +3097,18 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               </div>
             )}
 
-            {/* Invite to Group (only for leaders/independent users) */}
-            {groupRole !== 'member' && (
-              <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
-                <h3 className="font-bold mb-2">Invite to Your Group</h3>
-                <p className="text-xs text-zinc-400 mb-4">
-                  Send invites to share your AI-generated workouts with others
-                </p>
+            {/* Invite to Group (all group roles can invite) */}
+            <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">
+              <h3 className="font-bold mb-2">
+                {groupRole === 'member'
+                  ? `Invite to ${groupLeader?.group_name || `${groupLeader?.name}'s Group`}`
+                  : `Invite to ${groupName || 'Your Group'}`}
+              </h3>
+              <p className="text-xs text-zinc-400 mb-4">
+                {groupRole === 'member'
+                  ? `Invite others to follow ${groupLeader?.name || 'your leader'}'s workout program`
+                  : 'Send invites to share your AI-generated workouts with others'}
+              </p>
                 <div className="relative mb-4">
                   <input
                     type="text"
@@ -2885,7 +3188,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   </div>
                 )}
               </div>
-            )}
           </>
         )}
       </main>
@@ -2901,10 +3203,13 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
           ].map(tab => {
             // Check for notifications
             let notificationCount = 0;
+            let showUnreadDot = false;
             if (tab.id === 'buddies' && user) {
               const pendingRequests = user.receivedRequests?.length || 0;
               const acceptedNotifs = user.acceptedNotifications?.length || 0;
               notificationCount = pendingRequests + acceptedNotifs;
+              // Show unread dot for chat messages (separate from count)
+              showUnreadDot = hasUnreadMessages;
             }
 
             return (
@@ -2918,10 +3223,12 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               >
                 <div className="relative">
                   <tab.icon className="w-6 h-6" />
-                  {notificationCount > 0 && (
+                  {notificationCount > 0 ? (
                     <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-zinc-900">
                       {notificationCount}
                     </span>
+                  ) : showUnreadDot && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-zinc-900" />
                   )}
                 </div>
                 <span className="text-xs font-medium">{tab.label}</span>
