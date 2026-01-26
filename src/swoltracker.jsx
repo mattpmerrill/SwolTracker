@@ -2942,7 +2942,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                                 </p>
                                 <p className="text-sm break-words">{msg.content}</p>
                                 <p className="text-[10px] text-zinc-500 mt-1">
-                                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  {new Date(msg.message_created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
                             </div>

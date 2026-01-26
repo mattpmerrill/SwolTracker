@@ -65,7 +65,7 @@ RETURNS TABLE (
   sender_avatar TEXT,
   sender_avatar_url TEXT,
   content TEXT,
-  created_at TIMESTAMPTZ
+  message_created_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -89,11 +89,11 @@ BEGIN
     p.avatar as sender_avatar,
     p.avatar_url as sender_avatar_url,
     gm.content,
-    gm.created_at
+    gm.created_at as message_created_at
   FROM group_messages gm
   JOIN profiles p ON p.id = gm.sender_id
   WHERE gm.leader_id = v_leader_id
-    AND (p_before_id IS NULL OR gm.created_at < (SELECT created_at FROM group_messages WHERE id = p_before_id))
+    AND (p_before_id IS NULL OR gm.created_at < (SELECT gm2.created_at FROM group_messages gm2 WHERE gm2.id = p_before_id))
   ORDER BY gm.created_at DESC
   LIMIT p_limit;
 END;
@@ -130,8 +130,8 @@ BEGIN
 
   -- Check if user is actually in a group (either as leader or member)
   IF NOT EXISTS (
-    SELECT 1 FROM buddy_requests
-    WHERE (leader_id = p_user_id OR member_id = p_user_id) AND status = 'accepted'
+    SELECT 1 FROM buddy_requests br2
+    WHERE (br2.leader_id = p_user_id OR br2.member_id = p_user_id) AND br2.status = 'accepted'
   ) THEN
     RETURN jsonb_build_object('success', false, 'error', 'You must be in a group to send messages');
   END IF;
