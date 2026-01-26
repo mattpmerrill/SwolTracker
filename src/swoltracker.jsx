@@ -785,10 +785,10 @@ export default function SwolTracker() {
       setChatMessages(prev => prev.filter(msg => msg.id !== tempId));
       toast.error(result?.error || 'Failed to send message');
       setChatInput(content); // Restore input on failure
-    } else if (result?.data?.id) {
+    } else if (result?.message_id) {
       // Store real message ID for deduplication
       setChatMessages(prev => prev.map(msg =>
-        msg.id === tempId ? { ...msg, _realId: result.data.id } : msg
+        msg.id === tempId ? { ...msg, _realId: result.message_id } : msg
       ));
     }
   };
