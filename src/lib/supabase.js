@@ -593,7 +593,8 @@ export const db = {
         p_workout_days: onboardingData.workoutDays,
         p_workout_duration: onboardingData.workoutDuration,
         p_workout_location: onboardingData.workoutLocation,
-        p_equipment: onboardingData.equipment
+        p_equipment: onboardingData.equipment,
+        p_program_start_date: onboardingData.programStartDate || new Date().toISOString().split('T')[0]
       })
 
     if (error) {

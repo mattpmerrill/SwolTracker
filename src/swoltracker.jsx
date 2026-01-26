@@ -482,13 +482,10 @@ export default function SwolTracker() {
   const [exerciseLog, setExerciseLog] = useState({});
   const [workoutProgram, setWorkoutProgram] = useState(defaultWorkoutProgram);
   const [programStartDate, setProgramStartDate] = useState(() => {
-    const today = new Date();
-    const monday = getMondayOfWeek(today);
-    monday.setDate(monday.getDate() - 21);
-    return monday.toISOString();
+    return new Date().toISOString();
   });
 
-  const [currentWeek, setCurrentWeek] = useState(4);
+  const [currentWeek, setCurrentWeek] = useState(1);
   const [currentDay, setCurrentDay] = useState(() => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[new Date().getDay()];
@@ -545,6 +542,15 @@ export default function SwolTracker() {
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const weekDates = getWeekDates(programStartDate, currentWeek);
+
+  // Calculate actual current week based on program start date
+  const actualCurrentWeek = (() => {
+    const startDate = new Date(programStartDate);
+    const today = new Date();
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const weeksElapsed = Math.floor((today - startDate) / msPerWeek);
+    return Math.max(1, weeksElapsed + 1);
+  })();
 
   // Check auth state on mount
   useEffect(() => {
@@ -632,6 +638,19 @@ export default function SwolTracker() {
         };
 
         setProfiles({ [userId]: mergedProfile });
+
+        // Set program start date and calculate current week
+        if (profile.program_start_date) {
+          const startDate = new Date(profile.program_start_date);
+          setProgramStartDate(startDate.toISOString());
+
+          // Calculate current week based on start date
+          const today = new Date();
+          const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+          const weeksElapsed = Math.floor((today - startDate) / msPerWeek);
+          const calculatedWeek = Math.max(1, weeksElapsed + 1);
+          setCurrentWeek(calculatedWeek);
+        }
 
         // 2. Get or Create Gym
         const gyms = await db.getMyGyms(userId);
@@ -925,6 +944,12 @@ Return JSON only with this structure:
         newProgram[weekNum] = generatedProgram[weekKey];
       });
       setWorkoutProgram(prev => ({ ...prev, ...newProgram }));
+
+      // Set program start date and current week
+      if (data.programStartDate) {
+        const startDate = new Date(data.programStartDate);
+        setProgramStartDate(startDate.toISOString());
+      }
       setCurrentWeek(1);
 
       return true;
@@ -1813,7 +1838,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
                 })}
               </p>
-              <p className="text-xs text-zinc-500 mt-1">Week 4 is the current week</p>
+              <p className="text-xs text-zinc-500 mt-1">Currently on Week {actualCurrentWeek}</p>
             </div>
           </div>
         </div>
@@ -1960,7 +1985,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
                 })}
               </p>
-              <p className="text-xs text-zinc-500 mt-1">Week 4 is the current week</p>
+              <p className="text-xs text-zinc-500 mt-1">Currently on Week {actualCurrentWeek}</p>
             </div>
           </div>
         </div>
@@ -2241,7 +2266,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                   {formatDate(weekDates.start)} - {formatDate(weekDates.end)}
                 </span>
                 <h2 className="text-2xl font-bold">Week {currentWeek}</h2>
-                {currentWeek === 4 && (
+                {currentWeek === actualCurrentWeek && (
                   <span className="text-xs text-green-400 font-medium">Current Week</span>
                 )}
               </div>
@@ -2258,7 +2283,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               {days.map((day, idx) => {
                 const dayDate = new Date(weekDates.start);
                 dayDate.setDate(dayDate.getDate() + idx);
-                const isToday = currentWeek === 4 && day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+                const isToday = currentWeek === actualCurrentWeek && day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
 
                 return (
                   <button
@@ -2308,7 +2333,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                         <p className="text-xs text-zinc-500 mt-1">Check back later or ask them to generate this week</p>
                       </div>
                       <button
-                        onClick={() => setCurrentWeek(4)}
+                        onClick={() => setCurrentWeek(actualCurrentWeek)}
                         className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
                       >
                         ← Back to Current Week
@@ -2331,7 +2356,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                         Generate Week {currentWeek} with AI
                       </button>
                       <button
-                        onClick={() => setCurrentWeek(4)}
+                        onClick={() => setCurrentWeek(actualCurrentWeek)}
                         className="py-3 px-6 rounded-xl bg-zinc-800 font-medium hover:bg-zinc-700 transition-colors text-zinc-300"
                       >
                         ← Back to Current Week
@@ -2340,7 +2365,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 max-w-sm mx-auto">
                       <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Pro Tip</p>
                       <p className="text-sm text-zinc-400">
-                        🎯 Your Week 4 lifts are looking strong! Keep the momentum going by planning ahead.
+                        🎯 Keep the momentum going by planning ahead. Great progress so far!
                       </p>
                     </div>
                   </>
