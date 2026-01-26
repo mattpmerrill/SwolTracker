@@ -58,6 +58,76 @@ export const db = {
     return data
   },
 
+  // Avatar Storage
+  async uploadAvatar(userId, file) {
+    if (!supabase) return { error: 'Not configured' }
+
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${userId}/${Date.now()}.${fileExt}`
+
+      // Delete any existing avatars for this user first
+      const { data: existingFiles } = await supabase.storage
+        .from('avatars')
+        .list(userId)
+
+      if (existingFiles?.length) {
+        const filePaths = existingFiles.map(f => `${userId}/${f.name}`)
+        await supabase.storage.from('avatars').remove(filePaths)
+      }
+
+      // Upload new avatar
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (error) return { error: error.message }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      // Update profile with new avatar URL
+      await this.updateProfile(userId, {
+        avatar_url: publicUrl,
+        avatar: null // Clear emoji when image is set
+      })
+
+      return { url: publicUrl }
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+      return { error: error.message }
+    }
+  },
+
+  async deleteAvatar(userId) {
+    if (!supabase) return false
+
+    try {
+      // List and delete all files in user's folder
+      const { data: files } = await supabase.storage
+        .from('avatars')
+        .list(userId)
+
+      if (files?.length) {
+        const filePaths = files.map(f => `${userId}/${f.name}`)
+        await supabase.storage.from('avatars').remove(filePaths)
+      }
+
+      // Clear avatar_url in profile
+      await this.updateProfile(userId, { avatar_url: null })
+      return true
+    } catch (error) {
+      console.error('Error deleting avatar:', error)
+      return false
+    }
+  },
+
   // Gyms
   async getMyGyms(userId) {
     if (!supabase) return []

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, Award, UserPlus, Package, Loader2, Trash2, AlertCircle, LogOut, Users, Copy, CheckCircle, Bell, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Dumbbell, Calendar, TrendingUp, Settings, ChevronRight, ChevronLeft, Check, Plus, Flame, Target, Zap, Brain, Edit3, X, BarChart3, Clock, UserPlus, Package, Loader2, Trash2, AlertCircle, Users, CheckCircle, Shield } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, signInWithGoogle, signOut, db } from './lib/supabase';
 import { callLlmProvider } from './lib/llm';
 import Onboarding from './components/Onboarding';
 import AdminArea from './components/admin/AdminArea';
+import ProfileArea from './components/Profile/ProfileArea';
+import AvatarDisplay from './components/Profile/AvatarDisplay';
 
 // Default workout program data (used when no database or for demo)
 const defaultWorkoutProgram = {
@@ -286,16 +288,7 @@ const defaultEquipment = [
   'Cable Machine', 'Sled', 'Kettlebells'
 ];
 
-const avatarOptions = ['💪', '🔥', '⚡', '🏋️', '💥', '🦾', '🎯', '🚀', '⭐', '🏆'];
-
 // Helper functions
-const getMondayOfWeek = (date) => {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
-};
-
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
@@ -494,16 +487,13 @@ export default function SwolTracker() {
   const [gymId, setGymId] = useState(null);
 
   // Modal states
-  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
-  const [showAddUser, setShowAddUser] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [showAddLift, setShowAddLift] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAiGenerator, setShowAiGenerator] = useState(false);
 
   // Form states
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserAvatar, setNewUserAvatar] = useState('💪');
   const [newEquipmentName, setNewEquipmentName] = useState('');
   const [newLiftName, setNewLiftName] = useState('');
   const [newLiftWeight, setNewLiftWeight] = useState('');
@@ -797,6 +787,64 @@ export default function SwolTracker() {
     setAuthUser(null);
   };
 
+  // Handle profile updates from Profile area
+  const handleUpdateProfile = async (updates) => {
+    if (demoMode) {
+      // In demo mode, just update local state
+      setProfiles(prev => ({
+        ...prev,
+        [currentUser]: {
+          ...prev[currentUser],
+          ...updates
+        }
+      }));
+      return;
+    }
+
+    if (!authUser) return;
+
+    try {
+      const updated = await db.updateProfile(authUser.id, updates);
+      if (updated) {
+        setProfiles(prev => ({
+          ...prev,
+          [currentUser]: {
+            ...prev[currentUser],
+            ...updated
+          }
+        }));
+
+        // If program_start_date was updated, also update local state
+        if (updates.program_start_date) {
+          setProgramStartDate(updates.program_start_date);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
+  // Handle avatar upload
+  const handleUploadAvatar = async (file) => {
+    if (demoMode || !authUser) return;
+
+    try {
+      const result = await db.uploadAvatar(authUser.id, file);
+      if (result?.url) {
+        setProfiles(prev => ({
+          ...prev,
+          [currentUser]: {
+            ...prev[currentUser],
+            avatar_url: result.url,
+            avatar: null
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+    }
+  };
+
   // Handle onboarding completion
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
@@ -1033,44 +1081,6 @@ Return JSON only. You MUST include all 4 weeks (week1, week2, week3, week4) with
       }
     });
     return Math.round((completedSets / totalSets) * 100);
-  };
-
-  // User management
-  const addNewUser = () => {
-    if (!newUserName.trim()) return;
-    const userId = newUserName.toLowerCase().replace(/\s+/g, '_');
-    setProfiles(prev => ({
-      ...prev,
-      [userId]: {
-        id: userId,
-        name: newUserName,
-        avatar: newUserAvatar,
-        maxes: {
-          'Bench Press': 135,
-          'Back Squat': 185,
-          'Deadlift': 225,
-          'Overhead Press': 95,
-        },
-        buddies: [],
-        receivedRequests: [],
-        sentRequests: [],
-        acceptedNotifications: [],
-      }
-    }));
-    setNewUserName('');
-    setNewUserAvatar('💪');
-    setShowAddUser(false);
-    setCurrentUser(userId);
-  };
-
-  const deleteUser = (userId) => {
-    if (Object.keys(profiles).length <= 1) return;
-    const newProfiles = { ...profiles };
-    delete newProfiles[userId];
-    setProfiles(newProfiles);
-    if (currentUser === userId) {
-      setCurrentUser(Object.keys(newProfiles)[0]);
-    }
   };
 
   // Buddy Management
@@ -1566,9 +1576,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         <div className="px-5 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-xl shadow-lg shadow-orange-500/20">
-                {user?.avatar}
-              </div>
+              <AvatarDisplay user={user} size="md" />
               <div>
                 <h1 className="text-lg font-bold tracking-tight">SwolTracker</h1>
                 <p className="text-xs text-zinc-400 font-medium">
@@ -1584,7 +1592,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 <Settings className="w-5 h-5 text-zinc-300" />
               </button>
               <button
-                onClick={() => setShowProfileSwitcher(true)}
+                onClick={() => setShowProfile(true)}
                 className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors"
               >
                 <User className="w-5 h-5 text-zinc-300" />
@@ -1610,144 +1618,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         </div>
       )}
 
-      {/* Profile Switcher Modal */}
-      {showProfileSwitcher && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6 max-h-[80vh] overflow-y-auto">
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Switch Profile</h2>
-              <button onClick={() => setShowProfileSwitcher(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {/* Profile List */}
-            <div className="space-y-3">
-              {Object.entries(profiles)
-                .filter(([id, _]) => id === currentUser || user.buddies?.includes(id))
-                .map(([id, profile]) => (
-                  <div
-                    key={id}
-                    className={`p-4 rounded-2xl flex items-center gap-4 transition-all ${currentUser === id
-                      ? 'bg-gradient-to-r from-orange-500/20 to-red-500/20 border-2 border-orange-500/50'
-                      : 'bg-zinc-800/50 border-2 border-transparent hover:border-zinc-700'
-                      }`}
-                  >
-                    <button
-                      onClick={() => { setCurrentUser(id); setShowProfileSwitcher(false); }}
-                      className="flex items-center gap-4 flex-1"
-                    >
-                      <span className="text-3xl">{profile.avatar}</span>
-                      <div className="text-left">
-                        <p className="font-semibold text-lg">{profile.name}</p>
-                        <p className="text-sm text-zinc-400">
-                          Bench: {profile.maxes['Bench Press'] || 0} lbs • Squat: {profile.maxes['Back Squat'] || 0} lbs
-                        </p>
-                      </div>
-                    </button>
-                    {currentUser === id && <Check className="w-6 h-6 text-orange-500" />}
-                    {Object.keys(profiles).length > 1 && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteUser(id); }}
-                        className="p-2 hover:bg-red-500/20 rounded-lg text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-              {/* Debug / Demo Option to see all users */}
-              <div className="pt-4 border-t border-zinc-800 mt-4">
-                <p className="text-xs text-zinc-500 mb-2">Debug Actions</p>
-                <button
-                  onClick={() => {
-                    // Demo hack: Show a prompt or simple list to switch to any user
-                    const allUsers = Object.keys(profiles).join(', ');
-                    const target = prompt(`Demo Switch: Enter username to switch to:\nAvailable: ${allUsers}`);
-                    if (target && profiles[target]) {
-                      setCurrentUser(target);
-                      setShowProfileSwitcher(false);
-                    }
-                  }}
-                  className="w-full p-3 rounded-xl bg-zinc-800/50 text-xs text-zinc-400 hover:text-white transition-colors border border-zinc-700/50 border-dashed"
-                >
-                  Force Switch Profile (Demo)
-                </button>
-              </div>
-            </div>
-
-            <button
-              onClick={() => { setShowProfileSwitcher(false); setShowAddUser(true); }}
-              className="w-full mt-4 p-4 rounded-2xl bg-zinc-800/50 border-2 border-dashed border-zinc-700 font-semibold hover:border-orange-500/50 transition-colors flex items-center justify-center gap-2"
-            >
-              <UserPlus className="w-5 h-5" />
-              Add New User
-            </button>
-
-            {/* Logout Button */}
-            < button
-              onClick={handleLogout}
-              className="w-full mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 font-semibold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 text-red-400"
-            >
-              <LogOut className="w-5 h-5" />
-              {demoMode ? 'Exit Demo' : 'Sign Out'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Add User Modal */}
-      {showAddUser && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
-          <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-6">
-            <div className="w-12 h-1 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" />
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Add New User</h2>
-              <button onClick={() => setShowAddUser(false)} className="p-2 hover:bg-zinc-800 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">Name</label>
-                <input
-                  type="text"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  placeholder="Enter name"
-                  className="w-full px-4 py-3 bg-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">Avatar</label>
-                <div className="flex gap-2 flex-wrap">
-                  {avatarOptions.map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => setNewUserAvatar(emoji)}
-                      className={`w-12 h-12 rounded-xl text-2xl flex items-center justify-center transition-all ${newUserAvatar === emoji
-                        ? 'bg-orange-500/30 ring-2 ring-orange-500'
-                        : 'bg-zinc-800 hover:bg-zinc-700'
-                        }`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={addNewUser}
-                disabled={!newUserName.trim()}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                Create Profile
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
@@ -2060,6 +1931,22 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
         <AdminArea onClose={() => setShowAdmin(false)} db={db} />
       )}
 
+      {/* Profile Area */}
+      {showProfile && (
+        <ProfileArea
+          user={user}
+          authUser={authUser}
+          onClose={() => setShowProfile(false)}
+          onUpdateProfile={handleUpdateProfile}
+          onLogout={() => { setShowProfile(false); handleLogout(); }}
+          onUploadAvatar={handleUploadAvatar}
+          equipment={equipment}
+          programStartDate={programStartDate}
+          actualCurrentWeek={actualCurrentWeek}
+          demoMode={demoMode}
+        />
+      )}
+
       {/* AI Workout Generator Modal */}
       {showAiGenerator && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center overflow-y-auto">
@@ -2099,7 +1986,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(profiles).map(([id, p]) => (
                         <div key={id} className="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
-                          <span>{p.avatar}</span>
+                          <AvatarDisplay user={p} size="xs" />
                           <span className="text-sm font-medium">{p.name}</span>
                         </div>
                       ))}
@@ -2702,9 +2589,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
               <div className="mb-6 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl border border-blue-500/30 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center text-2xl">
-                      {groupLeader.avatar || '👤'}
-                    </div>
+                    <AvatarDisplay user={groupLeader} size="lg" />
                     <div>
                       <p className="text-xs text-blue-400 uppercase tracking-wider">Following</p>
                       <p className="font-bold text-lg">{groupLeader.name}'s Workouts</p>
@@ -2781,16 +2666,14 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 </h3>
                 <div className="space-y-3">
                   {user.receivedRequests.map((req) => {
-                    const requesterName = req.name || profiles[req.from]?.name || 'Unknown';
-                    const requesterAvatar = req.avatar || profiles[req.from]?.avatar || '💪';
+                    const requester = { ...profiles[req.from], ...req };
+                    const requesterName = requester.name || 'Unknown';
                     const canAccept = groupRole === 'independent';
                     return (
                       <div key={req.from} className="bg-zinc-800/80 p-4 rounded-xl border border-orange-500/30">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-zinc-700 flex items-center justify-center text-xl">
-                              {requesterAvatar}
-                            </div>
+                            <AvatarDisplay user={requester} size="sm" />
                             <div>
                               <p className="font-semibold">{requesterName}</p>
                               <p className="text-xs text-zinc-400">Wants you to follow their workouts</p>
@@ -2808,7 +2691,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
 
                         <div className="flex gap-2">
                           <button
-                            onClick={() => acceptBuddyRequest(req.id, req.from, requesterName, requesterAvatar)}
+                            onClick={() => acceptBuddyRequest(req.id, req.from, requesterName, requester.avatar)}
                             disabled={!canAccept}
                             className={`flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium ${!canAccept ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
@@ -2850,9 +2733,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                     return (
                       <div key={buddyId} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                            {buddy.avatar || '💪'}
-                          </div>
+                          <AvatarDisplay user={buddy} size="lg" />
                           <div>
                             <p className="font-bold">{buddy.name}</p>
                             <p className="text-xs text-zinc-400">{buddy.email || 'Gym Buddy'}</p>
@@ -2923,7 +2804,6 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                       const myProfile = profiles[currentUser] || {};
                       const oderId = p.user_id || p.id;
                       const userName = p.name;
-                      const userAvatar = p.avatar || '💪';
                       const isBuddy = myProfile.buddies?.includes(oderId);
                       const isPending = myProfile.sentRequests?.some(r => r.to === oderId);
                       const isIncoming = myProfile.receivedRequests?.some(r => r.from === oderId);
@@ -2932,7 +2812,7 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                       return (
                         <div key={oderId} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
                           <div className="flex items-center gap-3">
-                            <span className="text-xl">{userAvatar}</span>
+                            <AvatarDisplay user={p} size="sm" />
                             <div>
                               <span className="font-medium">{userName}</span>
                               {p.email && <p className="text-xs text-zinc-500">{p.email}</p>}
@@ -2952,14 +2832,14 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                             </button>
                           ) : isIncoming ? (
                             <button
-                              onClick={() => acceptBuddyRequest(incomingReq?.id, oderId, userName, userAvatar)}
+                              onClick={() => acceptBuddyRequest(incomingReq?.id, oderId, userName, p.avatar)}
                               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600"
                             >
                               Accept Request
                             </button>
                           ) : (
                             <button
-                              onClick={() => sendBuddyRequest(oderId, userName, userAvatar)}
+                              onClick={() => sendBuddyRequest(oderId, userName, p.avatar)}
                               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600"
                             >
                               Send Invite
