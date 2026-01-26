@@ -1,10 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dumbbell, User, Heart, Flame, Scale, Wind, Target,
   Calendar, Clock, Home, Building2, ChevronRight, ChevronLeft,
   Sparkles, Check, Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+
+// Fun motivational phrases to show while generating workout
+const LOADING_PHRASES = [
+  { text: "Calculating optimal gains...", emoji: "📊" },
+  { text: "Consulting the ancient scrolls of swole...", emoji: "📜" },
+  { text: "Channeling Arnold's spirit...", emoji: "💪" },
+  { text: "Teaching AI to count reps...", emoji: "🤖" },
+  { text: "Warming up the algorithm...", emoji: "🔥" },
+  { text: "Mixing pre-workout for your phone...", emoji: "🧪" },
+  { text: "Leg day? More like EVERY day...", emoji: "🦵" },
+  { text: "Finding exercises that don't skip leg day...", emoji: "🏋️" },
+  { text: "Calibrating pump levels...", emoji: "💉" },
+  { text: "Crunching numbers (not abs... yet)...", emoji: "🔢" },
+  { text: "Rare Pepe says: Gains are coming...", emoji: "🐸" },
+  { text: "Loading your future six-pack...", emoji: "🎁" },
+  { text: "Summoning the gym gods...", emoji: "⚡" },
+  { text: "Your muscles don't know what's coming...", emoji: "😈" },
+  { text: "Preparing for beast mode activation...", emoji: "🦁" },
+  { text: "Converting pizza into protein math...", emoji: "🍕" },
+  { text: "Optimizing for maximum swoleness...", emoji: "📈" },
+  { text: "Teaching dumbbells to respect you...", emoji: "🙇" },
+  { text: "Building your gains blueprint...", emoji: "🏗️" },
+  { text: "No curls in the squat rack, promise...", emoji: "🤞" },
+  { text: "Downloading more biceps...", emoji: "⬇️" },
+  { text: "Buffering... like your future muscles...", emoji: "⏳" },
+  { text: "Asking ChatGPT to spot you...", emoji: "🤝" },
+  { text: "Remember: crying is cardio too...", emoji: "😭" },
+  { text: "Calculating how sore you'll be...", emoji: "🩹" },
+  { text: "Finding the perfect pump playlist...", emoji: "🎵" },
+  { text: "Almost there... unlike your last PR...", emoji: "😏" },
+  { text: "Manifesting your summer body...", emoji: "🏖️" },
+  { text: "This is going to hurt so good...", emoji: "🥵" },
+  { text: "Feels good man... - Pepe", emoji: "🐸" },
+];
 
 const STEPS = [
   'welcome',
@@ -67,6 +101,21 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
   const [step, setStep] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
+
+  // Rotate through fun loading phrases while generating
+  useEffect(() => {
+    if (!isGenerating) return;
+
+    // Start with a random phrase
+    setLoadingPhraseIndex(Math.floor(Math.random() * LOADING_PHRASES.length));
+
+    const interval = setInterval(() => {
+      setLoadingPhraseIndex(prev => (prev + 1) % LOADING_PHRASES.length);
+    }, 2500); // Change phrase every 2.5 seconds
+
+    return () => clearInterval(interval);
+  }, [isGenerating]);
 
   // Form data
   const [displayName, setDisplayName] = useState(user?.name || user?.email?.split('@')[0] || '');
@@ -607,6 +656,7 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
         );
 
       case 'generating':
+        const currentPhrase = LOADING_PHRASES[loadingPhraseIndex];
         return (
           <div className="text-center animate-in fade-in zoom-in duration-500">
             <div className="w-24 h-24 bg-gradient-to-br from-orange-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-orange-500/30 animate-pulse-slow">
@@ -621,12 +671,24 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
             </h2>
             <p className="text-xl text-zinc-300 mb-8 font-medium">{generationProgress}</p>
             {isGenerating && (
-              <div className="max-w-xs mx-auto">
+              <div className="max-w-sm mx-auto">
                 <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-orange-500 via-pink-500 to-purple-500 rounded-full animate-progress" style={{ width: '100%' }} />
                 </div>
-                <p className="text-sm text-zinc-500 mt-6 font-medium animate-pulse">
-                  Your AI Coach is designing a custom 4-week program...
+
+                {/* Fun rotating phrases */}
+                <div className="mt-8 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/50 min-h-[80px] flex items-center justify-center">
+                  <div
+                    key={loadingPhraseIndex}
+                    className="animate-in fade-in slide-in-from-bottom-2 duration-500"
+                  >
+                    <span className="text-3xl mb-2 block">{currentPhrase.emoji}</span>
+                    <p className="text-zinc-300 font-medium">{currentPhrase.text}</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-zinc-600 mt-4">
+                  Your AI Coach is crafting a personalized 4-week program
                 </p>
               </div>
             )}
