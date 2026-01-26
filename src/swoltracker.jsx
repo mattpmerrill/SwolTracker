@@ -838,8 +838,8 @@ Goals: {{fitness_goals}}
 Days: {{workout_days}}, Duration: {{workout_duration}}, Location: {{workout_location}}
 Equipment: {{equipment}}
 
-Return JSON only with this structure:
-{"week1": {"DayName": {"focus": "description", "exercises": [{"name": "Exercise", "sets": 3, "reps": "8-10", "notes": "optional"}]}}}`;
+Return JSON only. You MUST include all 4 weeks (week1, week2, week3, week4) with this structure:
+{"week1": {"DayName": {"focus": "description", "exercises": [{"name": "Exercise", "sets": 3, "reps": "8-10", "notes": "optional"}]}}, "week2": {...}, "week3": {...}, "week4": {...}}`;
       }
 
       // 4. Fetch user's 1RM maxes to pass to the AI
