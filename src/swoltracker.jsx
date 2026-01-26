@@ -2551,20 +2551,28 @@ For exercises without percentage-based loading (bodyweight, conditioning, etc.),
                 Strength Levels
               </h3>
               <div className="space-y-4">
-                {['Bench Press', 'Back Squat', 'Deadlift'].map(lift => (
-                  <div key={lift}>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-zinc-400">{lift}</span>
-                      <span className="font-semibold">{user?.maxes?.[lift] || 0} lbs</span>
-                    </div>
-                    <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-500"
-                        style={{ width: `${((user?.maxes?.[lift] || 0) / 400) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                {Object.keys(user?.maxes || {}).length > 0 ? (
+                  Object.entries(user.maxes).map(([lift, weight]) => {
+                    const maxWeight = Math.max(...Object.values(user.maxes));
+                    const barScale = maxWeight * 1.2; // Add 20% buffer for visual headroom
+                    return (
+                      <div key={lift}>
+                        <div className="flex justify-between text-sm mb-2">
+                          <span className="text-zinc-400">{lift}</span>
+                          <span className="font-semibold">{weight} lbs</span>
+                        </div>
+                        <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-500"
+                            style={{ width: `${(weight / barScale) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-zinc-500 text-sm">No maxes logged yet. Add your 1RMs in the Maxes tab!</p>
+                )}
               </div>
             </div>
 
