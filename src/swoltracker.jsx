@@ -404,15 +404,46 @@ export default function SwolTracker() {
         .replace(/\{\{equipment\}\}/g, onboardingData.equipment.join(', '));
 
       // 5. Call the LLM
-      const systemPrompt = 'You are an expert fitness coach. Generate a workout program as JSON only, no markdown.';
+      const systemPrompt = 'You are an expert fitness coach. Generate a workout program as JSON only, no markdown, no comments, no explanations. Return ONLY valid JSON.';
       const result = await callLlmProvider(provider, apiKey, systemPrompt, filledPrompt, 'onboarding', db, authUser.id);
 
       // Log the API usage
       await db.logApiUsage(authUser.id, 'onboarding_workout', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
-      // 6. Parse the response
-      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
-      const generatedProgram = JSON.parse(cleanedResponse);
+      // 6. Parse the response - extract JSON robustly
+      let cleanedResponse = result.content
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
+      // Try to extract JSON object if there's extra text
+      const firstBrace = cleanedResponse.indexOf('{');
+      const lastBrace = cleanedResponse.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanedResponse = cleanedResponse.slice(firstBrace, lastBrace + 1);
+      }
+
+      let generatedProgram;
+      try {
+        generatedProgram = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        // Log the parsing error with a snippet of what we tried to parse
+        await logError(db, {
+          category: ErrorCategory.PARSING,
+          message: 'Failed to parse AI workout response: ' + parseError.message,
+          severity: ErrorSeverity.ERROR,
+          userId: authUser?.id,
+          component: 'swoltracker.jsx',
+          operation: 'handleGenerateOnboardingWorkout.parseJson',
+          originalError: parseError,
+          context: {
+            responseSnippet: cleanedResponse.substring(0, 500),
+            responseLength: cleanedResponse.length,
+            onboardingData
+          }
+        });
+        throw new Error('The AI returned an invalid response. Please try again.');
+      }
 
       // 7. Save workout programs for each week
       // First, get or create the user's gym
