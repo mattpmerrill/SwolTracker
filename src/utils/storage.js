@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   WORKOUT_PROGRAM: 'swoltracker-program',
   PROGRAM_START_DATE: 'swoltracker-startdate',
   CURRENT_USER: 'swoltracker-currentuser',
+  COMPLETED_WORKOUTS: 'swoltracker-completed-workouts',
 };
 
 /**
@@ -123,6 +124,7 @@ export const loadAllData = () => {
     workoutProgram: getItem(STORAGE_KEYS.WORKOUT_PROGRAM),
     programStartDate: getString(STORAGE_KEYS.PROGRAM_START_DATE),
     currentUser: getString(STORAGE_KEYS.CURRENT_USER),
+    completedWorkouts: getItem(STORAGE_KEYS.COMPLETED_WORKOUTS),
   };
 };
 
@@ -137,6 +139,7 @@ export const saveAllData = (data) => {
   if (data.workoutProgram !== undefined) setItem(STORAGE_KEYS.WORKOUT_PROGRAM, data.workoutProgram);
   if (data.programStartDate !== undefined) setString(STORAGE_KEYS.PROGRAM_START_DATE, data.programStartDate);
   if (data.currentUser !== undefined) setString(STORAGE_KEYS.CURRENT_USER, data.currentUser);
+  if (data.completedWorkouts !== undefined) setItem(STORAGE_KEYS.COMPLETED_WORKOUTS, data.completedWorkouts);
 };
 
 /**

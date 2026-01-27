@@ -9,6 +9,7 @@ export default function ExerciseCard({
   exerciseIndex,
   userMaxes,
   isViewingBuddy,
+  isWorkoutComplete,
   isSetLogged,
   onLogSet,
   onAddMax,
@@ -51,6 +52,7 @@ export default function ExerciseCard({
                 reps={exercise.reps}
                 isLogged={logged}
                 isViewingBuddy={isViewingBuddy}
+                isWorkoutComplete={isWorkoutComplete}
                 exerciseName={exercise.name}
                 onLogSet={() => onLogSet(exerciseIndex, setIdx, { weight, reps: exercise.reps })}
                 onAddMax={() => onAddMax(exercise.name)}

@@ -1,3 +1,5 @@
+import { Check, RotateCcw } from 'lucide-react';
+
 /**
  * Today's workout focus card with completion ring
  */
@@ -5,6 +7,9 @@ export default function WorkoutFocus({
   currentDay,
   workout,
   completionPercentage,
+  isWorkoutComplete,
+  isViewingBuddy,
+  onToggleComplete,
 }) {
   if (!workout) return null;
 
@@ -66,6 +71,30 @@ export default function WorkoutFocus({
             </div>
           )}
         </div>
+
+        {/* Complete Workout Button - only show if completion > 0% and not a rest day */}
+        {workout.focus !== 'Rest Day' && completionPercentage > 0 && !isViewingBuddy && (
+          <button
+            onClick={onToggleComplete}
+            className={`mt-4 w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+              isWorkoutComplete
+                ? 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
+                : 'bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30'
+            }`}
+          >
+            {isWorkoutComplete ? (
+              <>
+                <RotateCcw className="w-5 h-5" />
+                Workout Complete - Tap to Edit
+              </>
+            ) : (
+              <>
+                <Check className="w-5 h-5" />
+                Complete Workout
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

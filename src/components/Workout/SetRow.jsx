@@ -10,20 +10,23 @@ export default function SetRow({
   reps,
   isLogged,
   isViewingBuddy,
+  isWorkoutComplete,
   exerciseName,
   onLogSet,
   onAddMax,
 }) {
+  // Disable interaction when viewing buddy or when workout is marked complete
+  const isDisabled = isViewingBuddy || isWorkoutComplete;
   return (
     <div
-      onClick={!isViewingBuddy ? onLogSet : undefined}
+      onClick={!isDisabled ? onLogSet : undefined}
       className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
         isLogged
           ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30'
           : 'bg-zinc-800/40 hover:bg-zinc-800/60'
-      } ${!isViewingBuddy ? 'cursor-pointer' : ''}`}
+      } ${!isDisabled ? 'cursor-pointer' : ''} ${isWorkoutComplete ? 'opacity-75' : ''}`}
     >
-      {isViewingBuddy ? (
+      {isDisabled ? (
         <div
           className={`w-8 h-8 rounded-lg flex items-center justify-center ${
             isLogged ? 'bg-green-500 text-white' : 'bg-zinc-700'
@@ -63,15 +66,15 @@ export default function SetRow({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (!isViewingBuddy && onAddMax) onAddMax();
+                if (!isDisabled && onAddMax) onAddMax();
               }}
               className={`flex items-baseline gap-2 ${
-                !isViewingBuddy ? 'hover:text-orange-400 transition-colors' : ''
+                !isDisabled ? 'hover:text-orange-400 transition-colors' : ''
               }`}
-              disabled={isViewingBuddy}
+              disabled={isDisabled}
             >
               <span className="text-zinc-400">{percentage}% of 1RM</span>
-              {!isViewingBuddy && (
+              {!isDisabled && (
                 <span className="text-xs text-orange-500 font-medium">+ Add Max</span>
               )}
             </button>

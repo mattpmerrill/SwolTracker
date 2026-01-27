@@ -50,6 +50,7 @@ export default function SwolTracker() {
   const [currentUser, setCurrentUser] = useState('merrill');
   const [equipment, setEquipment] = useState(defaultEquipment);
   const [exerciseLog, setExerciseLog] = useState({});
+  const [completedWorkouts, setCompletedWorkouts] = useState({});
   const [workoutProgram, setWorkoutProgram] = useState(defaultWorkoutProgram);
   const [programStartDate, setProgramStartDate] = useState(() => new Date().toISOString());
   const [currentWeek, setCurrentWeek] = useState(1);
@@ -268,6 +269,7 @@ export default function SwolTracker() {
     if (data.profiles) setProfiles(data.profiles);
     if (data.equipment) setEquipment(data.equipment);
     if (data.exerciseLog) setExerciseLog(data.exerciseLog);
+    if (data.completedWorkouts) setCompletedWorkouts(data.completedWorkouts);
     if (data.workoutProgram) setWorkoutProgram(data.workoutProgram);
     if (data.programStartDate) setProgramStartDate(data.programStartDate);
     if (data.currentUser) setCurrentUser(data.currentUser);
@@ -276,8 +278,8 @@ export default function SwolTracker() {
 
   useEffect(() => {
     if (isLoading || authLoading) return;
-    saveAllData({ profiles, equipment, exerciseLog, workoutProgram, programStartDate, currentUser });
-  }, [profiles, equipment, exerciseLog, workoutProgram, programStartDate, currentUser, isLoading, authLoading]);
+    saveAllData({ profiles, equipment, exerciseLog, completedWorkouts, workoutProgram, programStartDate, currentUser });
+  }, [profiles, equipment, exerciseLog, completedWorkouts, workoutProgram, programStartDate, currentUser, isLoading, authLoading]);
 
   // ==========================================
   // CHAT SUBSCRIPTION
@@ -515,6 +517,28 @@ export default function SwolTracker() {
 
   const getTotalCompletedSets = (userId = currentUser) => {
     return Object.keys(exerciseLog).filter(k => k.startsWith(userId) && exerciseLog[k]?.completed).length;
+  };
+
+  const isWorkoutComplete = (week, day, targetUserId = currentUser) => {
+    return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
+  };
+
+  const toggleWorkoutComplete = (week, day) => {
+    const key = `${currentUser}-${week}-${day}`;
+    const wasComplete = completedWorkouts[key] || false;
+    const completionPct = getCompletionPercentage(week, day, currentUser);
+
+    setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
+
+    // Fire confetti when completing a workout at 100%
+    if (!wasComplete && completionPct === 100) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
+      });
+    }
   };
 
   // Maxes
@@ -785,6 +809,8 @@ export default function SwolTracker() {
             onLogSet={logSet}
             onAddMax={openQuickAddMax}
             getCompletionPercentage={getCompletionPercentage}
+            isWorkoutComplete={isWorkoutComplete}
+            onToggleWorkoutComplete={toggleWorkoutComplete}
           />
         )}
 

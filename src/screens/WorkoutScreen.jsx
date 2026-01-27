@@ -31,6 +31,8 @@ export default function WorkoutScreen({
   onLogSet,
   onAddMax,
   getCompletionPercentage,
+  isWorkoutComplete,
+  onToggleWorkoutComplete,
 }) {
   const weekDates = getWeekDates(programStartDate, currentWeek);
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
@@ -75,6 +77,9 @@ export default function WorkoutScreen({
           currentDay={currentDay}
           workout={todayWorkout}
           completionPercentage={getCompletionPercentage(currentWeek, currentDay, user.id)}
+          isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
+          isViewingBuddy={isViewingBuddy}
+          onToggleComplete={() => onToggleWorkoutComplete(currentWeek, currentDay)}
         />
       )}
 
@@ -91,6 +96,7 @@ export default function WorkoutScreen({
                 exerciseIndex={exIdx}
                 userMaxes={user?.maxes}
                 isViewingBuddy={isViewingBuddy}
+                isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}
                 onAddMax={onAddMax}
