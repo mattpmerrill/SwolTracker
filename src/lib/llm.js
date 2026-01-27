@@ -223,15 +223,16 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
 }
 
 async function callClaude(apiKey, systemPrompt, userPrompt, model) {
-  const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+  // Use Vercel serverless proxy to avoid CORS issues
+  const proxyUrl = '/api/claude';
+
+  const response = await fetchWithTimeout(proxyUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
+      apiKey: apiKey,
       model: model,
       max_tokens: 4000,
       system: systemPrompt,
