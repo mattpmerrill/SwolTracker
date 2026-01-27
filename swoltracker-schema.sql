@@ -189,6 +189,23 @@ CREATE INDEX idx_logs_user_week ON workout_logs(user_id, week_number, day_name);
 CREATE INDEX idx_logs_gym_week ON workout_logs(gym_id, week_number);
 
 -- ============================================
+-- WORKOUT COMPLETIONS (whole workout marked complete)
+-- ============================================
+CREATE TABLE workout_completions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  gym_id UUID REFERENCES gyms(id) ON DELETE CASCADE,
+  week_number INT NOT NULL,
+  day_name TEXT NOT NULL,
+  completed_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, gym_id, week_number, day_name)
+);
+
+-- Indexes for performance
+CREATE INDEX idx_workout_completions_user ON workout_completions(user_id);
+CREATE INDEX idx_workout_completions_gym ON workout_completions(gym_id, week_number);
+
+-- ============================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================
 
@@ -200,6 +217,7 @@ ALTER TABLE gym_equipment ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_maxes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workout_completions ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Users can read all profiles, but only update their own
 CREATE POLICY "Profiles are viewable by everyone" ON profiles
@@ -279,6 +297,18 @@ CREATE POLICY "View gym buddy logs" ON workout_logs
   );
 
 CREATE POLICY "Users manage own logs" ON workout_logs
+  FOR ALL USING (user_id = auth.uid());
+
+-- Workout Completions: View own and gym completions
+CREATE POLICY "View own completions" ON workout_completions
+  FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY "View gym completions" ON workout_completions
+  FOR SELECT USING (
+    gym_id IN (SELECT gym_id FROM gym_members WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users manage own completions" ON workout_completions
   FOR ALL USING (user_id = auth.uid());
 
 -- ============================================

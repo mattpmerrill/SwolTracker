@@ -250,6 +250,14 @@ export default function SwolTracker() {
           newLog[key] = { completed: l.completed, actualWeight: l.actual_weight, actualReps: l.actual_reps };
         });
         setExerciseLog(newLog);
+
+        // Load workout completions from database
+        const completions = await db.getWorkoutCompletions(activeGymId);
+        const completedMap = {};
+        completions.forEach(c => {
+          completedMap[`${c.user_id}-${c.week_number}-${c.day_name}`] = true;
+        });
+        setCompletedWorkouts(completedMap);
       }
 
       setIsAdmin(db.isAdmin(authUser.email));
@@ -527,12 +535,21 @@ export default function SwolTracker() {
     return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
   };
 
-  const toggleWorkoutComplete = (week, day) => {
+  const toggleWorkoutComplete = async (week, day) => {
     const key = `${currentUser}-${week}-${day}`;
     const wasComplete = completedWorkouts[key] || false;
     const completionPct = getCompletionPercentage(week, day, currentUser);
 
     setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
+
+    // Save to database
+    if (!demoMode) {
+      if (wasComplete) {
+        await db.unmarkWorkoutComplete(currentUser, gymId, week, day);
+      } else {
+        await db.markWorkoutComplete(currentUser, gymId, week, day);
+      }
+    }
 
     // Fire confetti when completing a workout at 100%
     if (!wasComplete && completionPct === 100) {

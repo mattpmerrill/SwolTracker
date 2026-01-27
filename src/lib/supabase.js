@@ -411,6 +411,73 @@ export const db = {
     return data || []
   },
 
+  // Workout Completions
+  async markWorkoutComplete(userId, gymId, weekNumber, dayName) {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .from('workout_completions')
+      .upsert({
+        user_id: userId,
+        gym_id: gymId,
+        week_number: weekNumber,
+        day_name: dayName
+      }, {
+        onConflict: 'user_id,gym_id,week_number,day_name'
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error marking workout complete:', error)
+    }
+    return data
+  },
+
+  async unmarkWorkoutComplete(userId, gymId, weekNumber, dayName) {
+    if (!supabase) return false
+    const { error } = await supabase
+      .from('workout_completions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('gym_id', gymId)
+      .eq('week_number', weekNumber)
+      .eq('day_name', dayName)
+
+    if (error) {
+      console.error('Error unmarking workout complete:', error)
+      return false
+    }
+    return true
+  },
+
+  async getWorkoutCompletions(gymId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .from('workout_completions')
+      .select('*')
+      .eq('gym_id', gymId)
+
+    if (error) {
+      console.error('Error fetching workout completions:', error)
+      return []
+    }
+    return data || []
+  },
+
+  async getUserWorkoutCompletions(userId) {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .from('workout_completions')
+      .select('*')
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('Error fetching user workout completions:', error)
+      return []
+    }
+    return data || []
+  },
+
   // Stats
   async getUserStats(userId) {
     if (!supabase) return { totalSets: 0, weeksActive: 0 }
