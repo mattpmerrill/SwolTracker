@@ -3,6 +3,10 @@
     "vercel-swoltracker": {
       "type": "http",
       "url": "https://mcp.vercel.com/matts-projects-628fad4b/swol-tracker"
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp"
     }
   }
 }
