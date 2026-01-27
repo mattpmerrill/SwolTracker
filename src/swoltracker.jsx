@@ -519,6 +519,10 @@ export default function SwolTracker() {
     return Object.keys(exerciseLog).filter(k => k.startsWith(userId) && exerciseLog[k]?.completed).length;
   };
 
+  const getTotalCompletedWorkouts = (userId = currentUser) => {
+    return Object.keys(completedWorkouts).filter(k => k.startsWith(userId) && completedWorkouts[k]).length;
+  };
+
   const isWorkoutComplete = (week, day, targetUserId = currentUser) => {
     return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
   };
@@ -841,7 +845,7 @@ export default function SwolTracker() {
         {activeTab === 'progress' && (
           <ProgressScreen
             user={user}
-            totalCompletedSets={getTotalCompletedSets(user.id)}
+            totalCompletedWorkouts={getTotalCompletedWorkouts(user.id)}
             weeksProgrammed={Object.keys(workoutProgram).length}
           />
         )}

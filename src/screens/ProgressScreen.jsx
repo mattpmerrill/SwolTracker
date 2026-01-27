@@ -6,7 +6,7 @@ import { ProgressStats, StrengthLevels } from '../components/Progress';
  */
 export default function ProgressScreen({
   user,
-  totalCompletedSets,
+  totalCompletedWorkouts,
   weeksProgrammed,
 }) {
   return (
@@ -17,7 +17,7 @@ export default function ProgressScreen({
       </div>
 
       <ProgressStats
-        totalCompletedSets={totalCompletedSets}
+        totalCompletedWorkouts={totalCompletedWorkouts}
         weeksProgrammed={weeksProgrammed}
       />
 
