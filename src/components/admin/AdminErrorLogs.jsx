@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   AlertCircle, AlertTriangle, Info, CheckCircle,
   Loader2, RefreshCw, Trash2, ChevronDown, ChevronRight,
-  Filter, Search, Clock, User, Code, FileText, X
+  Filter, Search, Clock, User, Code, FileText, X, Copy, Check
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -77,6 +77,7 @@ const AdminErrorLogs = ({ db }) => {
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState({});
   const [message, setMessage] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
 
   // Filters
   const [category, setCategory] = useState('all');
@@ -136,6 +137,16 @@ const AdminErrorLogs = ({ db }) => {
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const copyToClipboard = async (text, id) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
   };
 
   const filteredErrors = errors.filter(e =>
@@ -397,9 +408,28 @@ const AdminErrorLogs = ({ db }) => {
                         {/* Context */}
                         {error.context && Object.keys(error.context).length > 0 && (
                           <div className="space-y-1 md:col-span-2">
-                            <div className="flex items-center gap-2 text-xs text-zinc-400">
-                              <FileText className="w-3 h-3" />
-                              Context
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                                <FileText className="w-3 h-3" />
+                                Context
+                              </div>
+                              <button
+                                onClick={() => copyToClipboard(JSON.stringify(error.context, null, 2), `context-${error.id}`)}
+                                className="flex items-center gap-1.5 px-2 py-1 text-xs text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-md transition-all border border-white/5 hover:border-white/10"
+                                title="Copy to clipboard"
+                              >
+                                {copiedId === `context-${error.id}` ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span className="text-emerald-400">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
                             </div>
                             <pre className="text-xs text-zinc-300 bg-zinc-900/50 p-3 rounded-lg overflow-x-auto max-h-32 font-mono">
                               {JSON.stringify(error.context, null, 2)}
@@ -411,9 +441,28 @@ const AdminErrorLogs = ({ db }) => {
                       {/* Stack Trace */}
                       {error.stack_trace && (
                         <div className="mt-4 space-y-1">
-                          <div className="flex items-center gap-2 text-xs text-zinc-400">
-                            <Code className="w-3 h-3" />
-                            Stack Trace
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-zinc-400">
+                              <Code className="w-3 h-3" />
+                              Stack Trace
+                            </div>
+                            <button
+                              onClick={() => copyToClipboard(error.stack_trace, `stack-${error.id}`)}
+                              className="flex items-center gap-1.5 px-2 py-1 text-xs text-zinc-400 hover:text-white bg-zinc-800/50 hover:bg-zinc-800 rounded-md transition-all border border-white/5 hover:border-white/10"
+                              title="Copy to clipboard"
+                            >
+                              {copiedId === `stack-${error.id}` ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-emerald-400">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
                           </div>
                           <pre className="text-xs text-zinc-400 bg-zinc-900/50 p-3 rounded-lg overflow-x-auto max-h-48 font-mono whitespace-pre-wrap">
                             {error.stack_trace}
