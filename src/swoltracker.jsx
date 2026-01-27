@@ -365,6 +365,91 @@ export default function SwolTracker() {
     }
   };
 
+  const handleGenerateOnboardingWorkout = async (onboardingData) => {
+    if (!authUser) return false;
+
+    try {
+      // 1. Save the user profile with onboarding data
+      const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
+      if (!profileSaved) {
+        console.error('Failed to save onboarding profile');
+        return false;
+      }
+
+      // 2. Get the prompt template
+      const promptTemplate = await db.getPromptTemplate('onboarding_workout_generator');
+      if (!promptTemplate) {
+        console.error('Onboarding prompt template not found');
+        return false;
+      }
+
+      // 3. Get LLM provider and API key
+      const provider = await db.getLlmProvider();
+      const apiKey = await db.getGlobalApiKey();
+      if (!apiKey) {
+        console.error('No API key configured');
+        return false;
+      }
+
+      // 4. Fill in the prompt template with user data
+      const filledPrompt = promptTemplate
+        .replace(/\{\{display_name\}\}/g, onboardingData.displayName)
+        .replace(/\{\{gender\}\}/g, onboardingData.gender)
+        .replace(/\{\{age\}\}/g, onboardingData.age)
+        .replace(/\{\{weight_lbs\}\}/g, onboardingData.weightLbs)
+        .replace(/\{\{workout_location\}\}/g, onboardingData.workoutLocation)
+        .replace(/\{\{fitness_goals\}\}/g, onboardingData.fitnessGoals.join(', '))
+        .replace(/\{\{workout_days\}\}/g, onboardingData.workoutDays.join(', '))
+        .replace(/\{\{workout_duration\}\}/g, onboardingData.workoutDuration)
+        .replace(/\{\{equipment\}\}/g, onboardingData.equipment.join(', '));
+
+      // 5. Call the LLM
+      const systemPrompt = 'You are an expert fitness coach. Generate a workout program as JSON only, no markdown.';
+      const result = await callLlmProvider(provider, apiKey, systemPrompt, filledPrompt, 'onboarding', db, authUser.id);
+
+      // Log the API usage
+      await db.logApiUsage(authUser.id, 'onboarding_workout', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
+
+      // 6. Parse the response
+      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
+      const generatedProgram = JSON.parse(cleanedResponse);
+
+      // 7. Save workout programs for each week
+      // First, get or create the user's gym
+      let userGymId = gymId;
+      if (!userGymId) {
+        // Get the profile which should now have a gym_id from completeOnboarding
+        const profile = await db.getProfile(authUser.id);
+        userGymId = profile?.gym_id;
+      }
+
+      if (userGymId) {
+        // Save each week's program
+        for (let week = 1; week <= 4; week++) {
+          const weekKey = `week${week}`;
+          if (generatedProgram[weekKey]) {
+            await db.saveWorkoutProgram(userGymId, week, generatedProgram[weekKey], authUser.id, true, 'Generated during onboarding');
+          }
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error generating onboarding workout:', error);
+      await logError(db, {
+        category: ErrorCategory.LLM,
+        message: error.message || 'Failed to generate onboarding workout',
+        severity: ErrorSeverity.ERROR,
+        userId: authUser?.id,
+        component: 'swoltracker.jsx',
+        operation: 'handleGenerateOnboardingWorkout',
+        originalError: error,
+        context: { onboardingData }
+      });
+      return false;
+    }
+  };
+
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
     if (authUser) window.location.reload();
@@ -629,7 +714,7 @@ export default function SwolTracker() {
   }
 
   if (showOnboarding && !demoMode) {
-    return <Onboarding user={onboardingData} onComplete={handleOnboardingComplete} onGenerateWorkout={() => {}} />;
+    return <Onboarding user={onboardingData} onComplete={handleOnboardingComplete} onGenerateWorkout={handleGenerateOnboardingWorkout} />;
   }
 
   return (
