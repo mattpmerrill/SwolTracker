@@ -16,11 +16,12 @@ export default function SetRow({
 }) {
   return (
     <div
+      onClick={!isViewingBuddy ? onLogSet : undefined}
       className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
         isLogged
           ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30'
           : 'bg-zinc-800/40 hover:bg-zinc-800/60'
-      }`}
+      } ${!isViewingBuddy ? 'cursor-pointer' : ''}`}
     >
       {isViewingBuddy ? (
         <div
@@ -35,8 +36,7 @@ export default function SetRow({
           )}
         </div>
       ) : (
-        <button
-          onClick={onLogSet}
+        <div
           className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
             isLogged
               ? 'bg-green-500 text-white'
@@ -48,7 +48,7 @@ export default function SetRow({
           ) : (
             <span className="text-sm font-bold">{setIndex + 1}</span>
           )}
-        </button>
+        </div>
       )}
 
       <div className="flex-1">
@@ -61,7 +61,10 @@ export default function SetRow({
           ) : percentage ? (
             // Has percentage but no 1RM logged - prompt user to add
             <button
-              onClick={!isViewingBuddy ? onAddMax : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isViewingBuddy && onAddMax) onAddMax();
+              }}
               className={`flex items-baseline gap-2 ${
                 !isViewingBuddy ? 'hover:text-orange-400 transition-colors' : ''
               }`}
