@@ -9,6 +9,7 @@ import {
   Loader2,
   CheckCircle,
   Check,
+  Clock,
 } from 'lucide-react';
 import AvatarDisplay from '../Profile/AvatarDisplay';
 
@@ -25,6 +26,10 @@ export default function AiGeneratorModal({
   aiLoading,
   aiError,
   generatedPreview,
+  weekCount,
+  onWeekCountChange,
+  previewWeek,
+  onPreviewWeekChange,
   onNotesChange,
   onGenerate,
   onConfirm,
@@ -32,6 +37,10 @@ export default function AiGeneratorModal({
   onClose,
 }) {
   if (!isOpen) return null;
+
+  // Get the weeks in the preview (week1, week2, etc.)
+  const previewWeeks = generatedPreview ? Object.keys(generatedPreview).filter(k => k.startsWith('week')).sort() : [];
+  const currentPreviewData = generatedPreview && previewWeek ? generatedPreview[previewWeek] : null;
 
   // Get weeks to show as context
   const contextWeeks = [generationWeek - 3, generationWeek - 2, generationWeek - 1].filter(w => w > 0);
@@ -133,6 +142,32 @@ export default function AiGeneratorModal({
                   ))}
                 </div>
               </div>
+
+              {/* Program Length Selection */}
+              <div className="bg-zinc-800/50 rounded-xl p-4">
+                <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-purple-500" />
+                  Program Length
+                </h3>
+                <div className="flex gap-2">
+                  {[2, 4, 6].map(count => (
+                    <button
+                      key={count}
+                      onClick={() => onWeekCountChange(count)}
+                      className={`flex-1 py-3 rounded-xl text-center font-semibold transition-all ${
+                        weekCount === count
+                          ? 'bg-purple-500/20 border-2 border-purple-500 text-purple-400'
+                          : 'bg-zinc-700/50 border-2 border-transparent text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {count} Weeks
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500 mt-2 text-center">
+                  Generating weeks {generationWeek} - {generationWeek + weekCount - 1}
+                </p>
+              </div>
             </div>
 
             {/* Notes Input */}
@@ -175,12 +210,12 @@ export default function AiGeneratorModal({
               {aiLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating Week {generationWeek}...
+                  Generating {weekCount} Weeks...
                 </>
               ) : (
                 <>
                   <Zap className="w-5 h-5" />
-                  Generate Workout Program
+                  Generate {weekCount}-Week Program
                 </>
               )}
             </button>
@@ -197,12 +232,31 @@ export default function AiGeneratorModal({
               <div className="flex items-center gap-2 mb-4">
                 <CheckCircle className="w-5 h-5 text-green-500" />
                 <span className="font-semibold text-green-400">
-                  Workout Generated Successfully!
+                  {previewWeeks.length} Week{previewWeeks.length > 1 ? 's' : ''} Generated Successfully!
                 </span>
               </div>
 
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                {Object.entries(generatedPreview).map(([day, workout]) => (
+              {/* Week Tabs */}
+              {previewWeeks.length > 1 && (
+                <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                  {previewWeeks.map((weekKey, idx) => (
+                    <button
+                      key={weekKey}
+                      onClick={() => onPreviewWeekChange(weekKey)}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all ${
+                        previewWeek === weekKey
+                          ? 'bg-purple-500/20 border border-purple-500 text-purple-400'
+                          : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Week {generationWeek + idx}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                {currentPreviewData && Object.entries(currentPreviewData).map(([day, workout]) => (
                   <div key={day} className="bg-zinc-800/50 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-semibold">{day}</h4>
@@ -253,7 +307,7 @@ export default function AiGeneratorModal({
                 className="flex-1 py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
-                Add to Program
+                Add {previewWeeks.length} Week{previewWeeks.length > 1 ? 's' : ''} to Program
               </button>
             </div>
           </>

@@ -86,6 +86,8 @@ export default function SwolTracker() {
   const [aiError, setAiError] = useState('');
   const [generatedPreview, setGeneratedPreview] = useState(null);
   const [generationWeek, setGenerationWeek] = useState(null);
+  const [weekCount, setWeekCount] = useState(4);
+  const [previewWeek, setPreviewWeek] = useState('week1');
 
   // ==========================================
   // BUDDY/GROUP STATE
@@ -725,6 +727,8 @@ export default function SwolTracker() {
     setAiNotes('');
     setAiError('');
     setGeneratedPreview(null);
+    setWeekCount(4);
+    setPreviewWeek('week1');
     setShowAiGenerator(true);
   };
 
@@ -738,22 +742,66 @@ export default function SwolTracker() {
       const apiKey = await db.getGlobalApiKey();
       if (!apiKey) { setAiError('No API key configured.'); setAiLoading(false); return; }
 
+      // Fetch recent workout logs for performance data
+      const recentWorkoutLogs = await db.getRecentWorkoutLogs(currentUser, 4);
+
+      // Collect previous weeks for context
       const recentWeeks = [];
       for (let w = Math.max(1, generationWeek - 3); w < generationWeek; w++) {
         if (workoutProgram[w]) recentWeeks.push({ week: w, program: workoutProgram[w] });
       }
 
-      const systemPrompt = `You are an elite strength and conditioning coach. Generate a complete week of workouts in JSON format.`;
-      const userPrompt = `Generate Week ${generationWeek} workout program. Athletes: ${Object.entries(profiles).map(([id, p]) => `${p.name} with maxes: ${JSON.stringify(p.maxes)}`).join('; ')}. Equipment: ${equipment.join(', ')}. Previous weeks: ${JSON.stringify(recentWeeks)}. Notes: ${aiNotes || 'None'}. Return JSON only with Monday-Sunday, each having focus and exercises array.`;
+      // Fetch the multi-week prompt template
+      let promptTemplate = await db.getPromptTemplate('multi_week_workout_generator');
+
+      // Format athletes info
+      const athletesInfo = Object.entries(profiles).map(([id, p]) =>
+        `${p.name}: maxes = ${JSON.stringify(p.maxes || {})}`
+      ).join('\n');
+
+      // Format recent workout logs for the prompt
+      const recentWorkoutsFormatted = recentWorkoutLogs.length > 0
+        ? JSON.stringify(recentWorkoutLogs, null, 2)
+        : 'No recent workout data available';
+
+      // Get user profile for display name
+      const userProfile = profiles[currentUser];
+
+      if (promptTemplate) {
+        // Fill in the template placeholders
+        promptTemplate = promptTemplate
+          .replace(/\{\{display_name\}\}/g, userProfile?.name || 'Athlete')
+          .replace(/\{\{athletes\}\}/g, athletesInfo)
+          .replace(/\{\{equipment\}\}/g, equipment.join(', '))
+          .replace(/\{\{start_week\}\}/g, String(generationWeek))
+          .replace(/\{\{week_count\}\}/g, String(weekCount))
+          .replace(/\{\{user_notes\}\}/g, aiNotes || 'None')
+          .replace(/\{\{recent_workouts\}\}/g, recentWorkoutsFormatted)
+          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks));
+      }
+
+      const systemPrompt = promptTemplate || `You are an elite strength and conditioning coach. Generate ${weekCount} weeks of workouts in JSON format.`;
+      const userPrompt = !promptTemplate ? `Generate a ${weekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${aiNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.` : 'Generate the workout program based on the context provided.';
 
       const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
       await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
+      // Clean and parse the response
       const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
       const generatedProgram = JSON.parse(cleanedResponse);
+
+      // Validate the expected weeks exist
       const requiredDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      for (const day of requiredDays) { if (!generatedProgram[day]) throw new Error(`Missing day: ${day}`); }
+      for (let i = 1; i <= weekCount; i++) {
+        const weekKey = `week${i}`;
+        if (!generatedProgram[weekKey]) throw new Error(`Missing ${weekKey} in response`);
+        for (const day of requiredDays) {
+          if (!generatedProgram[weekKey][day]) throw new Error(`Missing ${day} in ${weekKey}`);
+        }
+      }
+
       setGeneratedPreview(generatedProgram);
+      setPreviewWeek('week1');
     } catch (error) {
       setAiError(error.message || 'Failed to generate workout.');
       toast.error(error.message);
@@ -764,11 +812,25 @@ export default function SwolTracker() {
 
   const confirmGeneratedWorkout = async () => {
     if (!generatedPreview || !generationWeek) return;
-    setWorkoutProgram(prev => ({ ...prev, [generationWeek]: generatedPreview }));
-    if (gymId) await db.saveWorkoutProgram(gymId, generationWeek, generatedPreview, currentUser, true, aiNotes);
+
+    const weekKeys = Object.keys(generatedPreview).filter(k => k.startsWith('week')).sort();
+    const updates = {};
+
+    for (let i = 0; i < weekKeys.length; i++) {
+      const weekKey = weekKeys[i];
+      const targetWeek = generationWeek + i;
+      updates[targetWeek] = generatedPreview[weekKey];
+
+      if (gymId) {
+        await db.saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes);
+      }
+    }
+
+    setWorkoutProgram(prev => ({ ...prev, ...updates }));
     setShowAiGenerator(false);
     setGeneratedPreview(null);
     setCurrentWeek(generationWeek);
+    toast.success(`${weekKeys.length} week${weekKeys.length > 1 ? 's' : ''} added to your program!`);
   };
 
   // ==========================================
@@ -948,6 +1010,10 @@ export default function SwolTracker() {
         aiLoading={aiLoading}
         aiError={aiError}
         generatedPreview={generatedPreview}
+        weekCount={weekCount}
+        onWeekCountChange={setWeekCount}
+        previewWeek={previewWeek}
+        onPreviewWeekChange={setPreviewWeek}
         onNotesChange={setAiNotes}
         onGenerate={generateAiWorkout}
         onConfirm={confirmGeneratedWorkout}

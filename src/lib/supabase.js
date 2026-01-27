@@ -411,6 +411,48 @@ export const db = {
     return data || []
   },
 
+  async getRecentWorkoutLogs(userId, limit = 4) {
+    if (!supabase) return []
+
+    const { data, error } = await supabase
+      .from('workout_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('completed', true)
+      .order('completed_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching recent workout logs:', error)
+      return []
+    }
+
+    // Group by week_number + day_name to get unique workout sessions
+    const sessionMap = new Map()
+    data?.forEach(log => {
+      const key = `${log.week_number}-${log.day_name}`
+      if (!sessionMap.has(key)) {
+        sessionMap.set(key, {
+          week_number: log.week_number,
+          day_name: log.day_name,
+          completed_at: log.completed_at,
+          exercises: []
+        })
+      }
+      sessionMap.get(key).exercises.push({
+        exercise_name: log.exercise_name,
+        prescribed_weight: log.prescribed_weight,
+        prescribed_reps: log.prescribed_reps,
+        actual_weight: log.actual_weight,
+        actual_reps: log.actual_reps
+      })
+    })
+
+    // Convert to array, sort by date, limit to N sessions
+    return Array.from(sessionMap.values())
+      .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+      .slice(0, limit)
+  },
+
   // Workout Completions
   async markWorkoutComplete(userId, gymId, weekNumber, dayName) {
     if (!supabase) return null
