@@ -13,6 +13,7 @@ import AdminArea from './components/admin/AdminArea';
 import ProfileArea from './components/Profile/ProfileArea';
 import { Header, BottomNav, ViewModeBanner } from './components/Layout';
 import { SettingsModal, EquipmentModal, AiGeneratorModal } from './components/Modals';
+import { AddLiftModal } from './components/Maxes';
 
 // Screens
 import { WorkoutScreen, MaxesScreen, ProgressScreen, BuddiesScreen } from './screens';
@@ -585,6 +586,7 @@ export default function SwolTracker() {
     setNewLiftName(maxKey || exerciseName);
     setNewLiftWeight('');
     setShowAddLift(true);
+    setActiveTab('maxes');
   };
 
   const deleteLift = async (lift) => {
@@ -904,9 +906,6 @@ export default function SwolTracker() {
             editingMax={editingMax}
             tempMaxValue={tempMaxValue}
             selectedReferenceExercise={selectedReferenceExercise}
-            showAddLift={showAddLift}
-            newLiftName={newLiftName}
-            newLiftWeight={newLiftWeight}
             onSelectReference={setSelectedReferenceExercise}
             onStartEdit={(lift, weight) => { setEditingMax(lift); setTempMaxValue(weight.toString()); }}
             onSaveEdit={(lift, val) => updateMax(lift, val)}
@@ -914,10 +913,6 @@ export default function SwolTracker() {
             onTempValueChange={setTempMaxValue}
             onDeleteLift={deleteLift}
             onOpenAddLift={() => setShowAddLift(true)}
-            onCloseAddLift={() => setShowAddLift(false)}
-            onNewLiftNameChange={setNewLiftName}
-            onNewLiftWeightChange={setNewLiftWeight}
-            onAddNewLift={addNewLift}
           />
         )}
 
@@ -1019,6 +1014,16 @@ export default function SwolTracker() {
         onConfirm={confirmGeneratedWorkout}
         onRegenerate={() => setGeneratedPreview(null)}
         onClose={() => setShowAiGenerator(false)}
+      />
+
+      <AddLiftModal
+        isOpen={showAddLift}
+        liftName={newLiftName}
+        liftWeight={newLiftWeight}
+        onLiftNameChange={setNewLiftName}
+        onLiftWeightChange={setNewLiftWeight}
+        onAdd={addNewLift}
+        onClose={() => setShowAddLift(false)}
       />
 
       {showAdmin && <AdminArea onClose={() => setShowAdmin(false)} db={db} />}

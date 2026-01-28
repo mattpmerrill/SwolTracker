@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react';
-import { MaxCard, QuickReference, AddLiftModal } from '../components/Maxes';
+import { MaxCard, QuickReference } from '../components/Maxes';
 
 /**
  * Maxes (1RM) tab screen composition
@@ -10,9 +10,6 @@ export default function MaxesScreen({
   editingMax,
   tempMaxValue,
   selectedReferenceExercise,
-  showAddLift,
-  newLiftName,
-  newLiftWeight,
   onSelectReference,
   onStartEdit,
   onSaveEdit,
@@ -20,10 +17,6 @@ export default function MaxesScreen({
   onTempValueChange,
   onDeleteLift,
   onOpenAddLift,
-  onCloseAddLift,
-  onNewLiftNameChange,
-  onNewLiftWeightChange,
-  onAddNewLift,
 }) {
   return (
     <>
@@ -65,16 +58,6 @@ export default function MaxesScreen({
       <QuickReference
         selectedExercise={selectedReferenceExercise}
         maxWeight={user?.maxes?.[selectedReferenceExercise]}
-      />
-
-      <AddLiftModal
-        isOpen={showAddLift}
-        liftName={newLiftName}
-        liftWeight={newLiftWeight}
-        onLiftNameChange={onNewLiftNameChange}
-        onLiftWeightChange={onNewLiftWeightChange}
-        onAdd={onAddNewLift}
-        onClose={onCloseAddLift}
       />
     </>
   );
