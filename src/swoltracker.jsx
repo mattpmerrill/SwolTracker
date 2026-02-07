@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, db } from './lib/supabase';
 import { callLlmProvider } from './lib/llm';
 import { useToast } from './components/Toast';
 import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
+import { useAdmin } from './hooks/useAdmin';
+import { useAiGenerator } from './hooks/useAiGenerator';
+import { useWorkoutLogger } from './hooks/useWorkoutLogger';
+import { validate, profileUpdateSchema, maxWeightSchema, chatMessageSchema, equipmentNameSchema, searchQuerySchema } from './lib/validation';
 
 // Components
 import LoginPage from './components/LoginPage';
 import Onboarding from './components/Onboarding';
-import AdminArea from './components/admin/AdminArea';
+const AdminArea = lazy(() => import('./components/admin/AdminArea'));
 import ProfileArea from './components/Profile/ProfileArea';
 import { Header, BottomNav, ViewModeBanner } from './components/Layout';
 import { SettingsModal, EquipmentModal, AiGeneratorModal } from './components/Modals';
@@ -19,10 +23,9 @@ import { AddLiftModal } from './components/Maxes';
 import { WorkoutScreen, MaxesScreen, ProgressScreen, BuddiesScreen } from './screens';
 
 // Constants and Utilities
-import { defaultWorkoutProgram, defaultProfiles, defaultEquipment } from './constants';
+import { defaultEquipment } from './constants';
 import { calculateCurrentWeek, getTodayDayName } from './utils/date';
 import { findMaxKey } from './utils/workout';
-import { loadAllData, saveAllData } from './utils/storage';
 
 // ============================================
 // MAIN APP COMPONENT
@@ -35,7 +38,7 @@ export default function SwolTracker() {
   // ==========================================
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [demoMode, setDemoMode] = useState(false);
+  const { isAdmin, showAdmin, checkAdmin, openAdmin, closeAdmin } = useAdmin(authUser);
 
   // ==========================================
   // ONBOARDING STATE
@@ -47,12 +50,10 @@ export default function SwolTracker() {
   // APP STATE
   // ==========================================
   const [isLoading, setIsLoading] = useState(true);
-  const [profiles, setProfiles] = useState(defaultProfiles);
-  const [currentUser, setCurrentUser] = useState('merrill');
+  const [profiles, setProfiles] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
   const [equipment, setEquipment] = useState(defaultEquipment);
-  const [exerciseLog, setExerciseLog] = useState({});
-  const [completedWorkouts, setCompletedWorkouts] = useState({});
-  const [workoutProgram, setWorkoutProgram] = useState(defaultWorkoutProgram);
+  const [workoutProgram, setWorkoutProgram] = useState({});
   const [programStartDate, setProgramStartDate] = useState(() => new Date().toISOString());
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentDay, setCurrentDay] = useState(getTodayDayName);
@@ -66,8 +67,6 @@ export default function SwolTracker() {
   const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [showAddLift, setShowAddLift] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showAiGenerator, setShowAiGenerator] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
 
   // ==========================================
   // FORM STATES
@@ -78,17 +77,6 @@ export default function SwolTracker() {
   const [editingMax, setEditingMax] = useState(null);
   const [tempMaxValue, setTempMaxValue] = useState('');
   const [selectedReferenceExercise, setSelectedReferenceExercise] = useState('Bench Press');
-
-  // ==========================================
-  // AI STATES
-  // ==========================================
-  const [aiNotes, setAiNotes] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [generatedPreview, setGeneratedPreview] = useState(null);
-  const [generationWeek, setGenerationWeek] = useState(null);
-  const [weekCount, setWeekCount] = useState(4);
-  const [previewWeek, setPreviewWeek] = useState('week1');
 
   // ==========================================
   // BUDDY/GROUP STATE
@@ -115,9 +103,24 @@ export default function SwolTracker() {
   const chatEndRef = useRef(null);
 
   // ==========================================
-  // ADMIN STATE
+  // DOMAIN HOOKS
   // ==========================================
-  const [isAdmin, setIsAdmin] = useState(false);
+  const {
+    exerciseLog, setExerciseLog,
+    completedWorkouts, setCompletedWorkouts,
+    logSet, isSetLogged, getCompletionPercentage,
+    getTotalCompletedSets, getTotalCompletedWorkouts,
+    isWorkoutComplete, toggleWorkoutComplete,
+  } = useWorkoutLogger({ currentUser, currentWeek, currentDay, workoutProgram, gymId });
+
+  const {
+    aiNotes, setAiNotes, aiLoading, aiError,
+    generatedPreview, setGeneratedPreview,
+    generationWeek, weekCount, setWeekCount,
+    previewWeek, setPreviewWeek,
+    showAiGenerator, setShowAiGenerator,
+    openAiGenerator, generateAiWorkout, confirmGeneratedWorkout,
+  } = useAiGenerator({ currentUser, profiles, equipment, workoutProgram, gymId, toast, setWorkoutProgram, setCurrentWeek });
 
   // ==========================================
   // DERIVED STATE
@@ -198,7 +201,6 @@ export default function SwolTracker() {
       }
 
       const mergedProfile = {
-        ...defaultProfiles.merrill,
         id: userId,
         name: authUser.user_metadata.full_name || authUser.email.split('@')[0],
         avatar: authUser.user_metadata.avatar_url || '💪',
@@ -254,7 +256,6 @@ export default function SwolTracker() {
         });
         setExerciseLog(newLog);
 
-        // Load workout completions from database
         const completions = await db.getWorkoutCompletions(activeGymId);
         const completedMap = {};
         completions.forEach(c => {
@@ -263,7 +264,7 @@ export default function SwolTracker() {
         setCompletedWorkouts(completedMap);
       }
 
-      setIsAdmin(db.isAdmin(authUser.email));
+      checkAdmin(authUser.email);
     } catch (e) {
       console.error("Error loading Supabase data:", e);
     } finally {
@@ -272,31 +273,10 @@ export default function SwolTracker() {
   };
 
   // ==========================================
-  // LOCAL STORAGE (Demo Mode)
-  // ==========================================
-  useEffect(() => {
-    if (authLoading || authUser) return;
-    const data = loadAllData();
-    if (data.profiles) setProfiles(data.profiles);
-    if (data.equipment) setEquipment(data.equipment);
-    if (data.exerciseLog) setExerciseLog(data.exerciseLog);
-    if (data.completedWorkouts) setCompletedWorkouts(data.completedWorkouts);
-    if (data.workoutProgram) setWorkoutProgram(data.workoutProgram);
-    if (data.programStartDate) setProgramStartDate(data.programStartDate);
-    if (data.currentUser) setCurrentUser(data.currentUser);
-    setIsLoading(false);
-  }, [authLoading]);
-
-  useEffect(() => {
-    if (isLoading || authLoading) return;
-    saveAllData({ profiles, equipment, exerciseLog, completedWorkouts, workoutProgram, programStartDate, currentUser });
-  }, [profiles, equipment, exerciseLog, completedWorkouts, workoutProgram, programStartDate, currentUser, isLoading, authLoading]);
-
-  // ==========================================
   // CHAT SUBSCRIPTION
   // ==========================================
   useEffect(() => {
-    if (!supabase || !currentUser || groupRole === 'independent' || demoMode) return;
+    if (!supabase || !currentUser || groupRole === 'independent') return;
 
     const setupSubscription = async () => {
       const leaderId = groupRole === 'leader' ? currentUser : groupLeader?.id;
@@ -334,7 +314,7 @@ export default function SwolTracker() {
 
     const cleanup = setupSubscription();
     return () => { cleanup?.then(fn => fn?.()); };
-  }, [currentUser, groupRole, groupLeader?.id, showChat, demoMode]);
+  }, [currentUser, groupRole, groupLeader?.id, showChat]);
 
   // ==========================================
   // CONFETTI FOR ACCEPTED REQUESTS
@@ -349,29 +329,24 @@ export default function SwolTracker() {
   // ==========================================
   // HANDLERS
   // ==========================================
-  const handleLogin = (options) => { if (options?.demoMode) setDemoMode(true); };
-
   const handleLogout = async () => {
-    if (supabase && !demoMode) await db.signOut?.() || (await supabase.auth.signOut());
-    setDemoMode(false);
+    if (supabase) await supabase.auth.signOut();
     setAuthUser(null);
   };
 
   const handleUpdateProfile = async (updates) => {
-    if (demoMode) {
-      setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], ...updates } }));
-      return;
-    }
     if (!authUser) return;
-    const updated = await db.updateProfile(authUser.id, updates);
+    const { success, data: validUpdates, error } = validate(profileUpdateSchema, updates);
+    if (!success) { toast.error(error); return; }
+    const updated = await db.updateProfile(authUser.id, validUpdates);
     if (updated) {
       setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], ...updated } }));
-      if (updates.program_start_date) setProgramStartDate(updates.program_start_date);
+      if (validUpdates.program_start_date) setProgramStartDate(validUpdates.program_start_date);
     }
   };
 
   const handleUploadAvatar = async (file) => {
-    if (demoMode || !authUser) return;
+    if (!authUser) return;
     const result = await db.uploadAvatar(authUser.id, file);
     if (result?.url) {
       setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], avatar_url: result.url, avatar: null } }));
@@ -382,29 +357,16 @@ export default function SwolTracker() {
     if (!authUser) return false;
 
     try {
-      // 1. Save the user profile with onboarding data
       const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
-      if (!profileSaved) {
-        console.error('Failed to save onboarding profile');
-        return false;
-      }
+      if (!profileSaved) { console.error('Failed to save onboarding profile'); return false; }
 
-      // 2. Get the prompt template
       const promptTemplate = await db.getPromptTemplate('onboarding_workout_generator');
-      if (!promptTemplate) {
-        console.error('Onboarding prompt template not found');
-        return false;
-      }
+      if (!promptTemplate) { console.error('Onboarding prompt template not found'); return false; }
 
-      // 3. Get LLM provider and API key
       const provider = await db.getLlmProvider();
       const apiKey = await db.getGlobalApiKey();
-      if (!apiKey) {
-        console.error('No API key configured');
-        return false;
-      }
+      if (!apiKey) { console.error('No API key configured'); return false; }
 
-      // 4. Fill in the prompt template with user data
       const filledPrompt = promptTemplate
         .replace(/\{\{display_name\}\}/g, onboardingData.displayName)
         .replace(/\{\{gender\}\}/g, onboardingData.gender)
@@ -416,20 +378,11 @@ export default function SwolTracker() {
         .replace(/\{\{workout_duration\}\}/g, onboardingData.workoutDuration)
         .replace(/\{\{equipment\}\}/g, onboardingData.equipment.join(', '));
 
-      // 5. Call the LLM
       const systemPrompt = 'You are an expert fitness coach. Generate a workout program as JSON only, no markdown, no comments, no explanations. Return ONLY valid JSON.';
       const result = await callLlmProvider(provider, apiKey, systemPrompt, filledPrompt, 'onboarding', db, authUser.id);
-
-      // Log the API usage
       await db.logApiUsage(authUser.id, 'onboarding_workout', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
-      // 6. Parse the response - extract JSON robustly
-      let cleanedResponse = result.content
-        .replace(/```json/gi, '')
-        .replace(/```/g, '')
-        .trim();
-
-      // Try to extract JSON object if there's extra text
+      let cleanedResponse = result.content.replace(/```json/gi, '').replace(/```/g, '').trim();
       const firstBrace = cleanedResponse.indexOf('{');
       const lastBrace = cleanedResponse.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -440,7 +393,6 @@ export default function SwolTracker() {
       try {
         generatedProgram = JSON.parse(cleanedResponse);
       } catch (parseError) {
-        // Log the parsing error with a snippet of what we tried to parse
         await logError(db, {
           category: ErrorCategory.PARSING,
           message: 'Failed to parse AI workout response: ' + parseError.message,
@@ -449,26 +401,18 @@ export default function SwolTracker() {
           component: 'swoltracker.jsx',
           operation: 'handleGenerateOnboardingWorkout.parseJson',
           originalError: parseError,
-          context: {
-            responseSnippet: cleanedResponse.substring(0, 500),
-            responseLength: cleanedResponse.length,
-            onboardingData
-          }
+          context: { responseSnippet: cleanedResponse.substring(0, 500), responseLength: cleanedResponse.length, onboardingData }
         });
         throw new Error('The AI returned an invalid response. Please try again.');
       }
 
-      // 7. Save workout programs for each week
-      // First, get or create the user's gym
       let userGymId = gymId;
       if (!userGymId) {
-        // Get the profile which should now have a gym_id from completeOnboarding
         const profile = await db.getProfile(authUser.id);
         userGymId = profile?.gym_id;
       }
 
       if (userGymId) {
-        // Save each week's program
         for (let week = 1; week <= 4; week++) {
           const weekKey = `week${week}`;
           if (generatedProgram[weekKey]) {
@@ -499,86 +443,23 @@ export default function SwolTracker() {
     if (authUser) window.location.reload();
   };
 
-  // Workout logging
-  const logSet = async (exerciseIndex, setIndex, data) => {
-    const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
-    const wasCompleted = exerciseLog[key]?.completed || false;
-    setExerciseLog(prev => ({ ...prev, [key]: { ...data, completed: !wasCompleted } }));
-    if (!demoMode && gymId) {
-      await db.logSet(currentUser, gymId, currentWeek, currentDay, exerciseIndex, setIndex, data.exerciseName || `Exercise ${exerciseIndex + 1}`, { ...data, completed: !wasCompleted });
-    }
-  };
-
-  const isSetLogged = (exerciseIndex, setIndex, targetUserId = currentUser) => {
-    return exerciseLog[`${targetUserId}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`]?.completed;
-  };
-
-  const getCompletionPercentage = (week, day, targetUserId = currentUser) => {
-    if (!workoutProgram[week]?.[day]?.exercises) return 0;
-    const totalSets = workoutProgram[week][day].exercises.reduce((acc, ex) => acc + ex.sets, 0);
-    if (totalSets === 0) return 0;
-    let completed = 0;
-    workoutProgram[week][day].exercises.forEach((ex, ei) => {
-      for (let si = 0; si < ex.sets; si++) {
-        if (exerciseLog[`${targetUserId}-${week}-${day}-${ei}-${si}`]?.completed) completed++;
-      }
-    });
-    return Math.round((completed / totalSets) * 100);
-  };
-
-  const getTotalCompletedSets = (userId = currentUser) => {
-    return Object.keys(exerciseLog).filter(k => k.startsWith(userId) && exerciseLog[k]?.completed).length;
-  };
-
-  const getTotalCompletedWorkouts = (userId = currentUser) => {
-    return Object.keys(completedWorkouts).filter(k => k.startsWith(userId) && completedWorkouts[k]).length;
-  };
-
-  const isWorkoutComplete = (week, day, targetUserId = currentUser) => {
-    return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
-  };
-
-  const toggleWorkoutComplete = async (week, day) => {
-    const key = `${currentUser}-${week}-${day}`;
-    const wasComplete = completedWorkouts[key] || false;
-    const completionPct = getCompletionPercentage(week, day, currentUser);
-
-    setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
-
-    // Save to database
-    if (!demoMode) {
-      if (wasComplete) {
-        await db.unmarkWorkoutComplete(currentUser, gymId, week, day);
-      } else {
-        await db.markWorkoutComplete(currentUser, gymId, week, day);
-      }
-    }
-
-    // Fire confetti when completing a workout at 100%
-    if (!wasComplete && completionPct === 100) {
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
-      });
-    }
-  };
-
   // Maxes
   const updateMax = async (lift, value) => {
-    const weight = parseInt(value) || 0;
+    const weight = Math.max(0, Math.min(9999, parseInt(value) || 0));
     setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [lift]: weight } } }));
     setEditingMax(null);
-    if (!demoMode) await db.updateMax(currentUser, lift, weight);
+    await db.updateMax(currentUser, lift, weight);
   };
 
   const addNewLift = async () => {
-    if (!newLiftName.trim() || !newLiftWeight) return;
-    const weight = parseInt(newLiftWeight);
-    setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [newLiftName]: weight } } }));
+    const { success, data: validated, error } = validate(maxWeightSchema, {
+      exerciseName: newLiftName,
+      weight: parseInt(newLiftWeight) || 0,
+    });
+    if (!success) { toast.error(error); return; }
+    setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [validated.exerciseName]: validated.weight } } }));
     setNewLiftName(''); setNewLiftWeight(''); setShowAddLift(false);
-    if (!demoMode) await db.updateMax(currentUser, newLiftName.trim(), weight);
+    await db.updateMax(currentUser, validated.exerciseName, validated.weight);
   };
 
   const openQuickAddMax = (exerciseName) => {
@@ -593,13 +474,14 @@ export default function SwolTracker() {
     const newMaxes = { ...profiles[currentUser].maxes };
     delete newMaxes[lift];
     setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: newMaxes } }));
-    if (!demoMode) await db.deleteMax(currentUser, lift);
+    await db.deleteMax(currentUser, lift);
   };
 
   // Equipment
   const addEquipment = () => {
-    if (!newEquipmentName.trim() || equipment.includes(newEquipmentName)) return;
-    setEquipment(prev => [...prev, newEquipmentName]);
+    const { success, data: name } = validate(equipmentNameSchema, newEquipmentName);
+    if (!success || equipment.includes(name)) return;
+    setEquipment(prev => [...prev, name]);
     setNewEquipmentName('');
     setShowAddEquipment(false);
   };
@@ -618,8 +500,9 @@ export default function SwolTracker() {
   };
 
   const sendChatMessage = async () => {
-    if (!chatInput.trim() || !currentUser) return;
-    const content = chatInput.trim();
+    if (!currentUser) return;
+    const { success, data: content } = validate(chatMessageSchema, chatInput);
+    if (!success) return;
     const userProfile = profiles[currentUser] || {};
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const optimisticMessage = { id: tempId, sender_id: currentUser, sender_name: userProfile.name || 'You', sender_avatar: userProfile.avatar, sender_avatar_url: userProfile.avatar_url, content, message_created_at: new Date().toISOString(), _optimistic: true, _realId: null };
@@ -640,24 +523,20 @@ export default function SwolTracker() {
   const sendBuddyRequest = async (targetId, targetName = '', targetAvatar = '') => {
     if (targetId === currentUser || profiles[currentUser]?.buddies?.includes(targetId)) return;
     if (profiles[currentUser]?.sentRequests?.find(r => r.to === targetId)) return;
-    if (!demoMode) {
-      const result = await db.sendMemberInvite(currentUser, targetId);
-      if (!result?.success) { toast.error(result?.error || 'Failed to send invite'); return; }
-    }
+    const result = await db.sendMemberInvite(currentUser, targetId);
+    if (!result?.success) { toast.error(result?.error || 'Failed to send invite'); return; }
     setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], sentRequests: [...(prev[currentUser].sentRequests || []), { to: targetId, name: targetName, avatar: targetAvatar, timestamp: new Date().toISOString() }] } }));
     setBuddiesSearch('');
   };
 
   const acceptBuddyRequest = async (requestId, requesterId, requesterName = '', requesterAvatar = '') => {
-    if (!demoMode) {
-      const success = await db.acceptGroupInvite(requestId, currentUser);
-      if (!success) return;
-      const leaderGym = await db.getLeaderGymId(currentUser);
-      if (leaderGym) {
-        setLeaderGymId(leaderGym);
-        const programs = await db.getAllWorkoutPrograms(leaderGym);
-        if (programs.length > 0) setWorkoutProgram(programs.find(p => p.is_active)?.program_data || programs[0] || {});
-      }
+    const success = await db.acceptGroupInvite(requestId, currentUser);
+    if (!success) return;
+    const leaderGym = await db.getLeaderGymId(currentUser);
+    if (leaderGym) {
+      setLeaderGymId(leaderGym);
+      const programs = await db.getAllWorkoutPrograms(leaderGym);
+      if (programs.length > 0) setWorkoutProgram(programs.find(p => p.is_active)?.program_data || programs[0] || {});
     }
     setGroupRole('member');
     setGroupLeader({ id: requesterId, name: requesterName, avatar: requesterAvatar });
@@ -672,12 +551,14 @@ export default function SwolTracker() {
   };
 
   const declineBuddyRequest = async (requestId, requesterId) => {
-    if (!demoMode) { const success = await db.declineBuddyRequest(requestId); if (!success) return; }
+    const success = await db.declineBuddyRequest(requestId);
+    if (!success) return;
     setProfiles(prev => ({ ...prev, [currentUser]: { ...prev[currentUser], receivedRequests: (prev[currentUser].receivedRequests || []).filter(r => r.from !== requesterId) } }));
   };
 
   const removeBuddy = async (buddyId) => {
-    if (!demoMode) { const success = await db.removeBuddy(currentUser, buddyId); if (!success) return; }
+    const success = await db.removeBuddy(currentUser, buddyId);
+    if (!success) return;
     setProfiles(prev => {
       const u = { ...prev[currentUser] };
       u.buddies = (u.buddies || []).filter(id => id !== buddyId);
@@ -689,7 +570,8 @@ export default function SwolTracker() {
 
   const leaveWorkoutGroup = async () => {
     if (!confirm('Are you sure you want to leave the group?')) return;
-    if (!demoMode) { const success = await db.leaveWorkoutGroup(currentUser); if (!success) return; }
+    const success = await db.leaveWorkoutGroup(currentUser);
+    if (!success) return;
     setGroupRole('independent');
     const prevLeader = groupLeader;
     setGroupLeader(null);
@@ -704,7 +586,8 @@ export default function SwolTracker() {
 
   const removeGroupMember = async (memberId, memberName) => {
     if (!confirm(`Remove ${memberName} from your group?`)) return;
-    if (!demoMode) { const success = await db.removeGroupMember(currentUser, memberId); if (!success) return; }
+    const success = await db.removeGroupMember(currentUser, memberId);
+    if (!success) return;
     setGroupMembers(prev => prev.filter(m => m.id !== memberId));
     setProfiles(prev => {
       const u = { ...prev[currentUser] };
@@ -716,123 +599,12 @@ export default function SwolTracker() {
   };
 
   const searchUsersInDb = async (searchTerm) => {
-    if (!searchTerm.trim() || demoMode) { setSearchResults([]); return; }
+    const { success, data: query } = validate(searchQuerySchema, searchTerm);
+    if (!success) { setSearchResults([]); return; }
     setSearchLoading(true);
-    const results = await db.searchUsers(searchTerm, currentUser);
+    const results = await db.searchUsers(query, currentUser);
     setSearchResults(results);
     setSearchLoading(false);
-  };
-
-  // AI Generator
-  const openAiGenerator = (weekNum) => {
-    setGenerationWeek(weekNum);
-    setAiNotes('');
-    setAiError('');
-    setGeneratedPreview(null);
-    setWeekCount(4);
-    setPreviewWeek('week1');
-    setShowAiGenerator(true);
-  };
-
-  const generateAiWorkout = async () => {
-    setAiLoading(true);
-    setAiError('');
-    setGeneratedPreview(null);
-
-    try {
-      const provider = await db.getLlmProvider();
-      const apiKey = await db.getGlobalApiKey();
-      if (!apiKey) { setAiError('No API key configured.'); setAiLoading(false); return; }
-
-      // Fetch recent workout logs for performance data
-      const recentWorkoutLogs = await db.getRecentWorkoutLogs(currentUser, 4);
-
-      // Collect previous weeks for context
-      const recentWeeks = [];
-      for (let w = Math.max(1, generationWeek - 3); w < generationWeek; w++) {
-        if (workoutProgram[w]) recentWeeks.push({ week: w, program: workoutProgram[w] });
-      }
-
-      // Fetch the multi-week prompt template
-      let promptTemplate = await db.getPromptTemplate('multi_week_workout_generator');
-
-      // Format athletes info
-      const athletesInfo = Object.entries(profiles).map(([id, p]) =>
-        `${p.name}: maxes = ${JSON.stringify(p.maxes || {})}`
-      ).join('\n');
-
-      // Format recent workout logs for the prompt
-      const recentWorkoutsFormatted = recentWorkoutLogs.length > 0
-        ? JSON.stringify(recentWorkoutLogs, null, 2)
-        : 'No recent workout data available';
-
-      // Get user profile for display name
-      const userProfile = profiles[currentUser];
-
-      if (promptTemplate) {
-        // Fill in the template placeholders
-        promptTemplate = promptTemplate
-          .replace(/\{\{display_name\}\}/g, userProfile?.name || 'Athlete')
-          .replace(/\{\{athletes\}\}/g, athletesInfo)
-          .replace(/\{\{equipment\}\}/g, equipment.join(', '))
-          .replace(/\{\{start_week\}\}/g, String(generationWeek))
-          .replace(/\{\{week_count\}\}/g, String(weekCount))
-          .replace(/\{\{user_notes\}\}/g, aiNotes || 'None')
-          .replace(/\{\{recent_workouts\}\}/g, recentWorkoutsFormatted)
-          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks));
-      }
-
-      const systemPrompt = promptTemplate || `You are an elite strength and conditioning coach. Generate ${weekCount} weeks of workouts in JSON format.`;
-      const userPrompt = !promptTemplate ? `Generate a ${weekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${aiNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.` : 'Generate the workout program based on the context provided.';
-
-      const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
-      await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
-
-      // Clean and parse the response
-      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
-      const generatedProgram = JSON.parse(cleanedResponse);
-
-      // Validate the expected weeks exist
-      const requiredDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      for (let i = 1; i <= weekCount; i++) {
-        const weekKey = `week${i}`;
-        if (!generatedProgram[weekKey]) throw new Error(`Missing ${weekKey} in response`);
-        for (const day of requiredDays) {
-          if (!generatedProgram[weekKey][day]) throw new Error(`Missing ${day} in ${weekKey}`);
-        }
-      }
-
-      setGeneratedPreview(generatedProgram);
-      setPreviewWeek('week1');
-    } catch (error) {
-      setAiError(error.message || 'Failed to generate workout.');
-      toast.error(error.message);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const confirmGeneratedWorkout = async () => {
-    if (!generatedPreview || !generationWeek) return;
-
-    const weekKeys = Object.keys(generatedPreview).filter(k => k.startsWith('week')).sort();
-    const updates = {};
-
-    for (let i = 0; i < weekKeys.length; i++) {
-      const weekKey = weekKeys[i];
-      const targetWeek = generationWeek + i;
-      updates[targetWeek] = generatedPreview[weekKey];
-
-      if (gymId) {
-        await db.saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes);
-      }
-    }
-
-    setWorkoutProgram(prev => ({ ...prev, ...updates }));
-    setShowAiGenerator(false);
-    setGeneratedPreview(null);
-    setCurrentWeek(generationWeek);
-    toast.success(`${weekKeys.length} week${weekKeys.length > 1 ? 's' : ''} added to your program!`);
   };
 
   // ==========================================
@@ -849,11 +621,11 @@ export default function SwolTracker() {
     );
   }
 
-  if (!authUser && !demoMode) {
-    return <LoginPage onLogin={handleLogin} isLoading={authLoading} />;
+  if (!authUser) {
+    return <LoginPage isLoading={authLoading} />;
   }
 
-  if (showOnboarding && !demoMode) {
+  if (showOnboarding) {
     return <Onboarding user={onboardingData} onComplete={handleOnboardingComplete} onGenerateWorkout={handleGenerateOnboardingWorkout} />;
   }
 
@@ -861,7 +633,6 @@ export default function SwolTracker() {
     <div className="min-h-screen bg-zinc-950 text-white pb-24">
       <Header
         user={user}
-        demoMode={demoMode}
         onSettingsClick={() => setShowSettings(true)}
         onProfileClick={() => setShowProfile(true)}
       />
@@ -929,7 +700,6 @@ export default function SwolTracker() {
             currentUser={currentUser}
             user={user}
             profiles={profiles}
-            demoMode={demoMode}
             groupRole={groupRole}
             groupLeader={groupLeader}
             groupMembers={groupMembers}
@@ -982,7 +752,7 @@ export default function SwolTracker() {
         isAdmin={isAdmin}
         onClose={() => setShowSettings(false)}
         onOpenAiGenerator={openAiGenerator}
-        onOpenAdmin={() => setShowAdmin(true)}
+        onOpenAdmin={openAdmin}
         onOpenEquipment={() => setShowAddEquipment(true)}
         onRemoveEquipment={removeEquipment}
       />
@@ -1026,7 +796,11 @@ export default function SwolTracker() {
         onClose={() => setShowAddLift(false)}
       />
 
-      {showAdmin && <AdminArea onClose={() => setShowAdmin(false)} db={db} />}
+      {showAdmin && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}>
+          <AdminArea onClose={closeAdmin} db={db} />
+        </Suspense>
+      )}
 
       {showProfile && (
         <ProfileArea
@@ -1039,7 +813,6 @@ export default function SwolTracker() {
           equipment={equipment}
           programStartDate={programStartDate}
           actualCurrentWeek={actualCurrentWeek}
-          demoMode={demoMode}
         />
       )}
     </div>

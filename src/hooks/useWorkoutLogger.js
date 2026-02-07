@@ -1,0 +1,86 @@
+import { useState, useCallback } from 'react';
+import confetti from 'canvas-confetti';
+import { db } from '../lib/supabase';
+
+/**
+ * Hook for managing workout set logging and completion tracking
+ */
+export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workoutProgram, gymId }) {
+  const [exerciseLog, setExerciseLog] = useState({});
+  const [completedWorkouts, setCompletedWorkouts] = useState({});
+
+  const logSet = useCallback(async (exerciseIndex, setIndex, data) => {
+    const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
+    const wasCompleted = exerciseLog[key]?.completed || false;
+    setExerciseLog(prev => ({ ...prev, [key]: { ...data, completed: !wasCompleted } }));
+    if (gymId) {
+      await db.logSet(currentUser, gymId, currentWeek, currentDay, exerciseIndex, setIndex, data.exerciseName || `Exercise ${exerciseIndex + 1}`, { ...data, completed: !wasCompleted });
+    }
+  }, [currentUser, gymId, currentWeek, currentDay, exerciseLog]);
+
+  const isSetLogged = useCallback((exerciseIndex, setIndex, targetUserId = currentUser) => {
+    return exerciseLog[`${targetUserId}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`]?.completed;
+  }, [currentWeek, currentDay, exerciseLog, currentUser]);
+
+  const getCompletionPercentage = useCallback((week, day, targetUserId = currentUser) => {
+    if (!workoutProgram[week]?.[day]?.exercises) return 0;
+    const totalSets = workoutProgram[week][day].exercises.reduce((acc, ex) => acc + ex.sets, 0);
+    if (totalSets === 0) return 0;
+    let completed = 0;
+    workoutProgram[week][day].exercises.forEach((ex, ei) => {
+      for (let si = 0; si < ex.sets; si++) {
+        if (exerciseLog[`${targetUserId}-${week}-${day}-${ei}-${si}`]?.completed) completed++;
+      }
+    });
+    return Math.round((completed / totalSets) * 100);
+  }, [workoutProgram, exerciseLog, currentUser]);
+
+  const getTotalCompletedSets = useCallback((userId = currentUser) => {
+    return Object.keys(exerciseLog).filter(k => k.startsWith(userId) && exerciseLog[k]?.completed).length;
+  }, [exerciseLog, currentUser]);
+
+  const getTotalCompletedWorkouts = useCallback((userId = currentUser) => {
+    return Object.keys(completedWorkouts).filter(k => k.startsWith(userId) && completedWorkouts[k]).length;
+  }, [completedWorkouts, currentUser]);
+
+  const isWorkoutComplete = useCallback((week, day, targetUserId = currentUser) => {
+    return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
+  }, [completedWorkouts, currentUser]);
+
+  const toggleWorkoutComplete = useCallback(async (week, day) => {
+    const key = `${currentUser}-${week}-${day}`;
+    const wasComplete = completedWorkouts[key] || false;
+    const completionPct = getCompletionPercentage(week, day, currentUser);
+
+    setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
+
+    if (wasComplete) {
+      await db.unmarkWorkoutComplete(currentUser, gymId, week, day);
+    } else {
+      await db.markWorkoutComplete(currentUser, gymId, week, day);
+    }
+
+    if (!wasComplete && completionPct === 100) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
+      });
+    }
+  }, [currentUser, gymId, completedWorkouts, getCompletionPercentage]);
+
+  return {
+    exerciseLog,
+    setExerciseLog,
+    completedWorkouts,
+    setCompletedWorkouts,
+    logSet,
+    isSetLogged,
+    getCompletionPercentage,
+    getTotalCompletedSets,
+    getTotalCompletedWorkouts,
+    isWorkoutComplete,
+    toggleWorkoutComplete,
+  };
+}
