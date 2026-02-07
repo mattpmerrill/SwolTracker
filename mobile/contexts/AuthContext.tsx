@@ -29,6 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
       setInitialized(true);
+    }).catch(() => {
+      setLoading(false);
+      setInitialized(true);
     });
 
     // Listen for auth changes

@@ -1,6 +1,7 @@
 import '../global.css';
 
 import { useEffect } from 'react';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,6 +23,15 @@ function RootLayoutNav() {
       router.replace('/(tabs)');
     }
   }, [user, initialized, segments]);
+
+  if (!initialized) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#09090b', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#f97316', fontSize: 32, fontWeight: '800', marginBottom: 16 }}>SwolTracker</Text>
+        <ActivityIndicator size="large" color="#f97316" />
+      </View>
+    );
+  }
 
   return (
     <>
