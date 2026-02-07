@@ -6,7 +6,6 @@ import AvatarDisplay from '../Profile/AvatarDisplay';
  */
 export default function Header({
   user,
-  demoMode,
   onSettingsClick,
   onProfileClick,
 }) {
@@ -19,7 +18,7 @@ export default function Header({
             <div>
               <h1 className="text-lg font-bold tracking-tight">SwolTracker</h1>
               <p className="text-xs text-zinc-400 font-medium">
-                {demoMode ? 'Demo Mode' : user?.name + "'s Training"}
+                {user?.name + "'s Training"}
               </p>
             </div>
           </div>

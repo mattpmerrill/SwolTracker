@@ -43,7 +43,6 @@ const ProfileArea = ({
   equipment = [],
   programStartDate,
   actualCurrentWeek,
-  demoMode = false
 }) => {
   const [activeSection, setActiveSection] = useState('info');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -529,7 +528,7 @@ const ProfileArea = ({
           className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/20 transition-colors text-sm font-medium"
         >
           <LogOut className="w-4 h-4" />
-          {demoMode ? 'Exit Demo' : 'Sign Out'}
+          Sign Out
         </button>
       </div>
 
@@ -599,15 +598,13 @@ const ProfileArea = ({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || demoMode}
+                disabled={uploading}
                 className="w-full py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl font-medium hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Camera className="w-5 h-5" />
                 {uploading ? 'Uploading...' : 'Upload Photo'}
               </button>
-              {demoMode && (
-                <p className="text-xs text-zinc-500 text-center mt-2">Photo upload available when signed in</p>
-              )}
+
             </div>
 
             <div className="relative my-6">

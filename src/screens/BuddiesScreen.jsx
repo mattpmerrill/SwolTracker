@@ -15,7 +15,6 @@ export default function BuddiesScreen({
   currentUser,
   user,
   profiles,
-  demoMode,
   groupRole,
   groupLeader,
   groupMembers,
@@ -137,7 +136,6 @@ export default function BuddiesScreen({
         searchLoading={searchLoading}
         currentUser={currentUser}
         profiles={profiles}
-        demoMode={demoMode}
         groupRole={groupRole}
         groupLeader={groupLeader}
         groupName={groupName}

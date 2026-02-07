@@ -10,7 +10,6 @@ export default function BuddySearch({
   searchLoading,
   currentUser,
   profiles,
-  demoMode,
   groupRole,
   groupLeader,
   groupName,
@@ -21,13 +20,7 @@ export default function BuddySearch({
 }) {
   const myProfile = profiles[currentUser] || {};
 
-  const displayResults = demoMode
-    ? Object.values(profiles).filter(
-        p =>
-          p.id !== currentUser &&
-          p.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : searchResults;
+  const displayResults = searchResults;
 
   return (
     <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800">

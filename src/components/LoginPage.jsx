@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Dumbbell, AlertCircle, Loader2, Zap, Target, Calendar, Brain } from 'lucide-react';
+import { Dumbbell, AlertCircle, Loader2, Target, Calendar, Brain } from 'lucide-react';
 import { signInWithGoogle } from '../lib/supabase';
 
 /**
- * Login page component with Google OAuth and demo mode
+ * Login page component with Google OAuth
  */
-export default function LoginPage({ onLogin, isLoading }) {
+export default function LoginPage({ isLoading }) {
   const [error, setError] = useState('');
 
   const handleGoogleLogin = async () => {
@@ -14,10 +14,6 @@ export default function LoginPage({ onLogin, isLoading }) {
     if (error) {
       setError(error.message);
     }
-  };
-
-  const handleDemoMode = () => {
-    onLogin({ demoMode: true });
   };
 
   return (
@@ -51,7 +47,7 @@ export default function LoginPage({ onLogin, isLoading }) {
             <button
               onClick={handleGoogleLogin}
               disabled={isLoading}
-              className="w-full py-4 px-6 rounded-xl bg-white text-zinc-900 font-semibold hover:bg-zinc-100 transition-colors flex items-center justify-center gap-3 disabled:opacity-50 mb-4"
+              className="w-full py-4 px-6 rounded-xl bg-white text-zinc-900 font-semibold hover:bg-zinc-100 transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -67,28 +63,6 @@ export default function LoginPage({ onLogin, isLoading }) {
                 </>
               )}
             </button>
-
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-zinc-900 text-zinc-500">or</span>
-              </div>
-            </div>
-
-            {/* Demo Mode Button */}
-            <button
-              onClick={handleDemoMode}
-              className="w-full py-4 px-6 rounded-xl bg-zinc-800 text-white font-semibold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Zap className="w-5 h-5 text-orange-500" />
-              Try Demo Mode
-            </button>
-
-            <p className="text-xs text-zinc-500 text-center mt-4">
-              Demo mode lets you explore without signing in
-            </p>
           </div>
         </div>
 
