@@ -3,3 +3,10 @@ node_modules
 dist
 .vercel
 .env*.local
+
+# Mobile (Expo)
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+mobile/web-build/
