@@ -8,7 +8,6 @@ export default function ExerciseCard({
   exercise,
   exerciseIndex,
   userMaxes,
-  isViewingBuddy,
   isWorkoutComplete,
   isSetLogged,
   onLogSet,
@@ -51,7 +50,6 @@ export default function ExerciseCard({
                 weight={weight}
                 reps={exercise.reps}
                 isLogged={logged}
-                isViewingBuddy={isViewingBuddy}
                 isWorkoutComplete={isWorkoutComplete}
                 exerciseName={exercise.name}
                 onLogSet={() => onLogSet(exerciseIndex, setIdx, { weight, reps: exercise.reps })}

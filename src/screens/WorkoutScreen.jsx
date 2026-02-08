@@ -19,7 +19,6 @@ export default function WorkoutScreen({
   actualCurrentWeek,
   programStartDate,
   user,
-  isViewingBuddy,
   groupRole,
   groupLeader,
   onPreviousWeek,
@@ -65,7 +64,6 @@ export default function WorkoutScreen({
           actualCurrentWeek={actualCurrentWeek}
           groupRole={groupRole}
           groupLeader={groupLeader}
-          isViewingBuddy={isViewingBuddy}
           onGenerateWorkout={() => onGenerateWorkout(currentWeek)}
           onGoToCurrentWeek={onGoToCurrentWeek}
         />
@@ -78,7 +76,6 @@ export default function WorkoutScreen({
           workout={todayWorkout}
           completionPercentage={getCompletionPercentage(currentWeek, currentDay, user.id)}
           isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
-          isViewingBuddy={isViewingBuddy}
           onToggleComplete={() => onToggleWorkoutComplete(currentWeek, currentDay)}
         />
       )}
@@ -95,7 +92,6 @@ export default function WorkoutScreen({
                 exercise={exercise}
                 exerciseIndex={exIdx}
                 userMaxes={user?.maxes}
-                isViewingBuddy={isViewingBuddy}
                 isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}

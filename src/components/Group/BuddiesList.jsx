@@ -8,7 +8,6 @@ export default function BuddiesList({
   buddies,
   buddyProfiles,
   profiles,
-  onViewProfile,
   onRemove,
 }) {
   if (!buddies?.length) return null;
@@ -38,22 +37,14 @@ export default function BuddiesList({
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onViewProfile(buddyId)}
-                  className="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg text-sm font-medium"
-                >
-                  View Profile
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm('Remove buddy?')) onRemove(buddyId);
-                  }}
-                  className="p-2 text-zinc-500 hover:text-red-400"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  if (confirm('Remove buddy?')) onRemove(buddyId);
+                }}
+                className="p-2 text-zinc-500 hover:text-red-400"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           );
         })}

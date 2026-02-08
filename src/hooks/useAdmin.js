@@ -8,8 +8,9 @@ export function useAdmin(authUser) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
 
-  const checkAdmin = useCallback((email) => {
-    setIsAdmin(db.isAdmin(email));
+  const checkAdmin = useCallback(async (userId) => {
+    const result = await db.isAdmin(userId);
+    setIsAdmin(result);
   }, []);
 
   const openAdmin = useCallback(() => setShowAdmin(true), []);

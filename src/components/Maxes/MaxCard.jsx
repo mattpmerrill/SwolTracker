@@ -9,7 +9,6 @@ export default function MaxCard({
   isEditing,
   tempValue,
   isSelected,
-  isViewingBuddy,
   onSelect,
   onStartEdit,
   onSaveEdit,
@@ -59,22 +58,18 @@ export default function MaxCard({
               <span className="text-2xl font-bold">{weight}</span>
               <span className="text-zinc-400 ml-1">lbs</span>
             </div>
-            {!isViewingBuddy && (
-              <>
-                <button
-                  onClick={onStartEdit}
-                  className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={onDelete}
-                  className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
-            )}
+            <button
+              onClick={onStartEdit}
+              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-zinc-700"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center hover:bg-red-500/20 text-zinc-400 hover:text-red-400"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         )}
       </div>

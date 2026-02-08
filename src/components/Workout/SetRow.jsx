@@ -9,14 +9,12 @@ export default function SetRow({
   weight,
   reps,
   isLogged,
-  isViewingBuddy,
   isWorkoutComplete,
   exerciseName,
   onLogSet,
   onAddMax,
 }) {
-  // Disable interaction when viewing buddy or when workout is marked complete
-  const isDisabled = isViewingBuddy || isWorkoutComplete;
+  const isDisabled = isWorkoutComplete;
   return (
     <div
       onClick={!isDisabled ? onLogSet : undefined}

@@ -2,11 +2,17 @@
  * Admin, LLM config, Prompt templates, API usage, Onboarding & Error logging repository
  */
 export function createAdminRepo(supabase, { getProfile }) {
-  // Admin check
-  const isAdmin = (userEmail) => {
-    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
-    if (!adminEmail || !userEmail) return false
-    return userEmail.toLowerCase() === adminEmail.toLowerCase()
+  // Admin check — server-side via RPC
+  const isAdmin = async (userId) => {
+    if (!supabase || !userId) return false
+    const { data, error } = await supabase
+      .rpc('is_admin', { p_user_id: userId })
+
+    if (error) {
+      console.error('Error checking admin status:', error)
+      return false
+    }
+    return data === true
   }
 
   // LLM Provider config
@@ -20,30 +26,6 @@ export function createAdminRepo(supabase, { getProfile }) {
       return 'openai'
     }
     return data || 'openai'
-  }
-
-  const getGlobalApiKey = async () => {
-    if (!supabase) return null
-    const { data, error } = await supabase
-      .rpc('get_global_llm_api_key')
-
-    if (error) {
-      console.error('Error getting global API key:', error)
-      return null
-    }
-    return data
-  }
-
-  const getApiKeyForProvider = async (provider) => {
-    if (!supabase) return null
-    const { data, error } = await supabase
-      .rpc('get_llm_api_key_for_provider', { p_provider: provider })
-
-    if (error) {
-      console.error('Error getting API key for provider:', error)
-      return null
-    }
-    return data
   }
 
   // App Settings
@@ -302,7 +284,7 @@ export function createAdminRepo(supabase, { getProfile }) {
     // Admin
     isAdmin,
     // LLM Config
-    getLlmProvider, getGlobalApiKey, getApiKeyForProvider,
+    getLlmProvider,
     // Settings
     getAppSetting, saveAppSetting, getAllAppSettings,
     // Dashboard

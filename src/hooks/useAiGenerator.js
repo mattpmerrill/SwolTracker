@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { db } from '../lib/supabase';
-import { callLlmProvider } from '../lib/llm';
+import { generateWithLlm } from '../lib/llm';
 import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 import { validate, aiNotesSchema, weekCountSchema } from '../lib/validation';
 
@@ -41,8 +41,6 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
 
     try {
       const provider = await db.getLlmProvider();
-      const apiKey = await db.getGlobalApiKey();
-      if (!apiKey) { setAiError('No API key configured.'); setAiLoading(false); return; }
 
       const recentWorkoutLogs = await db.getRecentWorkoutLogs(currentUser, 4);
 
@@ -78,7 +76,7 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
       const systemPrompt = promptTemplate || `You are an elite strength and conditioning coach. Generate ${validWeekCount} weeks of workouts in JSON format.`;
       const userPrompt = !promptTemplate ? `Generate a ${validWeekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${validNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.` : 'Generate the workout program based on the context provided.';
 
-      const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
+      const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
       await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
       const cleanedResponse = result.content.replace(/```json|```/g, '').trim();

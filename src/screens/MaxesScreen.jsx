@@ -6,7 +6,6 @@ import { MaxCard, QuickReference } from '../components/Maxes';
  */
 export default function MaxesScreen({
   user,
-  isViewingBuddy,
   editingMax,
   tempMaxValue,
   selectedReferenceExercise,
@@ -25,14 +24,12 @@ export default function MaxesScreen({
           <h2 className="text-2xl font-bold mb-1">1 Rep Maxes</h2>
           <p className="text-zinc-400">Track your strength progress</p>
         </div>
-        {!isViewingBuddy && (
-          <button
-            onClick={onOpenAddLift}
-            className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        )}
+        <button
+          onClick={onOpenAddLift}
+          className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="space-y-3">
@@ -44,7 +41,6 @@ export default function MaxesScreen({
             isEditing={editingMax === lift}
             tempValue={tempMaxValue}
             isSelected={selectedReferenceExercise === lift}
-            isViewingBuddy={isViewingBuddy}
             onSelect={() => onSelectReference(lift)}
             onStartEdit={() => onStartEdit(lift, weight)}
             onSaveEdit={() => onSaveEdit(lift, tempMaxValue)}

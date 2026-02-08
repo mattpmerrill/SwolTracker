@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase, db } from './lib/supabase';
-import { callLlmProvider } from './lib/llm';
+import { generateWithLlm } from './lib/llm';
 import { useToast } from './components/Toast';
 import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
 import { useAdmin } from './hooks/useAdmin';
@@ -15,7 +15,7 @@ import LoginPage from './components/LoginPage';
 import Onboarding from './components/Onboarding';
 const AdminArea = lazy(() => import('./components/admin/AdminArea'));
 import ProfileArea from './components/Profile/ProfileArea';
-import { Header, BottomNav, ViewModeBanner } from './components/Layout';
+import { Header, BottomNav } from './components/Layout';
 import { SettingsModal, EquipmentModal, AiGeneratorModal } from './components/Modals';
 import { AddLiftModal } from './components/Maxes';
 
@@ -81,7 +81,6 @@ export default function SwolTracker() {
   // ==========================================
   // BUDDY/GROUP STATE
   // ==========================================
-  const [viewingBuddy, setViewingBuddy] = useState(null);
   const [buddiesSearch, setBuddiesSearch] = useState('');
   const [groupRole, setGroupRole] = useState('independent');
   const [groupMembers, setGroupMembers] = useState([]);
@@ -125,8 +124,7 @@ export default function SwolTracker() {
   // ==========================================
   // DERIVED STATE
   // ==========================================
-  const displayUser = viewingBuddy ? profiles[viewingBuddy] : profiles[currentUser];
-  const user = displayUser || profiles[currentUser];
+  const user = profiles[currentUser];
   const actualCurrentWeek = calculateCurrentWeek(programStartDate);
 
   // ==========================================
@@ -264,7 +262,7 @@ export default function SwolTracker() {
         setCompletedWorkouts(completedMap);
       }
 
-      checkAdmin(authUser.email);
+      checkAdmin(authUser.id);
     } catch (e) {
       console.error("Error loading Supabase data:", e);
     } finally {
@@ -364,8 +362,6 @@ export default function SwolTracker() {
       if (!promptTemplate) { console.error('Onboarding prompt template not found'); return false; }
 
       const provider = await db.getLlmProvider();
-      const apiKey = await db.getGlobalApiKey();
-      if (!apiKey) { console.error('No API key configured'); return false; }
 
       const filledPrompt = promptTemplate
         .replace(/\{\{display_name\}\}/g, onboardingData.displayName)
@@ -379,7 +375,7 @@ export default function SwolTracker() {
         .replace(/\{\{equipment\}\}/g, onboardingData.equipment.join(', '));
 
       const systemPrompt = 'You are an expert fitness coach. Generate a workout program as JSON only, no markdown, no comments, no explanations. Return ONLY valid JSON.';
-      const result = await callLlmProvider(provider, apiKey, systemPrompt, filledPrompt, 'onboarding', db, authUser.id);
+      const result = await generateWithLlm(provider, systemPrompt, filledPrompt, 'onboarding', db, authUser.id);
       await db.logApiUsage(authUser.id, 'onboarding_workout', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
       let cleanedResponse = result.content.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -565,7 +561,6 @@ export default function SwolTracker() {
       if (u.buddyProfiles) delete u.buddyProfiles[buddyId];
       return { ...prev, [currentUser]: u };
     });
-    if (viewingBuddy === buddyId) setViewingBuddy(null);
   };
 
   const leaveWorkoutGroup = async () => {
@@ -603,7 +598,12 @@ export default function SwolTracker() {
     if (!success) { setSearchResults([]); return; }
     setSearchLoading(true);
     const results = await db.searchUsers(query, currentUser);
-    setSearchResults(results);
+    if (results?.rateLimited) {
+      toast.error(results.error);
+      setSearchResults([]);
+    } else {
+      setSearchResults(results);
+    }
     setSearchLoading(false);
   };
 
@@ -637,13 +637,6 @@ export default function SwolTracker() {
         onProfileClick={() => setShowProfile(true)}
       />
 
-      {viewingBuddy && (
-        <ViewModeBanner
-          buddyName={profiles[viewingBuddy]?.name}
-          onExitView={() => setViewingBuddy(null)}
-        />
-      )}
-
       <main className="px-5 py-6">
         {activeTab === 'workout' && (
           <WorkoutScreen
@@ -653,7 +646,6 @@ export default function SwolTracker() {
             actualCurrentWeek={actualCurrentWeek}
             programStartDate={programStartDate}
             user={user}
-            isViewingBuddy={!!viewingBuddy}
             groupRole={groupRole}
             groupLeader={groupLeader}
             onPreviousWeek={() => setCurrentWeek(w => Math.max(1, w - 1))}
@@ -673,7 +665,6 @@ export default function SwolTracker() {
         {activeTab === 'maxes' && (
           <MaxesScreen
             user={user}
-            isViewingBuddy={!!viewingBuddy}
             editingMax={editingMax}
             tempMaxValue={tempMaxValue}
             selectedReferenceExercise={selectedReferenceExercise}
@@ -723,7 +714,6 @@ export default function SwolTracker() {
             onDeclineInvite={declineBuddyRequest}
             onSearchChange={(val) => { setBuddiesSearch(val); if (val.trim()) searchUsersInDb(val); else setSearchResults([]); }}
             onSendInvite={sendBuddyRequest}
-            onViewProfile={(id) => { setViewingBuddy(id); setActiveTab('workout'); }}
             onRemoveBuddy={removeBuddy}
             onToggleChat={() => { setShowChat(!showChat); if (!showChat && chatMessages.length === 0) loadChatMessages(); }}
             onChatInputChange={setChatInput}

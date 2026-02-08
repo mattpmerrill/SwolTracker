@@ -38,7 +38,6 @@ export default function BuddiesScreen({
   onDeclineInvite,
   onSearchChange,
   onSendInvite,
-  onViewProfile,
   onRemoveBuddy,
   onToggleChat,
   onChatInputChange,
@@ -112,7 +111,6 @@ export default function BuddiesScreen({
           buddies={user.buddies}
           buddyProfiles={user.buddyProfiles}
           profiles={profiles}
-          onViewProfile={onViewProfile}
           onRemove={onRemoveBuddy}
         />
       )}
@@ -142,7 +140,6 @@ export default function BuddiesScreen({
         onSearchChange={onSearchChange}
         onSendInvite={onSendInvite}
         onAcceptRequest={onAcceptInvite}
-        onViewProfile={onViewProfile}
       />
     </>
   );

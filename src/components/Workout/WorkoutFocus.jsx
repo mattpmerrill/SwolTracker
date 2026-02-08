@@ -8,7 +8,6 @@ export default function WorkoutFocus({
   workout,
   completionPercentage,
   isWorkoutComplete,
-  isViewingBuddy,
   onToggleComplete,
 }) {
   if (!workout) return null;
@@ -73,7 +72,7 @@ export default function WorkoutFocus({
         </div>
 
         {/* Complete Workout Button - only show if completion > 0% and not a rest day */}
-        {workout.focus !== 'Rest Day' && completionPercentage > 0 && !isViewingBuddy && (
+        {workout.focus !== 'Rest Day' && completionPercentage > 0 && (
           <button
             onClick={onToggleComplete}
             className={`mt-4 w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${

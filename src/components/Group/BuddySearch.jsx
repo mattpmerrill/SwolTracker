@@ -16,7 +16,6 @@ export default function BuddySearch({
   onSearchChange,
   onSendInvite,
   onAcceptRequest,
-  onViewProfile,
 }) {
   const myProfile = profiles[currentUser] || {};
 
@@ -81,12 +80,11 @@ export default function BuddySearch({
                 </div>
 
                 {isBuddy ? (
-                  <button
-                    onClick={() => onViewProfile(userId)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                  <span
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/20 text-green-400"
                   >
-                    View Profile
-                  </button>
+                    In Group
+                  </span>
                 ) : isPending ? (
                   <button
                     disabled

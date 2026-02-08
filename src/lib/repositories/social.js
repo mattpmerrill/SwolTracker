@@ -46,6 +46,10 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
 
     if (error) {
       console.error('Error searching users:', error)
+      // Surface rate limit errors
+      if (error.message?.includes('Too many')) {
+        return { rateLimited: true, error: error.message }
+      }
       return []
     }
     return data || []
