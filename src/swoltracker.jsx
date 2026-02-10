@@ -153,7 +153,10 @@ export default function SwolTracker() {
   // DATA LOADING
   // ==========================================
   useEffect(() => {
-    if (!authUser) return;
+    if (!authUser) {
+      setIsLoading(false);
+      return;
+    }
     loadSupabaseData();
   }, [authUser]);
 
