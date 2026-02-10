@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db } from '../lib/db';
-import { callLlmProvider } from '../../src/lib/llm';
+import { callLlmProvider } from '../lib/llm';
 import { validate, aiNotesSchema, weekCountSchema } from '../../src/lib/validation';
 
 interface AiState {
