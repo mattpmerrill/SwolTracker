@@ -16,8 +16,8 @@ const PROVIDER_CONFIGS = {
   },
   claude: {
     endpoint: 'https://api.anthropic.com/v1/messages',
-    models: { onboarding: 'claude-3-haiku-20240307', weekly: 'claude-3-5-sonnet-latest' },
-    defaultModel: 'claude-3-5-sonnet-latest',
+    models: { onboarding: 'claude-haiku-4-5', weekly: 'claude-sonnet-4-6' },
+    defaultModel: 'claude-sonnet-4-6',
   },
   gemini: {
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
