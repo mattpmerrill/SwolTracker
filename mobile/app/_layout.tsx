@@ -5,7 +5,11 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+
+// Keep the splash screen visible until auth state is known
+SplashScreen.preventAutoHideAsync();
 import { initPurchases, identifyUser } from '../lib/purchases';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 
@@ -28,6 +32,13 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const { checkSubscription, loadOffering } = useSubscriptionStore();
+
+  // Hide splash once auth state is known
+  useEffect(() => {
+    if (initialized) {
+      SplashScreen.hideAsync();
+    }
+  }, [initialized]);
 
   // Auth routing
   useEffect(() => {
