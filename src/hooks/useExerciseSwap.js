@@ -1,0 +1,50 @@
+import { useState, useCallback } from 'react';
+import { db } from '../lib/supabase';
+import { generateWithLlm } from '../lib/llm';
+
+/**
+ * Hook for handling exercise swap/alternative suggestions
+ */
+export function useExerciseSwap({ equipment, currentUser, toast }) {
+  const [swapState, setSwapState] = useState({
+    loading: false,
+    exerciseIndex: null,
+    alternative: null,
+  });
+
+  const requestSwap = useCallback(async (exercise, exerciseIndex) => {
+    setSwapState({ loading: true, exerciseIndex, alternative: null });
+
+    try {
+      const provider = await db.getLlmProvider();
+
+      const systemPrompt = 'You are a fitness expert. Suggest exercise alternatives that target the same muscle groups. Return ONLY valid JSON, no markdown, no explanation.';
+
+      const userPrompt = `Given this exercise: ${exercise.name} targeting ${exercise.muscleGroups} with ${exercise.sets}×${exercise.reps}, suggest ONE alternative exercise that targets the same muscle groups. Available equipment: ${equipment.join(', ')}. Return ONLY valid JSON with this exact schema: { "name": "...", "muscleGroups": "...", "sets": ${exercise.sets}, "reps": "${exercise.reps}", "note": "Alternative for ${exercise.name}" }. Keep the same sets and reps.${exercise.percentages ? ' Include "percentages": [' + exercise.percentages.join(', ') + '] since the original had them.' : ' Do not include percentages.'}`;
+
+      const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'onboarding', db, currentUser);
+
+      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
+      const alternative = JSON.parse(cleanedResponse);
+
+      if (!alternative.name || !alternative.muscleGroups || !alternative.sets || !alternative.reps) {
+        throw new Error('Invalid exercise format returned');
+      }
+
+      setSwapState({ loading: false, exerciseIndex, alternative });
+    } catch (error) {
+      setSwapState({ loading: false, exerciseIndex: null, alternative: null });
+      toast.error('Failed to find alternative. Try again.');
+    }
+  }, [equipment, currentUser, toast]);
+
+  const clearSwap = useCallback(() => {
+    setSwapState({ loading: false, exerciseIndex: null, alternative: null });
+  }, []);
+
+  return {
+    swapState,
+    requestSwap,
+    clearSwap,
+  };
+}

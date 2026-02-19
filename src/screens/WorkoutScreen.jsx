@@ -32,6 +32,10 @@ export default function WorkoutScreen({
   getCompletionPercentage,
   isWorkoutComplete,
   onToggleWorkoutComplete,
+  swapState,
+  onRequestSwap,
+  onAcceptSwap,
+  onCancelSwap,
 }) {
   const weekDates = getWeekDates(programStartDate, currentWeek);
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
@@ -96,6 +100,10 @@ export default function WorkoutScreen({
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}
                 onAddMax={onAddMax}
+                swapState={swapState}
+                onRequestSwap={onRequestSwap}
+                onAcceptSwap={onAcceptSwap}
+                onCancelSwap={onCancelSwap}
               />
             ))}
           </div>

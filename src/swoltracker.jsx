@@ -8,6 +8,7 @@ import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
 import { useAdmin } from './hooks/useAdmin';
 import { useAiGenerator } from './hooks/useAiGenerator';
 import { useWorkoutLogger } from './hooks/useWorkoutLogger';
+import { useExerciseSwap } from './hooks/useExerciseSwap';
 import { validate, profileUpdateSchema, maxWeightSchema, chatMessageSchema, equipmentNameSchema, searchQuerySchema } from './lib/validation';
 
 // Components
@@ -120,6 +121,8 @@ export default function SwolTracker() {
     showAiGenerator, setShowAiGenerator,
     openAiGenerator, generateAiWorkout, confirmGeneratedWorkout,
   } = useAiGenerator({ currentUser, profiles, equipment, workoutProgram, gymId, toast, setWorkoutProgram, setCurrentWeek });
+
+  const { swapState, requestSwap, clearSwap } = useExerciseSwap({ equipment, currentUser, toast });
 
   // ==========================================
   // DERIVED STATE
@@ -469,6 +472,24 @@ export default function SwolTracker() {
     setActiveTab('maxes');
   };
 
+  const acceptSwap = async (exerciseIndex, alternative) => {
+    const updatedDayWorkout = { ...workoutProgram[currentWeek][currentDay] };
+    const updatedExercises = [...updatedDayWorkout.exercises];
+    updatedExercises[exerciseIndex] = alternative;
+    updatedDayWorkout.exercises = updatedExercises;
+
+    const updatedWeekProgram = { ...workoutProgram[currentWeek], [currentDay]: updatedDayWorkout };
+
+    setWorkoutProgram(prev => ({ ...prev, [currentWeek]: updatedWeekProgram }));
+
+    if (gymId) {
+      await db.saveWorkoutProgram(gymId, currentWeek, updatedWeekProgram, currentUser, false);
+    }
+
+    clearSwap();
+    toast.success(`Swapped to ${alternative.name}`);
+  };
+
   const deleteLift = async (lift) => {
     const newMaxes = { ...profiles[currentUser].maxes };
     delete newMaxes[lift];
@@ -662,6 +683,10 @@ export default function SwolTracker() {
             getCompletionPercentage={getCompletionPercentage}
             isWorkoutComplete={isWorkoutComplete}
             onToggleWorkoutComplete={toggleWorkoutComplete}
+            swapState={swapState}
+            onRequestSwap={requestSwap}
+            onAcceptSwap={acceptSwap}
+            onCancelSwap={clearSwap}
           />
         )}
 
