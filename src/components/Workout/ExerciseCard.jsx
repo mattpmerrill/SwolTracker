@@ -32,7 +32,7 @@ export default function ExerciseCard({
           </div>
           <div className="flex items-center gap-2">
             {/* Swap button */}
-            {!hasAlternative && (
+            {!hasAlternative && !isWorkoutComplete && (
               <button
                 onClick={() => onRequestSwap?.(exercise, exerciseIndex)}
                 disabled={isSwapping}
