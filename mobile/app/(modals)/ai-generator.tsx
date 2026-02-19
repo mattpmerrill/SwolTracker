@@ -7,6 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAiStore } from '../../stores/aiStore';
 import { useProfileStore } from '../../stores/profileStore';
 import { useWorkoutStore } from '../../stores/workoutStore';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import { incrementAiGenerationCount } from '../../lib/purchases';
 import { Button } from '../../components/ui';
 
 const LOADING_PHRASES = [
@@ -37,6 +39,8 @@ export default function AiGeneratorModal() {
     setShowAiGenerator,
   } = useAiStore();
 
+  const { refreshAiCount } = useSubscriptionStore();
+
   const [loadingPhrase, setLoadingPhrase] = useState(0);
 
   useEffect(() => {
@@ -59,6 +63,8 @@ export default function AiGeneratorModal() {
       currentUser: user.id,
       gymId,
       onComplete: (updates, startWeek) => {
+        incrementAiGenerationCount();
+        refreshAiCount();
         updateWorkoutProgram(updates);
         setCurrentWeek(startWeek);
         router.back();

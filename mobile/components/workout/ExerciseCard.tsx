@@ -18,6 +18,7 @@ interface ExerciseCardProps {
   isSetLogged: (exerciseIndex: number, setIndex: number) => boolean;
   onLogSet: (exerciseIndex: number, setIndex: number, data: any) => void;
   onAddMax?: (exerciseName: string) => void;
+  onSetCompleted?: () => void;
   disabled?: boolean;
 }
 
@@ -28,6 +29,7 @@ export function ExerciseCard({
   isSetLogged,
   onLogSet,
   onAddMax,
+  onSetCompleted,
   disabled = false,
 }: ExerciseCardProps) {
   const hasMax = !!findMaxKey(exercise.name, userMaxes);
@@ -84,6 +86,7 @@ export function ExerciseCard({
                 })
               }
               onAddMax={() => onAddMax?.(exercise.name)}
+              onSetCompleted={onSetCompleted}
               disabled={disabled}
             />
           );

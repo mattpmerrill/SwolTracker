@@ -1,4 +1,4 @@
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { DAYS_OF_WEEK } from '../../../src/constants';
 import { getTodayDayName } from '../../../src/utils/date';
 
@@ -29,12 +29,7 @@ export function DaySelector({
   const isViewingCurrentWeek = currentWeek === actualCurrentWeek;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-      className="py-2"
-    >
+    <View className="flex-row items-center justify-between px-4 py-2">
       {DAYS_OF_WEEK.map((day) => {
         const isSelected = currentDay === day;
         const isToday = isViewingCurrentWeek && day === today;
@@ -43,7 +38,8 @@ export function DaySelector({
           <Pressable
             key={day}
             onPress={() => onDayChange(day)}
-            className={`px-4 py-2.5 rounded-xl min-w-[56px] items-center ${
+            style={{ width: `${100 / 7 - 1.5}%` }}
+            className={`py-2.5 rounded-xl items-center ${
               isSelected
                 ? 'bg-orange-500'
                 : isToday
@@ -52,7 +48,7 @@ export function DaySelector({
             }`}
           >
             <Text
-              className={`text-sm font-semibold ${
+              className={`text-xs font-semibold ${
                 isSelected
                   ? 'text-white'
                   : isToday
@@ -65,6 +61,6 @@ export function DaySelector({
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }

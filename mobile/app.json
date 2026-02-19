@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.swoltracker.app"
+      "bundleIdentifier": "com.mattmerrill.swoltracker"
     },
     "android": {
       "adaptiveIcon": {
@@ -26,9 +26,20 @@
       "package": "com.swoltracker.app"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#f97316",
+          "iosDisplayInForeground": true,
+          "sounds": []
+        }
+      ]
     ],
     "extra": {
+      "supabaseUrl": "https://qbykzrpppowcjxrofoxi.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFieWt6cnBwcG93Y2p4cm9mb3hpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0OTk2MjMsImV4cCI6MjA4NDA3NTYyM30.YmmsJYFnhG_oHdp-q7BH39fdWE_o2ZojMhiatEBgXws",
       "eas": {
         "projectId": ""
       }

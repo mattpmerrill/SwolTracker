@@ -6,17 +6,33 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { initPurchases, identifyUser } from '../lib/purchases';
+import { useSubscriptionStore } from '../stores/subscriptionStore';
+
+// Show notifications even when app is foregrounded (guard for simulator builds)
+try {
+  const Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  // expo-notifications native module unavailable (simulator without push entitlements)
+}
 
 function RootLayoutNav() {
   const { user, loading, initialized } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const { checkSubscription, loadOffering } = useSubscriptionStore();
 
+  // Auth routing
   useEffect(() => {
     if (!initialized) return;
-
     const inAuthGroup = segments[0] === '(auth)';
-
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {
@@ -24,10 +40,25 @@ function RootLayoutNav() {
     }
   }, [user, initialized, segments]);
 
+  // Init RevenueCat and check subscription when user is known
+  useEffect(() => {
+    if (!initialized) return;
+    if (user?.id) {
+      initPurchases(user.id);
+      identifyUser(user.id).catch(() => {});
+    } else {
+      initPurchases();
+    }
+    checkSubscription();
+    loadOffering();
+  }, [user?.id, initialized]);
+
   if (!initialized) {
     return (
       <View style={{ flex: 1, backgroundColor: '#09090b', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#f97316', fontSize: 32, fontWeight: '800', marginBottom: 16 }}>SwolTracker</Text>
+        <Text style={{ color: '#f97316', fontSize: 32, fontWeight: '800', marginBottom: 16 }}>
+          SwolTracker
+        </Text>
         <ActivityIndicator size="large" color="#f97316" />
       </View>
     );
@@ -44,17 +75,12 @@ function RootLayoutNav() {
         }}
       >
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="(auth)"
-          options={{ animation: 'fade' }}
-        />
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         <Stack.Screen
           name="(modals)"
-          options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
-          }}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <Stack.Screen name="(screenshots)" />
       </Stack>
     </>
   );

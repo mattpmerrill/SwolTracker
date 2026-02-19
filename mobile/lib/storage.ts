@@ -10,6 +10,9 @@ export const STORAGE_KEYS = {
   PROGRAM_START_DATE: 'swoltracker-startdate',
   CURRENT_USER: 'swoltracker-currentuser',
   COMPLETED_WORKOUTS: 'swoltracker-completed-workouts',
+  NOTIFICATION_PREFS: 'swoltracker-notification-prefs',
+  HEALTH_PREFS: 'swoltracker-health-prefs',
+  AI_GENERATION_COUNT: 'swoltracker-ai-gen-count',
 } as const;
 
 export const getItem = (key: string): any | null => {

@@ -19,4 +19,7 @@ config.resolver.nodeModulesPaths = [
 // Allow importing .js/.jsx files from shared code
 config.resolver.sourceExts = [...(config.resolver.sourceExts || []), 'jsx'];
 
+// Listen on all interfaces so physical devices can connect
+config.server = { ...config.server, host: '0.0.0.0' };
+
 module.exports = withNativeWind(config, { input: './global.css' });

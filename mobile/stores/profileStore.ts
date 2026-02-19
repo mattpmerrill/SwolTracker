@@ -43,7 +43,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         db.getMyGyms(userId),
       ]);
 
-      const gymId = gyms?.[0]?.gym_id || null;
+      const gymId = gyms?.[0]?.id || null;
       set({ profile, gymId });
 
       if (gymId) {
@@ -65,15 +65,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
           }
         }
 
-        // Convert maxes array to key-value
-        const maxMap: Record<string, number> = {};
-        if (Array.isArray(maxes)) {
-          maxes.forEach((m: any) => {
-            maxMap[m.exercise_name] = m.weight_lbs;
-          });
-        }
+        // Maxes already returned as key-value object from repo
+        const maxMap: Record<string, number> = maxes && typeof maxes === 'object' ? maxes : {};
 
-        const equipNames = Array.isArray(equipment) ? equipment.map((e: any) => e.name) : [];
+        const equipNames = Array.isArray(equipment) ? equipment : [];
 
         set({ maxes: maxMap, equipment: equipNames, profiles });
       }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { View, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -15,14 +15,20 @@ import { DaySelector } from '../../components/workout/DaySelector';
 import { WorkoutFocus } from '../../components/workout/WorkoutFocus';
 import { ExerciseCard } from '../../components/workout/ExerciseCard';
 import { NoWorkoutState, RestDayState } from '../../components/workout/EmptyStates';
+import { RestTimerModal } from '../../components/workout/RestTimerModal';
+import { loadHealthPrefs, writeWorkoutToHealth } from '../../lib/health';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import { incrementAiGenerationCount } from '../../lib/purchases';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const confettiRef = useRef<ConfettiCannon>(null);
+  const [showRestTimer, setShowRestTimer] = useState(false);
 
   const {
     workoutProgram,
+    exerciseLog,
     currentWeek,
     currentDay,
     setCurrentWeek,
@@ -36,6 +42,7 @@ export default function WorkoutScreen() {
 
   const { profile, maxes, equipment, gymId, loadProfile } = useProfileStore();
   const { openAiGenerator } = useAiStore();
+  const { canUseAi, openPaywall, refreshAiCount } = useSubscriptionStore();
 
   const programStartDate = profile?.program_start_date || null;
   const actualCurrentWeek = programStartDate
@@ -89,13 +96,38 @@ export default function WorkoutScreen() {
     if (nowComplete && completionPct === 100) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       confettiRef.current?.start();
+
+      // Write to Apple Health if enabled
+      const healthPrefs = loadHealthPrefs();
+      if (healthPrefs.syncWorkoutsEnabled) {
+        const totalVolume = Object.values(exerciseLog).reduce((sum: number, log: any) => {
+          if (log?.completed && log?.weight) {
+            return sum + log.weight * (log.actual_reps || log.reps || 1);
+          }
+          return sum;
+        }, 0);
+        const endDate = new Date();
+        // Estimate ~1.5 min per set as workout start time
+        const totalSets = exercises.reduce((n: number, ex: any) => n + (ex.sets || 0), 0);
+        const startDate = new Date(endDate.getTime() - totalSets * 90_000);
+        writeWorkoutToHealth({ startDate, endDate, totalVolumeLbs: totalVolume }).catch(() => {});
+      }
     }
-  }, [user?.id, gymId, currentWeek, currentDay, completionPct]);
+  }, [user?.id, gymId, currentWeek, currentDay, completionPct, exerciseLog, exercises]);
+
+  const handleSetCompleted = useCallback(() => {
+    setShowRestTimer(true);
+  }, []);
 
   const handleGenerateWorkout = useCallback(() => {
+    if (!canUseAi) {
+      openPaywall();
+      router.push('/(modals)/paywall');
+      return;
+    }
     openAiGenerator(currentWeek);
     router.push('/(modals)/ai-generator');
-  }, [currentWeek]);
+  }, [currentWeek, canUseAi, openPaywall]);
 
   const handleBackToCurrentWeek = useCallback(() => {
     setCurrentWeek(actualCurrentWeek);
@@ -157,11 +189,17 @@ export default function WorkoutScreen() {
               userMaxes={maxes}
               isSetLogged={handleIsSetLogged}
               onLogSet={handleLogSet}
+              onSetCompleted={handleSetCompleted}
               disabled={workoutComplete}
             />
           ))}
         </ScrollView>
       )}
+
+      <RestTimerModal
+        visible={showRestTimer}
+        onClose={() => setShowRestTimer(false)}
+      />
 
       <ConfettiCannon
         ref={confettiRef}

@@ -12,6 +12,7 @@ interface SetRowProps {
   exerciseName: string;
   onPress: () => void;
   onAddMax: () => void;
+  onSetCompleted?: () => void;
   disabled?: boolean;
 }
 
@@ -25,16 +26,21 @@ export function SetRow({
   exerciseName,
   onPress,
   onAddMax,
+  onSetCompleted,
   disabled = false,
 }: SetRowProps) {
   const handlePress = async () => {
     if (disabled) return;
+    const completing = !isLogged;
     await Haptics.impactAsync(
-      isLogged
-        ? Haptics.ImpactFeedbackStyle.Light
-        : Haptics.ImpactFeedbackStyle.Medium
+      completing
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light
     );
     onPress();
+    if (completing) {
+      onSetCompleted?.();
+    }
   };
 
   return (

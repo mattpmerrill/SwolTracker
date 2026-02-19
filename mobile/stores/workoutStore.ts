@@ -136,7 +136,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   loadWorkoutData: async (userId, gymId) => {
     try {
       const [logs, completions, programs] = await Promise.all([
-        db.getWorkoutLogs(gymId),
+        db.getAllWorkoutLogs(gymId),
         db.getWorkoutCompletions(gymId),
         db.getAllWorkoutPrograms(gymId),
       ]);
@@ -158,13 +158,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         });
       }
 
-      // Convert programs array to week-indexed object
-      const programMap: Record<number, any> = {};
-      if (Array.isArray(programs)) {
-        programs.forEach((p: any) => {
-          programMap[p.week_number] = p.program_data;
-        });
-      }
+      // Programs already returned as week-indexed object from repo
+      const programMap: Record<number, any> = programs && typeof programs === 'object' ? programs : {};
 
       set({
         exerciseLog: logMap,
