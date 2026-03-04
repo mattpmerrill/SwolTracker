@@ -79,8 +79,33 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
       const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
       await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
 
-      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
-      const generatedProgram = JSON.parse(cleanedResponse);
+      let cleanedResponse = result.content.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const firstBrace = cleanedResponse.indexOf('{');
+      const lastBrace = cleanedResponse.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanedResponse = cleanedResponse.slice(firstBrace, lastBrace + 1);
+      }
+
+      if (!cleanedResponse) {
+        throw new Error('The AI returned an empty response. Please try again.');
+      }
+
+      let generatedProgram;
+      try {
+        generatedProgram = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        await logError(db, {
+          category: ErrorCategory.PARSING,
+          message: 'Failed to parse AI workout response: ' + parseError.message,
+          severity: ErrorSeverity.ERROR,
+          userId: currentUser,
+          component: 'useAiGenerator.js',
+          operation: 'generateAiWorkout.parseJson',
+          originalError: parseError,
+          context: { responseSnippet: cleanedResponse.substring(0, 500), responseLength: cleanedResponse.length },
+        });
+        throw new Error('The AI response was incomplete or malformed. Try generating again — this can happen with large programs.');
+      }
 
       const requiredDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
       for (let i = 1; i <= validWeekCount; i++) {

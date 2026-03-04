@@ -67,7 +67,8 @@ async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS)
   throw lastError;
 }
 
-async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
+async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType) {
+  const maxTokens = requestType === 'weekly' ? 16000 : 4000;
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -75,7 +76,7 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
       model,
       messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: maxTokens,
     }),
   });
 
@@ -92,7 +93,8 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model) {
   };
 }
 
-async function callClaude(apiKey, systemPrompt, userPrompt, model) {
+async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType) {
+  const maxTokens = requestType === 'weekly' ? 32000 : 4000;
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -102,7 +104,7 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4000,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
@@ -114,6 +116,9 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model) {
   }
 
   const data = await response.json();
+  if (data.stop_reason === 'max_tokens') {
+    throw new Error('The AI response was cut off because the workout program was too large. Try generating fewer weeks at a time.');
+  }
   return {
     content: data.content?.[0]?.text || '',
     usage: { prompt_tokens: data.usage?.input_tokens || 0, completion_tokens: data.usage?.output_tokens || 0 },
@@ -121,14 +126,15 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model) {
   };
 }
 
-async function callGemini(apiKey, systemPrompt, userPrompt, model) {
+async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType) {
+  const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4000 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens },
     }),
   });
 
