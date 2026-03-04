@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const TIMEOUT_MS = 60000;
+const TIMEOUT_MS = 270000; // 270s — just under Vercel's 300s maxDuration
 const AI_DAILY_LIMIT = 20; // max AI generations per user per day
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
@@ -59,6 +59,9 @@ async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS)
       if (message.includes('invalid api key') || message.includes('unauthorized') || message.includes('401') || message.includes('403')) {
         throw error;
       }
+      if (message.includes('timed out') || message.includes('timeout') || message.includes('504')) {
+        throw error; // no point retrying a timeout
+      }
       if (attempt < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, attempt)));
       }
@@ -67,8 +70,8 @@ async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS)
   throw lastError;
 }
 
-async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType) {
-  const maxTokens = requestType === 'weekly' ? 16000 : 4000;
+async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+  const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -93,8 +96,8 @@ async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType) 
   };
 }
 
-async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType) {
-  const maxTokens = requestType === 'weekly' ? 32000 : 4000;
+async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+  const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -126,7 +129,7 @@ async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType) 
   };
 }
 
-async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType) {
+async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
   const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const response = await fetchWithTimeout(endpoint, {
@@ -209,9 +212,9 @@ export default async function handler(req, res) {
 
     const result = await withRetry(async () => {
       switch (provider) {
-        case 'openai': return await callOpenAI(apiKey, systemPrompt, userPrompt, model);
-        case 'claude': return await callClaude(apiKey, systemPrompt, userPrompt, model);
-        case 'gemini': return await callGemini(apiKey, systemPrompt, userPrompt, model);
+        case 'openai': return await callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType);
+        case 'claude': return await callClaude(apiKey, systemPrompt, userPrompt, model, requestType);
+        case 'gemini': return await callGemini(apiKey, systemPrompt, userPrompt, model, requestType);
         default: throw new Error(`Provider ${provider} not implemented`);
       }
     });
