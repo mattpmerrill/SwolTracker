@@ -768,6 +768,7 @@ export default function SwolTracker() {
         programStartDate={programStartDate}
         actualCurrentWeek={actualCurrentWeek}
         isAdmin={isAdmin}
+        supabase={supabase}
         onClose={() => setShowSettings(false)}
         onOpenAiGenerator={openAiGenerator}
         onOpenAdmin={openAdmin}

@@ -10,3 +10,4 @@ mobile/dist/
 mobile/ios/
 mobile/android/
 mobile/web-build/
+mcp/.env
