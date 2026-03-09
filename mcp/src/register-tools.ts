@@ -62,13 +62,52 @@ export function registerTools(
 
   server.tool(
     "get_todays_workout",
-    "Get today's prescribed exercises with resolved weights. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise.",
+    "Get prescribed exercises with resolved weights for any week+day. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise. Defaults to current week + today.",
     {
       gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       day_name: z.string().optional().describe('Day name (e.g. "Monday"). Defaults to today.'),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current week)"),
     },
-    async ({ gym_id, day_name }) => {
-      const result = await queries.get_todays_workout(gym_id, day_name);
+    async ({ gym_id, day_name, week_number }) => {
+      const result = await queries.get_todays_workout(gym_id, day_name, week_number);
+      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
+    }
+  );
+
+  server.tool(
+    "get_weekly_workout",
+    "Get all 7 days for a week with resolved weights. Returns each day's focus, exercises (with exercise_index, weight_lbs), and total volume.",
+    {
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current week)"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ week_number, gym_id }) => {
+      const result = await queries.get_weekly_workout(week_number, gym_id);
+      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
+    }
+  );
+
+  server.tool(
+    "get_program_overview",
+    "High-level view of the full program — total weeks, each week's daily focus/theme, volume per week, and which week is current. Like a table of contents for the training plan.",
+    {
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ gym_id }) => {
+      const result = await queries.get_program_overview(gym_id);
+      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
+    }
+  );
+
+  server.tool(
+    "get_program_progression",
+    "Show how a specific lift progresses across all weeks — percentages, resolved weights, sets/reps per week. Use to preview upcoming intensity or compare training phases.",
+    {
+      exercise_name: z.string().describe('Exercise name (e.g. "Bench Press")'),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ exercise_name, gym_id }) => {
+      const result = await queries.get_program_progression(exercise_name, gym_id);
       return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
     }
   );

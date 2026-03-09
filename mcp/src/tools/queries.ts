@@ -10,6 +10,7 @@ import type {
   UserStats,
   ToolResult,
   ProgramDay,
+  ProgramExercise,
 } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
 
@@ -33,6 +34,53 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (gymId) return gymId;
     const gyms = await getMyGyms();
     return gyms[0]?.id ?? null;
+  }
+
+  async function resolveCurrentWeek(): Promise<number> {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("program_start_date")
+      .eq("id", userId)
+      .single();
+    return getCurrentWeek(profile?.program_start_date ?? null);
+  }
+
+  async function getUserMaxes(): Promise<Record<string, number>> {
+    const { data } = await supabase
+      .from("current_user_maxes")
+      .select("exercise_name, weight_lbs")
+      .eq("user_id", userId);
+    const maxes: Record<string, number> = {};
+    (data as CurrentMax[] | null)?.forEach(
+      (m) => (maxes[m.exercise_name] = m.weight_lbs)
+    );
+    return maxes;
+  }
+
+  function enrichExercises(
+    exercises: ProgramExercise[],
+    maxes: Record<string, number>
+  ) {
+    return exercises.map((ex, i) => {
+      const max1RM = maxes[ex.name] ?? null;
+      let weight_lbs: number | null = null;
+
+      if (ex.percentages && ex.percentages.length > 0 && max1RM) {
+        const maxPct = Math.max(...ex.percentages);
+        weight_lbs = Math.round((maxPct / 100) * max1RM);
+      }
+
+      return {
+        exercise_index: i,
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight_lbs,
+        max_1rm: max1RM,
+        percentages: ex.percentages ?? null,
+        muscleGroups: ex.muscleGroups ?? null,
+      };
+    });
   }
 
   // ── Tools ────────────────────────────────────────────────
@@ -117,81 +165,43 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
-  async function get_todays_workout(gymId?: string, dayName?: string): Promise<ToolResult> {
+  async function get_todays_workout(gymId?: string, dayName?: string, weekNumber?: number): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    // Get profile for program start date
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("program_start_date")
-      .eq("id", userId)
-      .single();
-
-    const currentWeek = getCurrentWeek(profile?.program_start_date ?? null);
-    const todayName = dayName ?? getTodayName();
+    const week = weekNumber ?? await resolveCurrentWeek();
+    const day = dayName ?? getTodayName();
 
     const { data: programRow } = await supabase
       .from("workout_programs")
       .select("*")
       .eq("gym_id", resolvedGymId)
-      .eq("week_number", currentWeek)
+      .eq("week_number", week)
       .single();
 
     if (!programRow) {
       return {
         success: true,
-        message: `No program found for Week ${currentWeek}. Generate one first.`,
-        data: { current_week: currentWeek, day_name: todayName, gym_id: resolvedGymId },
+        message: `No program found for Week ${week}. Generate one first.`,
+        data: { current_week: week, day_name: day, gym_id: resolvedGymId },
       };
     }
 
     const program = (programRow as WorkoutProgramRow).program_data;
-    const today: ProgramDay | undefined = program[todayName];
+    const today: ProgramDay | undefined = program[day];
 
     if (!today) {
       return {
         success: true,
-        message: `${todayName} is a rest day (Week ${currentWeek}).`,
-        data: { current_week: currentWeek, day_name: todayName, rest_day: true, gym_id: resolvedGymId },
+        message: `${day} is a rest day (Week ${week}).`,
+        data: { current_week: week, day_name: day, rest_day: true, gym_id: resolvedGymId },
       };
     }
 
-    // Fetch user maxes to resolve percentage-based weights
-    const { data: maxRows } = await supabase
-      .from("current_user_maxes")
-      .select("exercise_name, weight_lbs")
-      .eq("user_id", userId);
-
-    const maxes: Record<string, number> = {};
-    (maxRows as CurrentMax[] | null)?.forEach(
-      (m) => (maxes[m.exercise_name] = m.weight_lbs)
-    );
-
-    // Build enriched exercises with resolved weights and exercise_index
-    const enrichedExercises = today.exercises.map((ex, i) => {
-      const max1RM = maxes[ex.name] ?? null;
-      let weight_lbs: number | null = null;
-
-      if (ex.percentages && ex.percentages.length > 0 && max1RM) {
-        // Use the heaviest prescribed percentage as the target weight
-        const maxPct = Math.max(...ex.percentages);
-        weight_lbs = Math.round((maxPct / 100) * max1RM);
-      }
-
-      return {
-        exercise_index: i,
-        name: ex.name,
-        sets: ex.sets,
-        reps: ex.reps,
-        weight_lbs,
-        max_1rm: max1RM,
-        percentages: ex.percentages ?? null,
-        muscleGroups: ex.muscleGroups ?? null,
-      };
-    });
+    const maxes = await getUserMaxes();
+    const enrichedExercises = enrichExercises(today.exercises, maxes);
 
     const exerciseLines = enrichedExercises.map((ex) => {
       const weightStr = ex.weight_lbs
@@ -204,13 +214,222 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Week ${currentWeek}, ${todayName} — ${today.focus}:\n${exerciseLines.join("\n")}`,
+      message: `Week ${week}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}`,
       data: {
-        current_week: currentWeek,
-        day_name: todayName,
+        current_week: week,
+        day_name: day,
         focus: today.focus,
         exercises: enrichedExercises,
         gym_id: resolvedGymId,
+      },
+    };
+  }
+
+  async function get_weekly_workout(weekNumber?: number, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found for user.", data: {} };
+    }
+
+    const week = weekNumber ?? await resolveCurrentWeek();
+
+    const { data: programRow } = await supabase
+      .from("workout_programs")
+      .select("*")
+      .eq("gym_id", resolvedGymId)
+      .eq("week_number", week)
+      .single();
+
+    if (!programRow) {
+      return {
+        success: true,
+        message: `No program found for Week ${week}.`,
+        data: { week_number: week, gym_id: resolvedGymId },
+      };
+    }
+
+    const program = (programRow as WorkoutProgramRow).program_data;
+    const maxes = await getUserMaxes();
+    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    const days: Record<string, unknown> = {};
+    const lines: string[] = [];
+    let totalSets = 0;
+
+    for (const dayName of dayOrder) {
+      const day: ProgramDay | undefined = program[dayName];
+      if (!day || day.exercises.length === 0) {
+        days[dayName] = { focus: "Rest", exercises: [] };
+        lines.push(`  ${dayName}: Rest`);
+        continue;
+      }
+
+      const enriched = enrichExercises(day.exercises, maxes);
+      const daySets = enriched.reduce((sum, ex) => sum + ex.sets, 0);
+      totalSets += daySets;
+
+      days[dayName] = { focus: day.focus, exercises: enriched, total_sets: daySets };
+      lines.push(`  ${dayName}: ${day.focus} — ${enriched.length} exercises, ${daySets} sets`);
+    }
+
+    return {
+      success: true,
+      message: `Week ${week} (${totalSets} total sets):\n${lines.join("\n")}`,
+      data: { week_number: week, total_sets: totalSets, days, gym_id: resolvedGymId },
+    };
+  }
+
+  async function get_program_overview(gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found for user.", data: {} };
+    }
+
+    const currentWeek = await resolveCurrentWeek();
+
+    const { data: rows } = await supabase
+      .from("workout_programs")
+      .select("week_number, program_data, ai_notes")
+      .eq("gym_id", resolvedGymId)
+      .order("week_number", { ascending: true });
+
+    const programs = (rows as WorkoutProgramRow[] | null) ?? [];
+    if (programs.length === 0) {
+      return {
+        success: true,
+        message: "No programs found.",
+        data: { current_week: currentWeek, total_weeks: 0, weeks: [] },
+      };
+    }
+
+    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    const weeks = programs.map((row) => {
+      const prog = row.program_data;
+      let totalSets = 0;
+      let totalExercises = 0;
+      const dailySummary: Record<string, { focus: string; exercises: number; sets: number }> = {};
+
+      for (const dayName of dayOrder) {
+        const day: ProgramDay | undefined = prog[dayName];
+        if (!day || day.exercises.length === 0) {
+          dailySummary[dayName] = { focus: "Rest", exercises: 0, sets: 0 };
+          continue;
+        }
+        const daySets = day.exercises.reduce((sum, ex) => sum + ex.sets, 0);
+        totalSets += daySets;
+        totalExercises += day.exercises.length;
+        dailySummary[dayName] = { focus: day.focus, exercises: day.exercises.length, sets: daySets };
+      }
+
+      return {
+        week_number: row.week_number,
+        total_sets: totalSets,
+        total_exercises: totalExercises,
+        ai_notes: row.ai_notes,
+        days: dailySummary,
+      };
+    });
+
+    const lines = weeks.map((w) => {
+      const marker = w.week_number === currentWeek ? " ← current" : "";
+      const dayFocuses = dayOrder
+        .map((d) => w.days[d])
+        .filter((d) => d.focus !== "Rest")
+        .map((d) => d.focus)
+        .join(", ");
+      return `  Week ${w.week_number}: ${w.total_sets} sets, ${w.total_exercises} exercises — ${dayFocuses}${marker}`;
+    });
+
+    return {
+      success: true,
+      message: `Program overview (${programs.length} weeks, currently Week ${currentWeek}):\n${lines.join("\n")}`,
+      data: {
+        current_week: currentWeek,
+        total_weeks: programs.length,
+        weeks,
+        gym_id: resolvedGymId,
+      },
+    };
+  }
+
+  async function get_program_progression(exerciseName: string, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found for user.", data: {} };
+    }
+
+    const currentWeek = await resolveCurrentWeek();
+    const maxes = await getUserMaxes();
+    const max1RM = maxes[exerciseName] ?? null;
+
+    const { data: rows } = await supabase
+      .from("workout_programs")
+      .select("week_number, program_data")
+      .eq("gym_id", resolvedGymId)
+      .order("week_number", { ascending: true });
+
+    const programs = (rows as WorkoutProgramRow[] | null) ?? [];
+    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    const progression: {
+      week_number: number;
+      day_name: string;
+      sets: number;
+      reps: number | string;
+      percentages: number[] | null;
+      weight_lbs: number | null;
+    }[] = [];
+
+    for (const row of programs) {
+      for (const dayName of dayOrder) {
+        const day: ProgramDay | undefined = row.program_data[dayName];
+        if (!day) continue;
+
+        for (const ex of day.exercises) {
+          if (ex.name.toLowerCase() !== exerciseName.toLowerCase()) continue;
+
+          let weight_lbs: number | null = null;
+          if (ex.percentages && ex.percentages.length > 0 && max1RM) {
+            const maxPct = Math.max(...ex.percentages);
+            weight_lbs = Math.round((maxPct / 100) * max1RM);
+          }
+
+          progression.push({
+            week_number: row.week_number,
+            day_name: dayName,
+            sets: ex.sets,
+            reps: ex.reps,
+            percentages: ex.percentages ?? null,
+            weight_lbs,
+          });
+        }
+      }
+    }
+
+    if (progression.length === 0) {
+      return {
+        success: true,
+        message: `${exerciseName} not found in any program.`,
+        data: { exercise_name: exerciseName, max_1rm: max1RM, progression: [] },
+      };
+    }
+
+    const lines = progression.map((p) => {
+      const pctStr = p.percentages ? p.percentages.join("/") + "%" : "";
+      const weightStr = p.weight_lbs ? `@ ${p.weight_lbs} lbs` : "";
+      const marker = p.week_number === currentWeek ? " ← current" : "";
+      return `  Week ${p.week_number} ${p.day_name}: ${p.sets}x${p.reps} ${pctStr} ${weightStr}${marker}`.trim();
+    });
+
+    return {
+      success: true,
+      message: `${exerciseName} progression${max1RM ? ` (1RM: ${max1RM} lbs)` : ""}:\n${lines.join("\n")}`,
+      data: {
+        exercise_name: exerciseName,
+        max_1rm: max1RM,
+        current_week: currentWeek,
+        progression,
       },
     };
   }
@@ -222,16 +441,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   ): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
 
-    // If no week specified, use current week
-    let week = weekNumber;
-    if (!week) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("program_start_date")
-        .eq("id", userId)
-        .single();
-      week = getCurrentWeek(profile?.program_start_date ?? null);
-    }
+    const week = weekNumber ?? await resolveCurrentWeek();
 
     let query = supabase
       .from("workout_logs")
@@ -341,6 +551,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     get_max_history,
     list_gyms,
     get_todays_workout,
+    get_weekly_workout,
+    get_program_overview,
+    get_program_progression,
     get_workout_logs,
     get_recent_sessions,
     get_stats,
