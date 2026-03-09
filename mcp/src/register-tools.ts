@@ -51,15 +51,25 @@ export function registerTools(
   );
 
   server.tool(
+    "list_gyms",
+    "List all gyms the user belongs to — returns gym IDs, names, and roles",
+    {},
+    async () => {
+      const result = await queries.list_gyms();
+      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
+    }
+  );
+
+  server.tool(
     "get_todays_workout",
-    "Get today's prescribed exercises, sets, reps, and weights",
+    "Get today's prescribed exercises with resolved weights. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise.",
     {
       gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       day_name: z.string().optional().describe('Day name (e.g. "Monday"). Defaults to today.'),
     },
     async ({ gym_id, day_name }) => {
       const result = await queries.get_todays_workout(gym_id, day_name);
-      return { content: [{ type: "text", text: result.message }] };
+      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
     }
   );
 
@@ -105,7 +115,7 @@ export function registerTools(
     "log_set",
     "Log a single set completion for a specific exercise",
     {
-      gym_id: z.string().uuid().describe("Gym ID"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       week_number: z.number().int().min(1).describe("Week number"),
       day_name: z.string().describe('Day name (e.g. "Monday")'),
       exercise_index: z.number().int().min(0).describe("Exercise index in the day's program"),

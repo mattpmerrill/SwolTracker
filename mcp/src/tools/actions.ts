@@ -5,7 +5,7 @@ import { getCurrentWeek, getTodayName } from "../week-calc.js";
 import type { createQueryTools } from "./queries.js";
 
 interface LogSetParams {
-  gym_id: string;
+  gym_id?: string;
   week_number: number;
   day_name: string;
   exercise_index: number;
@@ -24,12 +24,17 @@ export function createActionTools(
   queries: ReturnType<typeof createQueryTools>
 ) {
   async function log_set(params: LogSetParams): Promise<ToolResult> {
+    const resolvedGymId = await queries.resolveGymId(params.gym_id);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
     const { data, error } = await supabase
       .from("workout_logs")
       .upsert(
         {
           user_id: userId,
-          gym_id: params.gym_id,
+          gym_id: resolvedGymId,
           week_number: params.week_number,
           day_name: params.day_name,
           exercise_index: params.exercise_index,

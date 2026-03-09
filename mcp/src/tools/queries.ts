@@ -101,6 +101,22 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
+  async function list_gyms(): Promise<ToolResult> {
+    const gyms = await getMyGyms();
+    if (gyms.length === 0) {
+      return { success: true, message: "No gyms found.", data: { gyms: [] } };
+    }
+
+    const lines = gyms.map(
+      (g, i) => `${i + 1}. ${g.name} (${g.id}) — role: ${g.role}`
+    );
+    return {
+      success: true,
+      message: `Your gyms:\n${lines.join("\n")}`,
+      data: { gyms: gyms.map((g) => ({ id: g.id, name: g.name, role: g.role })) },
+    };
+  }
+
   async function get_todays_workout(gymId?: string, dayName?: string): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
@@ -143,9 +159,47 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       };
     }
 
-    const exerciseLines = today.exercises.map((ex, i) => {
-      const weight = ex.percentages ? "(percentage-based)" : "";
-      return `  ${i + 1}. ${ex.name} — ${ex.sets}x${ex.reps} ${weight}`.trim();
+    // Fetch user maxes to resolve percentage-based weights
+    const { data: maxRows } = await supabase
+      .from("current_user_maxes")
+      .select("exercise_name, weight_lbs")
+      .eq("user_id", userId);
+
+    const maxes: Record<string, number> = {};
+    (maxRows as CurrentMax[] | null)?.forEach(
+      (m) => (maxes[m.exercise_name] = m.weight_lbs)
+    );
+
+    // Build enriched exercises with resolved weights and exercise_index
+    const enrichedExercises = today.exercises.map((ex, i) => {
+      const max1RM = maxes[ex.name] ?? null;
+      let weight_lbs: number | null = null;
+
+      if (ex.percentages && ex.percentages.length > 0 && max1RM) {
+        // Use the heaviest prescribed percentage as the target weight
+        const maxPct = Math.max(...ex.percentages);
+        weight_lbs = Math.round((maxPct / 100) * max1RM);
+      }
+
+      return {
+        exercise_index: i,
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight_lbs,
+        max_1rm: max1RM,
+        percentages: ex.percentages ?? null,
+        muscleGroups: ex.muscleGroups ?? null,
+      };
+    });
+
+    const exerciseLines = enrichedExercises.map((ex) => {
+      const weightStr = ex.weight_lbs
+        ? `@ ${ex.weight_lbs} lbs`
+        : ex.percentages
+          ? "(no max on file)"
+          : "";
+      return `  ${ex.exercise_index + 1}. ${ex.name} — ${ex.sets}x${ex.reps} ${weightStr}`.trim();
     });
 
     return {
@@ -155,7 +209,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         current_week: currentWeek,
         day_name: todayName,
         focus: today.focus,
-        exercises: today.exercises,
+        exercises: enrichedExercises,
         gym_id: resolvedGymId,
       },
     };
@@ -285,6 +339,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     get_profile,
     get_maxes,
     get_max_history,
+    list_gyms,
     get_todays_workout,
     get_workout_logs,
     get_recent_sessions,
