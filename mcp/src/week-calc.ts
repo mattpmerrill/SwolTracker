@@ -20,7 +20,7 @@ export function getCurrentWeek(programStartDate: string | null): number {
   const weeksSinceStart = Math.floor(
     (today.getTime() - start.getTime()) / msPerWeek
   );
-  return (weeksSinceStart % 4) + 1;
+  return weeksSinceStart + 1;
 }
 
 /** Get today's day name (e.g. "Monday") */
