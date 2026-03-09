@@ -15,9 +15,14 @@ export const formatDate = (date) => {
  */
 export const getWeekDates = (programStartDate, weekNumber) => {
   const start = new Date(programStartDate);
-  start.setDate(start.getDate() + (weekNumber - 1) * 7);
+  const dayOfWeek = start.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  start.setDate(start.getDate() - daysToMonday + (weekNumber - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+
   const end = new Date(start);
   end.setDate(end.getDate() + 6);
+
   return { start, end };
 };
 
@@ -28,9 +33,17 @@ export const getWeekDates = (programStartDate, weekNumber) => {
  */
 export const calculateCurrentWeek = (programStartDate) => {
   const startDate = new Date(programStartDate);
+  const dayOfWeek = startDate.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  startDate.setDate(startDate.getDate() - daysToMonday);
+  startDate.setHours(0, 0, 0, 0);
+
   const today = new Date();
-  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-  const weeksElapsed = Math.floor((today - startDate) / msPerWeek);
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysElapsed = Math.round((todayMidnight - startDate) / msPerDay);
+  const weeksElapsed = Math.floor(daysElapsed / 7);
+
   return Math.max(1, weeksElapsed + 1);
 };
 

@@ -14,13 +14,27 @@ const DAY_NAMES = [
  */
 export function getCurrentWeek(programStartDate: string | null): number {
   if (!programStartDate) return 1;
+
   const start = new Date(programStartDate);
+  const dayOfWeek = start.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  start.setDate(start.getDate() - daysToMonday);
+  start.setHours(0, 0, 0, 0);
+
   const today = new Date();
-  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-  const weeksSinceStart = Math.floor(
-    (today.getTime() - start.getTime()) / msPerWeek
+  const todayMidnight = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
   );
-  return weeksSinceStart + 1;
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysElapsed = Math.round(
+    (todayMidnight.getTime() - start.getTime()) / msPerDay
+  );
+  const weeksElapsed = Math.floor(daysElapsed / 7);
+
+  return Math.max(1, weeksElapsed + 1);
 }
 
 /** Get today's day name (e.g. "Monday") */
