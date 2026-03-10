@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
+import RestTimer from './RestTimer';
 import { calculateWeight } from '../../utils/workout';
 
 /**
@@ -21,6 +23,27 @@ export default function ExerciseCard({
 }) {
   const isSwapping = swapState?.loading && swapState?.exerciseIndex === exerciseIndex;
   const hasAlternative = swapState?.exerciseIndex === exerciseIndex && swapState?.alternative;
+
+  // Rest timer state
+  const [restTimer, setRestTimer] = useState(null); // { setIndex }
+
+  // Recommended rest based on reps (heavy = longer rest)
+  function getRestSeconds(reps) {
+    const r = parseInt(reps, 10);
+    if (isNaN(r) || r <= 3) return 180; // heavy triples → 3 min
+    if (r <= 6) return 150;             // strength work → 2.5 min
+    if (r <= 10) return 90;             // hypertrophy → 90s
+    return 60;                          // high rep / conditioning → 60s
+  }
+
+  function handleLogSet(setIdx, data) {
+    onLogSet(exerciseIndex, setIdx, data);
+    // Only show timer if this set wasn't already logged (i.e. we're logging it, not unlogging)
+    const alreadyLogged = isSetLogged(exerciseIndex, setIdx);
+    if (!alreadyLogged && !isWorkoutComplete) {
+      setRestTimer({ setIndex: setIdx });
+    }
+  }
 
   // Count how many sets are logged for this exercise
   const loggedCount = Array.from({ length: exercise.sets }).filter((_, si) =>
@@ -143,13 +166,24 @@ export default function ExerciseCard({
                 isLogged={logged}
                 isWorkoutComplete={isWorkoutComplete}
                 exerciseName={exercise.name}
-                onLogSet={() => onLogSet(exerciseIndex, setIdx, { weight, reps: exercise.reps })}
+                onLogSet={() => handleLogSet(setIdx, { weight, reps: exercise.reps })}
                 onAddMax={() => onAddMax(exercise.name)}
               />
             );
           })}
         </div>
       </div>
+
+      {/* Rest timer — shown after a set is logged */}
+      {restTimer && (
+        <RestTimer
+          exerciseName={exercise.name}
+          setIndex={restTimer.setIndex}
+          totalSets={exercise.sets}
+          restSeconds={getRestSeconds(exercise.reps)}
+          onDismiss={() => setRestTimer(null)}
+        />
+      )}
     </div>
   );
 }
