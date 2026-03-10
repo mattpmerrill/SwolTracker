@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeExerciseName } from "../exercise-normalizer.js";
 import type {
   Profile,
   CurrentMax,
@@ -128,6 +129,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   }
 
   async function get_max_history(exerciseName: string): Promise<ToolResult> {
+    exerciseName = normalizeExerciseName(exerciseName);
     const { data } = await supabase
       .from("user_maxes")
       .select("*")

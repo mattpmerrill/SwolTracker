@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventEmitter } from "../bot-native-shim.js";
 import type { ToolResult, WeekProgram } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import { normalizeExerciseName } from "../exercise-normalizer.js";
 import type { createQueryTools } from "./queries.js";
 
 interface LogSetParams {
@@ -86,7 +87,7 @@ export function createActionTools(
       day_name: slot.dayName,
       exercise_index: params.exercise_index,
       set_index: params.set_index,
-      exercise_name: params.exercise_name,
+      exercise_name: normalizeExerciseName(params.exercise_name),
       prescribed_weight: params.prescribed_weight ?? params.actual_weight,
       prescribed_reps: params.prescribed_reps ?? params.actual_reps,
       actual_weight: params.actual_weight,
@@ -129,6 +130,7 @@ export function createActionTools(
 
     const fullEntries: WorkoutLogEntry[] = entries.map((entry) => ({
       ...entry,
+      exercise_name: normalizeExerciseName(entry.exercise_name),
       user_id: userId,
     }));
 
@@ -214,6 +216,8 @@ export function createActionTools(
     exerciseName: string,
     weightLbs: number
   ): Promise<ToolResult> {
+    const canonicalName = normalizeExerciseName(exerciseName);
+    exerciseName = canonicalName;
     const { data: current } = await supabase
       .from("current_user_maxes")
       .select("weight_lbs")
@@ -267,6 +271,7 @@ export function createActionTools(
   }
 
   async function delete_max(exerciseName: string): Promise<ToolResult> {
+    exerciseName = normalizeExerciseName(exerciseName);
     const { error } = await supabase
       .from("user_maxes")
       .delete()

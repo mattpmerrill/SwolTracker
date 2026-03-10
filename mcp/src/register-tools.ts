@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { normalizeExerciseName, getAllCanonicalNames } from "./exercise-normalizer.js";
 import type { createQueryTools } from "./tools/queries.js";
 import type { createActionTools } from "./tools/actions.js";
 import type { createContextTools } from "./tools/context.js";
@@ -341,6 +342,41 @@ export function registerTools(
         gym_id
       );
       return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "normalize_exercise_name",
+    "Resolve a user-provided exercise name to its canonical form. Use before logging, querying maxes, or comparing exercise names.",
+    {
+      exercise_name: z.string().describe("Raw exercise name from user input"),
+    },
+    async ({ exercise_name }) => {
+      const canonical = normalizeExerciseName(exercise_name);
+      const matched = canonical !== exercise_name.trim();
+      return {
+        content: [{
+          type: "text",
+          text: matched
+            ? `"${exercise_name}" → "${canonical}"`
+            : `"${exercise_name}" is already canonical (or no match found — stored as-is)`,
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    "list_canonical_exercises",
+    "List all known canonical exercise names. Useful for finding the right name before logging or setting a max.",
+    {},
+    async () => {
+      const names = getAllCanonicalNames();
+      return {
+        content: [{
+          type: "text",
+          text: `${names.length} canonical exercises:\n${names.join("\n")}`,
+        }],
+      };
     }
   );
 }
