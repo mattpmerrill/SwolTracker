@@ -154,6 +154,122 @@ export function createActionTools(
     };
   }
 
+  async function delete_set(
+    gymId: string | undefined,
+    weekNumber: number | undefined,
+    dayName: string | undefined,
+    exerciseName: string,
+    setIndex: number
+  ): Promise<ToolResult> {
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
+    if (!slot) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const canonical = normalizeExerciseName(exerciseName);
+
+    // Find the exercise_index by matching exercise_name in logs
+    const { data: existing } = await supabase
+      .from("workout_logs")
+      .select("id, exercise_index, set_index, actual_weight, actual_reps")
+      .eq("user_id", userId)
+      .eq("gym_id", slot.gymId)
+      .eq("week_number", slot.weekNumber)
+      .eq("day_name", slot.dayName)
+      .eq("exercise_name", canonical)
+      .eq("set_index", setIndex)
+      .maybeSingle();
+
+    if (!existing) {
+      return {
+        success: false,
+        message: `No logged set found for ${canonical} set ${setIndex + 1} on ${slot.dayName} (Week ${slot.weekNumber}).`,
+        data: {},
+      };
+    }
+
+    const { error } = await supabase
+      .from("workout_logs")
+      .delete()
+      .eq("id", existing.id);
+
+    if (error) {
+      return {
+        success: false,
+        message: `Failed to delete set: ${error.message}`,
+        data: {},
+      };
+    }
+
+    return {
+      success: true,
+      message: `Deleted: ${canonical} set ${setIndex + 1} (was ${existing.actual_reps} reps @ ${existing.actual_weight} lbs) on ${slot.dayName} Week ${slot.weekNumber}.`,
+      data: { deleted: existing },
+    };
+  }
+
+  async function correct_set(
+    gymId: string | undefined,
+    weekNumber: number | undefined,
+    dayName: string | undefined,
+    exerciseName: string,
+    setIndex: number,
+    newWeight: number,
+    newReps: number | string
+  ): Promise<ToolResult> {
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
+    if (!slot) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const canonical = normalizeExerciseName(exerciseName);
+
+    // Find existing log row
+    const { data: existing } = await supabase
+      .from("workout_logs")
+      .select("id, exercise_index, actual_weight, actual_reps, prescribed_weight, prescribed_reps")
+      .eq("user_id", userId)
+      .eq("gym_id", slot.gymId)
+      .eq("week_number", slot.weekNumber)
+      .eq("day_name", slot.dayName)
+      .eq("exercise_name", canonical)
+      .eq("set_index", setIndex)
+      .maybeSingle();
+
+    if (!existing) {
+      return {
+        success: false,
+        message: `No logged set found for ${canonical} set ${setIndex + 1} on ${slot.dayName} (Week ${slot.weekNumber}). Log it first.`,
+        data: {},
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("workout_logs")
+      .update({
+        actual_weight: newWeight,
+        actual_reps: newReps,
+        completed: true,
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error) {
+      return {
+        success: false,
+        message: `Failed to correct set: ${error.message}`,
+        data: {},
+      };
+    }
+
+    return {
+      success: true,
+      message: `Corrected: ${canonical} set ${setIndex + 1} — was ${existing.actual_reps} reps @ ${existing.actual_weight} lbs, now ${newReps} reps @ ${newWeight} lbs.`,
+      data: { updated: data, previous: { weight: existing.actual_weight, reps: existing.actual_reps } },
+    };
+  }
+
   async function mark_workout_complete(
     gymId?: string,
     weekNumber?: number,
@@ -387,6 +503,8 @@ export function createActionTools(
   return {
     log_set,
     log_many_sets,
+    delete_set,
+    correct_set,
     mark_workout_complete,
     update_max,
     delete_max,

@@ -346,6 +346,40 @@ export function registerTools(
   );
 
   server.tool(
+    "delete_set",
+    "Delete a specific logged set for an exercise. Use when the user wants to undo or remove a set they logged by mistake.",
+    {
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+      day_name: z.string().optional().describe("Day name (defaults to today)"),
+      exercise_name: z.string().describe("Exercise name (will be normalized)"),
+      set_index: z.number().int().min(0).describe("0-based set index to delete"),
+    },
+    async ({ gym_id, week_number, day_name, exercise_name, set_index }) => {
+      const result = await actions.delete_set(gym_id, week_number, day_name, exercise_name, set_index);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "correct_set",
+    "Correct weight or reps on an already-logged set. Use when the user logged the wrong weight or rep count.",
+    {
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+      day_name: z.string().optional().describe("Day name (defaults to today)"),
+      exercise_name: z.string().describe("Exercise name (will be normalized)"),
+      set_index: z.number().int().min(0).describe("0-based set index to correct"),
+      new_weight: z.number().min(0).describe("Corrected weight in lbs"),
+      new_reps: repsSchema.describe("Corrected reps (number or AMRAP)"),
+    },
+    async ({ gym_id, week_number, day_name, exercise_name, set_index, new_weight, new_reps }) => {
+      const result = await actions.correct_set(gym_id, week_number, day_name, exercise_name, set_index, new_weight, new_reps);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "normalize_exercise_name",
     "Resolve a user-provided exercise name to its canonical form. Use before logging, querying maxes, or comparing exercise names.",
     {
