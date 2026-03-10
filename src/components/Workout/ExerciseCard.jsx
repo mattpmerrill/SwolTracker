@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
 import RestTimer from './RestTimer';
-import { calculateWeight } from '../../utils/workout';
+import { calculateWeight, findMaxKey } from '../../utils/workout';
 
 /**
  * Exercise card with name, muscle groups, and sets
@@ -153,7 +153,10 @@ export default function ExerciseCard({
             const percentage = exercise.percentages?.[setIdx];
             const weight = percentage
               ? calculateWeight(percentage, userMaxes || {}, exercise.name)
-              : null;
+              : (() => {
+                  const key = findMaxKey(exercise.name, userMaxes || {});
+                  return key ? (userMaxes[key] ?? null) : (userMaxes?.[exercise.name] ?? null);
+                })();
             const logged = isSetLogged(exerciseIndex, setIdx);
 
             return (
