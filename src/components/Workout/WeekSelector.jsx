@@ -31,7 +31,8 @@ export default function WeekSelector({
       </div>
       <button
         onClick={onNextWeek}
-        className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors"
+        className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors disabled:opacity-30"
+        disabled={currentWeek >= actualCurrentWeek + 1}
       >
         <ChevronRight className="w-5 h-5" />
       </button>

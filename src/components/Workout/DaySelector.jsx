@@ -1,4 +1,5 @@
-import { DAYS_OF_WEEK, WEEK_DAYS_FROM_SUNDAY } from '../../constants';
+import { DAYS_OF_WEEK } from '../../constants';
+import { getTodayDayName } from '../../utils/date';
 
 /**
  * Day selector with buttons for each day of the week
@@ -10,12 +11,14 @@ export default function DaySelector({
   weekDates,
   onDayChange,
 }) {
+  const todayDayName = getTodayDayName();
+
   return (
     <div className="flex gap-2 overflow-x-auto pb-4 -mx-5 px-5 scrollbar-hide">
       {DAYS_OF_WEEK.map((day, idx) => {
         const dayDate = new Date(weekDates.start);
         dayDate.setDate(dayDate.getDate() + idx);
-        const isToday = currentWeek === actualCurrentWeek && day === WEEK_DAYS_FROM_SUNDAY[new Date().getDay()];
+        const isToday = currentWeek === actualCurrentWeek && day === todayDayName;
 
         return (
           <button

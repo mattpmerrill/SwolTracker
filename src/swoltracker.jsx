@@ -673,9 +673,12 @@ export default function SwolTracker() {
             groupRole={groupRole}
             groupLeader={groupLeader}
             onPreviousWeek={() => setCurrentWeek(w => Math.max(1, w - 1))}
-            onNextWeek={() => setCurrentWeek(w => w + 1)}
+            onNextWeek={() => setCurrentWeek(w => Math.min(actualCurrentWeek + 1, w + 1))}
             onDayChange={setCurrentDay}
-            onGoToCurrentWeek={() => setCurrentWeek(actualCurrentWeek)}
+            onGoToCurrentWeek={() => {
+              setCurrentWeek(actualCurrentWeek);
+              setCurrentDay(getTodayDayName());
+            }}
             onGenerateWorkout={openAiGenerator}
             isSetLogged={isSetLogged}
             onLogSet={logSet}
