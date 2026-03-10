@@ -6,6 +6,17 @@ import type { createContextTools } from "./tools/context.js";
 import type { createNaturalLanguageTools } from "./tools/natural-language.js";
 import type { createGenerationTools } from "./tools/generation.js";
 
+const repsSchema = z.union([z.number().int().min(0), z.string()]);
+const weightSchema = z.union([z.number().min(0), z.literal("prescribed")]);
+const workoutSummaryExerciseSchema = z.object({
+  exercise_name: z.string().describe("Exercise name"),
+  sets: z.number().int().min(1).optional().describe("Number of sets. Defaults to the programmed set count when matched."),
+  reps: repsSchema.describe("Reps completed (number or 'AMRAP')"),
+  weight_lbs: weightSchema.optional().describe('Weight in lbs, or "prescribed" to use the programmed weight'),
+  notes: z.string().optional().describe("Optional notes"),
+  percentage_of_max: z.number().min(0).max(100).optional().describe("Optional percentage-of-max fallback for weight resolution"),
+});
+
 export function registerTools(
   server: McpServer,
   queries: ReturnType<typeof createQueryTools>,
@@ -155,15 +166,15 @@ export function registerTools(
     "Log a single set completion for a specific exercise",
     {
       gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
-      week_number: z.number().int().min(1).describe("Week number"),
-      day_name: z.string().describe('Day name (e.g. "Monday")'),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+      day_name: z.string().optional().describe('Day name (e.g. "Monday"). Defaults to today.'),
       exercise_index: z.number().int().min(0).describe("Exercise index in the day's program"),
       set_index: z.number().int().min(0).describe("Set index within the exercise"),
       exercise_name: z.string().describe("Exercise name"),
       actual_weight: z.number().min(0).describe("Weight used (lbs)"),
-      actual_reps: z.union([z.number().int().min(0), z.string()]).describe("Reps completed (number or 'AMRAP')"),
+      actual_reps: repsSchema.describe("Reps completed (number or 'AMRAP')"),
       prescribed_weight: z.number().min(0).optional().describe("Prescribed weight (lbs)"),
-      prescribed_reps: z.union([z.number().int().min(0), z.string()]).optional().describe("Prescribed reps"),
+      prescribed_reps: repsSchema.optional().describe("Prescribed reps"),
     },
     async (params) => {
       const result = await actions.log_set(params);
@@ -181,6 +192,22 @@ export function registerTools(
     },
     async ({ gym_id, week_number, day_name }) => {
       const result = await actions.mark_workout_complete(gym_id, week_number, day_name);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "log_workout_summary",
+    "Log an entire workout in one call. Supports prescribed weights, optional week/day auto-resolution, and optional workout completion.",
+    {
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+      day_name: z.string().optional().describe("Day name (defaults to today)"),
+      exercises: z.array(workoutSummaryExerciseSchema).min(1).describe("Exercises to log for the workout"),
+      mark_complete: z.boolean().optional().describe("Also mark the workout complete after logging all sets"),
+    },
+    async (params) => {
+      const result = await nlTools.log_workout_summary(params);
       return { content: [{ type: "text", text: result.message }] };
     }
   );
@@ -266,7 +293,7 @@ export function registerTools(
     {
       exercise_name: z.string().describe('Exercise name (e.g. "Bench Press")'),
       sets: z.number().int().min(1).describe("Number of sets"),
-      reps: z.union([z.number().int().min(0), z.string()]).describe('Reps per set (number or "AMRAP")'),
+      reps: repsSchema.describe('Reps per set (number or "AMRAP")'),
       weight_lbs: z.number().min(0).optional().describe("Weight in lbs"),
       notes: z.string().optional().describe("Optional notes"),
       percentage_of_max: z.number().min(0).max(100).optional().describe("If set, resolves weight from 1RM percentage"),

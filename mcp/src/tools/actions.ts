@@ -6,8 +6,8 @@ import type { createQueryTools } from "./queries.js";
 
 interface LogSetParams {
   gym_id?: string;
-  week_number: number;
-  day_name: string;
+  week_number?: number;
+  day_name?: string;
   exercise_index: number;
   set_index: number;
   exercise_name: string;
@@ -17,42 +17,84 @@ interface LogSetParams {
   prescribed_reps?: number | string;
 }
 
+interface WorkoutLogEntry {
+  user_id: string;
+  gym_id: string;
+  week_number: number;
+  day_name: string;
+  exercise_index: number;
+  set_index: number;
+  exercise_name: string;
+  prescribed_weight?: number;
+  prescribed_reps?: number | string;
+  actual_weight: number;
+  actual_reps: number | string;
+  completed: boolean;
+}
+
 export function createActionTools(
   supabase: SupabaseClient,
   userId: string,
   events: EventEmitter,
   queries: ReturnType<typeof createQueryTools>
 ) {
+  async function resolveWorkoutSlot(gymId?: string, weekNumber?: number, dayName?: string) {
+    const resolvedGymId = await queries.resolveGymId(gymId);
+    if (!resolvedGymId) return null;
+
+    let week = weekNumber;
+    if (!week) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("program_start_date")
+        .eq("id", userId)
+        .single();
+      week = getCurrentWeek(profile?.program_start_date ?? null);
+    }
+
+    return {
+      gymId: resolvedGymId,
+      weekNumber: week,
+      dayName: dayName ?? getTodayName(),
+    };
+  }
+
+  async function upsertWorkoutLogs(entries: WorkoutLogEntry[]) {
+    return supabase
+      .from("workout_logs")
+      .upsert(entries, {
+        onConflict: "user_id,gym_id,week_number,day_name,exercise_index,set_index",
+      })
+      .select();
+  }
+
   async function log_set(params: LogSetParams): Promise<ToolResult> {
-    const resolvedGymId = await queries.resolveGymId(params.gym_id);
-    if (!resolvedGymId) {
+    const slot = await resolveWorkoutSlot(
+      params.gym_id,
+      params.week_number,
+      params.day_name
+    );
+
+    if (!slot) {
       return { success: false, message: "No gym found.", data: {} };
     }
 
-    const { data, error } = await supabase
-      .from("workout_logs")
-      .upsert(
-        {
-          user_id: userId,
-          gym_id: resolvedGymId,
-          week_number: params.week_number,
-          day_name: params.day_name,
-          exercise_index: params.exercise_index,
-          set_index: params.set_index,
-          exercise_name: params.exercise_name,
-          prescribed_weight: params.prescribed_weight ?? params.actual_weight,
-          prescribed_reps: params.prescribed_reps ?? params.actual_reps,
-          actual_weight: params.actual_weight,
-          actual_reps: params.actual_reps,
-          completed: true,
-        },
-        {
-          onConflict:
-            "user_id,gym_id,week_number,day_name,exercise_index,set_index",
-        }
-      )
-      .select()
-      .single();
+    const entry: WorkoutLogEntry = {
+      user_id: userId,
+      gym_id: slot.gymId,
+      week_number: slot.weekNumber,
+      day_name: slot.dayName,
+      exercise_index: params.exercise_index,
+      set_index: params.set_index,
+      exercise_name: params.exercise_name,
+      prescribed_weight: params.prescribed_weight ?? params.actual_weight,
+      prescribed_reps: params.prescribed_reps ?? params.actual_reps,
+      actual_weight: params.actual_weight,
+      actual_reps: params.actual_reps,
+      completed: true,
+    };
+
+    const { data, error } = await upsertWorkoutLogs([entry]);
 
     if (error) {
       return {
@@ -65,7 +107,48 @@ export function createActionTools(
     return {
       success: true,
       message: `Logged: ${params.exercise_name} set ${params.set_index + 1} — ${params.actual_reps} reps @ ${params.actual_weight} lbs`,
-      data: { log: data },
+      data: {
+        log: data?.[0] ?? null,
+        week_number: slot.weekNumber,
+        day_name: slot.dayName,
+        gym_id: slot.gymId,
+      },
+    };
+  }
+
+  async function log_many_sets(
+    entries: Omit<WorkoutLogEntry, "user_id">[]
+  ): Promise<ToolResult> {
+    if (entries.length === 0) {
+      return {
+        success: false,
+        message: "No sets provided.",
+        data: {},
+      };
+    }
+
+    const fullEntries: WorkoutLogEntry[] = entries.map((entry) => ({
+      ...entry,
+      user_id: userId,
+    }));
+
+    const { data, error } = await upsertWorkoutLogs(fullEntries);
+
+    if (error) {
+      return {
+        success: false,
+        message: `Failed to log workout summary: ${error.message}`,
+        data: {},
+      };
+    }
+
+    return {
+      success: true,
+      message: `Logged ${fullEntries.length} set${fullEntries.length === 1 ? "" : "s"}.`,
+      data: {
+        logs: data ?? [],
+        count: fullEntries.length,
+      },
     };
   }
 
@@ -74,31 +157,19 @@ export function createActionTools(
     weekNumber?: number,
     dayName?: string
   ): Promise<ToolResult> {
-    const resolvedGymId = await queries.resolveGymId(gymId);
-    if (!resolvedGymId) {
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
+    if (!slot) {
       return { success: false, message: "No gym found.", data: {} };
     }
-
-    let week = weekNumber;
-    if (!week) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("program_start_date")
-        .eq("id", userId)
-        .single();
-      week = getCurrentWeek(profile?.program_start_date ?? null);
-    }
-
-    const day = dayName ?? getTodayName();
 
     const { data, error } = await supabase
       .from("workout_completions")
       .upsert(
         {
           user_id: userId,
-          gym_id: resolvedGymId,
-          week_number: week,
-          day_name: day,
+          gym_id: slot.gymId,
+          week_number: slot.weekNumber,
+          day_name: slot.dayName,
         },
         { onConflict: "user_id,gym_id,week_number,day_name" }
       )
@@ -113,21 +184,19 @@ export function createActionTools(
       };
     }
 
-    // Emit workout_completed event (Step 4)
     try {
-      // Count sets logged for this day
       const { data: logs } = await supabase
         .from("workout_logs")
         .select("id")
         .eq("user_id", userId)
-        .eq("gym_id", resolvedGymId)
-        .eq("week_number", week)
-        .eq("day_name", day)
+        .eq("gym_id", slot.gymId)
+        .eq("week_number", slot.weekNumber)
+        .eq("day_name", slot.dayName)
         .eq("completed", true);
 
       await events.emit("swoltracker.workout_completed", userId, {
-        day_name: day,
-        week_number: week,
+        day_name: slot.dayName,
+        week_number: slot.weekNumber,
         total_sets: logs?.length ?? 0,
       });
     } catch {
@@ -136,7 +205,7 @@ export function createActionTools(
 
     return {
       success: true,
-      message: `${day} (Week ${week}) marked complete!`,
+      message: `${slot.dayName} (Week ${slot.weekNumber}) marked complete!`,
       data: { completion: data },
     };
   }
@@ -145,7 +214,6 @@ export function createActionTools(
     exerciseName: string,
     weightLbs: number
   ): Promise<ToolResult> {
-    // Check for PR before inserting (Step 4)
     const { data: current } = await supabase
       .from("current_user_maxes")
       .select("weight_lbs")
@@ -173,7 +241,6 @@ export function createActionTools(
       };
     }
 
-    // Emit PR event if new weight > old (Step 4)
     const isPR = weightLbs > oldMax && oldMax > 0;
     if (isPR) {
       try {
@@ -297,7 +364,6 @@ export function createActionTools(
       )
       .join("\n");
 
-    // Mark events as processed
     const ids = eventList.map((e: any) => e.id);
     if (ids.length > 0) {
       await supabase
@@ -315,6 +381,7 @@ export function createActionTools(
 
   return {
     log_set,
+    log_many_sets,
     mark_workout_complete,
     update_max,
     delete_max,
