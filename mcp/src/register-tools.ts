@@ -263,6 +263,16 @@ export function registerTools(
   // ── Context bundle ───────────────────────────────────────
 
   server.tool(
+    "get_streak",
+    "Get the user's current workout streak (consecutive weeks with at least one completed workout), their longest streak, and which weeks they've been active.",
+    {},
+    async () => {
+      const result = await context.get_streak();
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "get_context_bundle",
     "Get compressed user state for agent context window (<500 tokens)",
     {},
