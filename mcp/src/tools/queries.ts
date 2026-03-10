@@ -200,8 +200,60 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       };
     }
 
-    const maxes = await getUserMaxes();
-    const enrichedExercises = enrichExercises(today.exercises, maxes);
+    const [maxes, logsResult, completionResult] = await Promise.all([
+      getUserMaxes(),
+      supabase
+        .from("workout_logs")
+        .select("exercise_index, set_index, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed, completed_at")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", week)
+        .eq("day_name", day)
+        .order("exercise_index", { ascending: true })
+        .order("set_index", { ascending: true }),
+      supabase
+        .from("workout_completions")
+        .select("id, completed_at")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", week)
+        .eq("day_name", day)
+        .maybeSingle(),
+    ]);
+
+    const logs = (logsResult.data as Array<Pick<WorkoutLog, "exercise_index" | "set_index" | "exercise_name" | "actual_weight" | "actual_reps" | "prescribed_weight" | "prescribed_reps" | "completed" | "completed_at">> | null) ?? [];
+    const enrichedExercises = enrichExercises(today.exercises, maxes).map((ex) => {
+      const matchingLogs = logs.filter((log) => log.exercise_index === ex.exercise_index);
+      const completedLogs = matchingLogs.filter((log) => log.completed);
+      const loggedSetIndexes = [...new Set(completedLogs.map((log) => log.set_index))].sort((a, b) => a - b);
+      const setsLogged = loggedSetIndexes.length;
+      const setsRemaining = Math.max(0, ex.sets - setsLogged);
+
+      return {
+        ...ex,
+        sets_logged: setsLogged,
+        sets_remaining: setsRemaining,
+        is_fully_logged: setsLogged >= ex.sets,
+        logged_set_indexes: loggedSetIndexes,
+        logged_sets: completedLogs.map((log) => ({
+          set_index: log.set_index,
+          actual_weight: log.actual_weight,
+          actual_reps: log.actual_reps,
+          prescribed_weight: log.prescribed_weight,
+          prescribed_reps: log.prescribed_reps,
+          completed_at: log.completed_at,
+        })),
+      };
+    });
+
+    const adHocLogs = logs.filter(
+      (log) => log.exercise_index >= today.exercises.length
+    );
+
+    const completedExercises = enrichedExercises.filter((ex) => ex.is_fully_logged).length;
+    const totalLoggedSets = enrichedExercises.reduce((sum, ex) => sum + ex.sets_logged, 0);
+    const totalPrescribedSets = enrichedExercises.reduce((sum, ex) => sum + ex.sets, 0);
+    const dayCompleted = Boolean(completionResult.data);
 
     const exerciseLines = enrichedExercises.map((ex) => {
       const weightStr = ex.weight_lbs
@@ -209,18 +261,34 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         : ex.percentages
           ? "(no max on file)"
           : "";
-      return `  ${ex.exercise_index + 1}. ${ex.name} — ${ex.sets}x${ex.reps} ${weightStr}`.trim();
+      const progressStr = ex.sets_logged > 0
+        ? ` — logged ${ex.sets_logged}/${ex.sets}`
+        : "";
+      return `  ${ex.exercise_index + 1}. ${ex.name} — ${ex.sets}x${ex.reps} ${weightStr}${progressStr}`.trim();
     });
+
+    const statusLine = dayCompleted
+      ? `\nStatus: complete (${totalLoggedSets}/${totalPrescribedSets} programmed sets logged)`
+      : totalLoggedSets > 0
+        ? `\nStatus: in progress (${totalLoggedSets}/${totalPrescribedSets} programmed sets logged)`
+        : "";
 
     return {
       success: true,
-      message: `Week ${week}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}`,
+      message: `Week ${week}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
       data: {
         current_week: week,
         day_name: day,
         focus: today.focus,
         exercises: enrichedExercises,
         gym_id: resolvedGymId,
+        day_completed: dayCompleted,
+        day_completed_at: completionResult.data?.completed_at ?? null,
+        completed_exercises: completedExercises,
+        total_exercises: enrichedExercises.length,
+        total_logged_sets: totalLoggedSets,
+        total_prescribed_sets: totalPrescribedSets,
+        ad_hoc_logs: adHocLogs,
       },
     };
   }
