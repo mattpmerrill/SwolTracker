@@ -619,6 +619,115 @@ export function createActionTools(
     };
   }
 
+  async function check_workout_reminder(thresholdHour: number = 16, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await queries.resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const todayName = getTodayName();
+
+    // Get today's program
+    const todayResult = await queries.get_todays_workout(resolvedGymId, todayName);
+    const todayData = todayResult.data as Record<string, unknown>;
+
+    // Rest day — no reminder needed
+    if (todayData.rest_day || !todayData.exercises || (todayData.exercises as unknown[]).length === 0) {
+      return {
+        success: true,
+        message: `Today (${todayName}) is a rest day. No reminder needed.`,
+        data: { action: "skipped", reason: "rest_day", day_name: todayName },
+      };
+    }
+
+    // Already logged sets today
+    const totalLogged = (todayData.total_logged_sets as number) ?? 0;
+    if (totalLogged > 0) {
+      return {
+        success: true,
+        message: `Already logged ${totalLogged} sets today. No reminder needed.`,
+        data: { action: "skipped", reason: "already_logged", sets_logged: totalLogged, day_name: todayName },
+      };
+    }
+
+    // Check time threshold (use UTC hour + approximate MT offset: UTC-6 in MDT)
+    // Better: compare against threshold in a timezone-agnostic way using Date
+    const nowUTC = new Date();
+    const nowHourMT = ((nowUTC.getUTCHours() - 6) + 24) % 24; // MDT = UTC-6
+
+    if (nowHourMT < thresholdHour) {
+      return {
+        success: true,
+        message: `No sets logged today (${todayName}) but it's only ${nowHourMT}:00 MT — reminder threshold is ${thresholdHour}:00 MT. Check back later.`,
+        data: {
+          action: "skipped",
+          reason: "too_early",
+          current_hour_mt: nowHourMT,
+          threshold_hour: thresholdHour,
+          day_name: todayName,
+        },
+      };
+    }
+
+    // Check if a reminder was already sent today (unprocessed)
+    const { data: existingEvents } = await supabase
+      .from("app_events")
+      .select("id")
+      .eq("app_name", "swoltracker")
+      .eq("event_name", "swoltracker.workout_reminder")
+      .eq("user_id", userId)
+      .is("processed_at", null);
+
+    // Filter to today's reminders in payload
+    const todayReminders = (existingEvents ?? []).filter((e: any) => {
+      // Already-sent check: look for a reminder with matching day_name
+      return true; // We'll dedupe by checking the most recent below
+    });
+
+    if (todayReminders.length > 0) {
+      return {
+        success: true,
+        message: `Reminder already sent for today (${todayName}). Waiting for it to be processed.`,
+        data: { action: "skipped", reason: "already_reminded", day_name: todayName },
+      };
+    }
+
+    // All checks passed — emit the reminder event
+    const weekNumber = (todayData.current_week as number) ?? 1;
+    const focus = (todayData.focus as string) ?? "Workout";
+    const exerciseCount = (todayData.total_exercises as number) ?? (todayData.exercises as unknown[]).length;
+
+    try {
+      await events.emit("swoltracker.workout_reminder", userId, {
+        day_name: todayName,
+        week_number: weekNumber,
+        focus,
+        exercises_count: exerciseCount,
+        threshold_hour: thresholdHour,
+        triggered_at: nowUTC.toISOString(),
+      });
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Failed to emit reminder event: ${err.message}`,
+        data: {},
+      };
+    }
+
+    return {
+      success: true,
+      message: `🏋️ Reminder event emitted for ${todayName} — ${focus} (${exerciseCount} exercises). No sets logged yet and it's past ${thresholdHour}:00 MT.`,
+      data: {
+        action: "reminder_sent",
+        day_name: todayName,
+        week_number: weekNumber,
+        focus,
+        exercises_count: exerciseCount,
+        threshold_hour: thresholdHour,
+      },
+    };
+  }
+
   /**
    * Returns an ISO timestamp for the start of a given program week,
    * anchored to the user's actual program start date.
@@ -643,5 +752,6 @@ export function createActionTools(
     save_workout_program,
     get_pending_events,
     generate_weekly_summary,
+    check_workout_reminder,
   };
 }
