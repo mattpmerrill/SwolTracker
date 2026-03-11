@@ -390,6 +390,19 @@ export function registerTools(
   );
 
   server.tool(
+    "generate_weekly_summary",
+    "Generate an end-of-week recap for a given week. Returns workouts completed vs scheduled, missed days, total sets, total volume (lbs lifted), and any PRs set that week. Defaults to current week.",
+    {
+      week_number: z.number().int().min(1).optional().describe("Week number to summarize (defaults to current week)"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ week_number, gym_id }) => {
+      const result = await actions.generate_weekly_summary(week_number, gym_id);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "compare_weeks",
     "Compare workout data between two weeks. Shows sets, volume (lbs lifted), and day-by-day breakdown. Defaults to current week vs previous week.",
     {

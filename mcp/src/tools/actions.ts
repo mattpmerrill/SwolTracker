@@ -500,6 +500,138 @@ export function createActionTools(
     };
   }
 
+  async function generate_weekly_summary(weekNumber?: number, gymId?: string): Promise<ToolResult> {
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, getTodayName());
+    if (!slot) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const { gymId: resolvedGymId, weekNumber: week } = slot;
+
+    // Get program start date for accurate PR window calculation
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("program_start_date")
+      .eq("id", userId)
+      .single();
+    const programStartDate: string | null = profileData?.program_start_date ?? null;
+
+    // Fetch everything in parallel
+    const [logsResult, completionsResult, programResult, maxHistoryResult] = await Promise.all([
+      supabase
+        .from("workout_logs")
+        .select("day_name, exercise_name, actual_weight, actual_reps, completed")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", week)
+        .eq("completed", true),
+      supabase
+        .from("workout_completions")
+        .select("day_name")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", week),
+      supabase
+        .from("workout_programs")
+        .select("program_data")
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", week)
+        .single(),
+      // PRs: maxes recorded during this week
+      supabase
+        .from("user_maxes")
+        .select("exercise_name, weight_lbs, recorded_at")
+        .eq("user_id", userId)
+        .gte("recorded_at", getWeekStartISO(week, programStartDate))
+        .lt("recorded_at", getWeekStartISO(week + 1, programStartDate))
+        .order("recorded_at", { ascending: false }),
+    ]);
+
+    const logs = (logsResult.data ?? []) as Array<{
+      day_name: string;
+      exercise_name: string;
+      actual_weight: number;
+      actual_reps: number | string;
+      completed: boolean;
+    }>;
+    const completedDays = (completionsResult.data ?? []).map((c: any) => c.day_name as string);
+
+    // Scheduled workout days from program
+    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const programData = programResult.data?.program_data ?? {};
+    const scheduledDays = dayOrder.filter(
+      (d) => programData[d]?.exercises?.length > 0
+    );
+    const missedDays = scheduledDays.filter((d) => !completedDays.includes(d));
+
+    // Volume + sets
+    const totalSets = logs.length;
+    const totalVolume = logs.reduce((sum, log) => {
+      const reps = typeof log.actual_reps === "number" ? log.actual_reps : 0;
+      return sum + (log.actual_weight ?? 0) * reps;
+    }, 0);
+
+    // PRs this week
+    const prsThisWeek = ((maxHistoryResult.data ?? []) as Array<{
+      exercise_name: string;
+      weight_lbs: number;
+      recorded_at: string;
+    }>).map((pr) => ({
+      exercise_name: pr.exercise_name,
+      weight_lbs: pr.weight_lbs,
+      recorded_at: pr.recorded_at,
+    }));
+
+    const completionRate = scheduledDays.length > 0
+      ? Math.round((completedDays.length / scheduledDays.length) * 100)
+      : null;
+
+    // Human summary
+    const prLines = prsThisWeek.length > 0
+      ? prsThisWeek.map((pr) => `${pr.exercise_name}: ${pr.weight_lbs} lbs`).join(", ")
+      : "None";
+
+    const lines = [
+      `Week ${week} Summary:`,
+      `  Workouts: ${completedDays.length}/${scheduledDays.length} completed${completionRate !== null ? ` (${completionRate}%)` : ""}`,
+      missedDays.length > 0 ? `  Missed: ${missedDays.join(", ")}` : `  Missed: None — perfect week! 🔥`,
+      `  Total sets: ${totalSets}`,
+      `  Total volume: ${totalVolume.toLocaleString()} lbs`,
+      `  PRs: ${prLines}`,
+    ].filter(Boolean);
+
+    const summary = lines.join("\n");
+
+    return {
+      success: true,
+      message: summary,
+      data: {
+        week_number: week,
+        workouts_completed: completedDays.length,
+        workouts_scheduled: scheduledDays.length,
+        completion_rate: completionRate,
+        completed_days: completedDays,
+        missed_days: missedDays,
+        total_sets: totalSets,
+        total_volume_lbs: totalVolume,
+        prs_this_week: prsThisWeek,
+      },
+    };
+  }
+
+  /**
+   * Returns an ISO timestamp for the start of a given program week,
+   * anchored to the user's actual program start date.
+   */
+  function getWeekStartISO(weekNumber: number, programStartDate: string | null): string {
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const base = programStartDate
+      ? new Date(programStartDate + "T00:00:00.000Z")
+      : new Date("2026-01-05T00:00:00.000Z"); // fallback
+    const weekStart = new Date(base.getTime() + (weekNumber - 1) * msPerWeek);
+    return weekStart.toISOString();
+  }
+
   return {
     log_set,
     log_many_sets,
@@ -510,5 +642,6 @@ export function createActionTools(
     delete_max,
     save_workout_program,
     get_pending_events,
+    generate_weekly_summary,
   };
 }
