@@ -615,6 +615,127 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
+  async function compare_weeks(week1?: number, week2?: number, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found for user.", data: {} };
+    }
+
+    const currentWeek = await resolveCurrentWeek();
+    const w1 = week1 ?? currentWeek;
+    const w2 = week2 ?? Math.max(1, currentWeek - 1);
+
+    if (w1 === w2) {
+      return { success: false, message: "week1 and week2 must be different.", data: {} };
+    }
+
+    // Fetch logs for both weeks in parallel
+    const [logs1Result, logs2Result, completions1Result, completions2Result] = await Promise.all([
+      supabase
+        .from("workout_logs")
+        .select("day_name, exercise_name, actual_weight, actual_reps, completed")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", w1)
+        .eq("completed", true),
+      supabase
+        .from("workout_logs")
+        .select("day_name, exercise_name, actual_weight, actual_reps, completed")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", w2)
+        .eq("completed", true),
+      supabase
+        .from("workout_completions")
+        .select("day_name")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", w1),
+      supabase
+        .from("workout_completions")
+        .select("day_name")
+        .eq("user_id", userId)
+        .eq("gym_id", resolvedGymId)
+        .eq("week_number", w2),
+    ]);
+
+    const logs1 = (logs1Result.data ?? []) as Array<{ day_name: string; exercise_name: string; actual_weight: number; actual_reps: number | string; completed: boolean }>;
+    const logs2 = (logs2Result.data ?? []) as Array<{ day_name: string; exercise_name: string; actual_weight: number; actual_reps: number | string; completed: boolean }>;
+
+    function calcVolume(logs: typeof logs1): number {
+      return logs.reduce((sum, log) => {
+        const reps = typeof log.actual_reps === "number" ? log.actual_reps : 0;
+        return sum + (log.actual_weight ?? 0) * reps;
+      }, 0);
+    }
+
+    function groupByDay(logs: typeof logs1): Record<string, { sets: number; volume: number }> {
+      const map: Record<string, { sets: number; volume: number }> = {};
+      for (const log of logs) {
+        if (!map[log.day_name]) map[log.day_name] = { sets: 0, volume: 0 };
+        map[log.day_name].sets += 1;
+        const reps = typeof log.actual_reps === "number" ? log.actual_reps : 0;
+        map[log.day_name].volume += (log.actual_weight ?? 0) * reps;
+      }
+      return map;
+    }
+
+    const sets1 = logs1.length;
+    const sets2 = logs2.length;
+    const vol1 = calcVolume(logs1);
+    const vol2 = calcVolume(logs2);
+    const setsDelta = sets1 - sets2;
+    const volDeltaPct = vol2 > 0 ? Math.round(((vol1 - vol2) / vol2) * 100) : null;
+
+    const completedDays1 = (completions1Result.data ?? []).map((c: any) => c.day_name as string);
+    const completedDays2 = (completions2Result.data ?? []).map((c: any) => c.day_name as string);
+
+    const dayGroups1 = groupByDay(logs1);
+    const dayGroups2 = groupByDay(logs2);
+    const allDays = [...new Set([...Object.keys(dayGroups1), ...Object.keys(dayGroups2)])].sort();
+
+    const byDay: Record<string, { week1_sets: number; week2_sets: number; week1_volume: number; week2_volume: number }> = {};
+    for (const day of allDays) {
+      byDay[day] = {
+        week1_sets: dayGroups1[day]?.sets ?? 0,
+        week2_sets: dayGroups2[day]?.sets ?? 0,
+        week1_volume: dayGroups1[day]?.volume ?? 0,
+        week2_volume: dayGroups2[day]?.volume ?? 0,
+      };
+    }
+
+    // Build human-readable summary
+    const setsDir = setsDelta > 0 ? `+${setsDelta} more` : setsDelta < 0 ? `${setsDelta} fewer` : "same";
+    const volDir = volDeltaPct !== null
+      ? volDeltaPct > 0 ? `+${volDeltaPct}% more` : volDeltaPct < 0 ? `${volDeltaPct}% less` : "same"
+      : "volume not comparable (no data)";
+
+    const summary = [
+      `Week ${w1} vs Week ${w2}:`,
+      `  Sets: ${sets1} vs ${sets2} (${setsDir} sets this week)`,
+      `  Volume: ${vol1.toLocaleString()} vs ${vol2.toLocaleString()} lbs total (${volDir} volume)`,
+      `  Workouts completed: ${completedDays1.length} vs ${completedDays2.length} days`,
+    ].join("\n");
+
+    return {
+      success: true,
+      message: summary,
+      data: {
+        week1: w1,
+        week2: w2,
+        week1_sets: sets1,
+        week2_sets: sets2,
+        sets_delta: setsDelta,
+        week1_volume_lbs: vol1,
+        week2_volume_lbs: vol2,
+        volume_delta_pct: volDeltaPct,
+        week1_completed_days: completedDays1,
+        week2_completed_days: completedDays2,
+        by_day: byDay,
+      },
+    };
+  }
+
   return {
     get_profile,
     get_maxes,
@@ -627,6 +748,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     get_workout_logs,
     get_recent_sessions,
     get_stats,
+    compare_weeks,
     // Expose helpers for other tool modules
     getMyGyms,
     resolveGymId,

@@ -390,6 +390,20 @@ export function registerTools(
   );
 
   server.tool(
+    "compare_weeks",
+    "Compare workout data between two weeks. Shows sets, volume (lbs lifted), and day-by-day breakdown. Defaults to current week vs previous week.",
+    {
+      week1: z.number().int().min(1).optional().describe("First week number (defaults to current week)"),
+      week2: z.number().int().min(1).optional().describe("Second week number to compare against (defaults to current - 1)"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ week1, week2, gym_id }) => {
+      const result = await queries.compare_weeks(week1, week2, gym_id);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "normalize_exercise_name",
     "Resolve a user-provided exercise name to its canonical form. Use before logging, querying maxes, or comparing exercise names.",
     {
