@@ -444,6 +444,19 @@ export function registerTools(
   );
 
   server.tool(
+    "get_training_history_summary",
+    "Returns a rich training history summary for the last N weeks — completions, missed days with reasons, exercise performance (sets, avg weight, hit/missed reps), and current 1RMs. Call this BEFORE generating a new program so the AI has full context for adaptive programming. Also includes the recommended next week number.",
+    {
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      lookback_weeks: z.number().int().min(1).max(12).optional().describe("How many weeks to look back (default 4)"),
+    },
+    async ({ gym_id, lookback_weeks }) => {
+      const result = await queries.get_training_history_summary(gym_id, lookback_weeks);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "get_overload_recommendations",
     "Analyze recent training history and return progressive overload recommendations. Flags exercises where the user has: (1) hit all prescribed reps for 2+ weeks → ready to increase weight, (2) missed prescribed reps for 2+ weeks → consider deload, (3) not logged in 2+ weeks → stale. Call this before generating a new program or during weekly check-ins.",
     {

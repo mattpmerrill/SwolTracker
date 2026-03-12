@@ -615,6 +615,163 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
+  async function get_training_history_summary(gymId?: string, lookbackWeeks: number = 4): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const currentWeek = await resolveCurrentWeek();
+    const fromWeek = Math.max(1, currentWeek - lookbackWeeks);
+
+    // Fetch profile, maxes, recent logs, completions, missed days — all in parallel
+    const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult] =
+      await Promise.all([
+        get_profile(),
+        get_maxes(),
+        supabase
+          .from("workout_logs")
+          .select("week_number, day_name, exercise_name, set_index, actual_weight, actual_reps, prescribed_weight, prescribed_reps")
+          .eq("user_id", userId)
+          .eq("gym_id", resolvedGymId)
+          .eq("completed", true)
+          .gte("week_number", fromWeek)
+          .order("week_number", { ascending: false }),
+        supabase
+          .from("workout_completions")
+          .select("week_number, day_name")
+          .eq("user_id", userId)
+          .eq("gym_id", resolvedGymId)
+          .gte("week_number", fromWeek),
+        supabase
+          .from("missed_days")
+          .select("week_number, day_name, reason")
+          .eq("user_id", userId)
+          .eq("gym_id", resolvedGymId)
+          .gte("week_number", fromWeek)
+          .order("week_number", { ascending: false }),
+        supabase
+          .from("workout_programs")
+          .select("week_number, program_data, ai_notes")
+          .eq("gym_id", resolvedGymId)
+          .gte("week_number", fromWeek)
+          .order("week_number", { ascending: false }),
+      ]);
+
+    const profile = profileResult.data as Record<string, unknown>;
+    const maxes = (maxesResult.data as any)?.maxes ?? {};
+    const logs = (logsResult.data ?? []) as Array<{
+      week_number: number; day_name: string; exercise_name: string;
+      set_index: number; actual_weight: number; actual_reps: number | string;
+      prescribed_weight: number | null; prescribed_reps: number | string | null;
+    }>;
+    const completions = (completionsResult.data ?? []) as Array<{ week_number: number; day_name: string }>;
+    const missedDays = (missedDaysResult.data ?? []) as Array<{ week_number: number; day_name: string; reason: string | null }>;
+    const programs = (programsResult.data ?? []) as Array<{ week_number: number; program_data: Record<string, any>; ai_notes: string | null }>;
+
+    // Build per-week summaries
+    const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+    const weekSummaries: Record<number, {
+      completed_days: string[];
+      missed_days: Array<{ day: string; reason: string | null }>;
+      exercises: Record<string, { sessions: Array<{ sets_logged: number; avg_weight: number; hit_reps: boolean }> }>;
+    }> = {};
+
+    for (let w = fromWeek; w <= currentWeek; w++) {
+      weekSummaries[w] = { completed_days: [], missed_days: [], exercises: {} };
+    }
+
+    for (const c of completions) {
+      if (weekSummaries[c.week_number]) weekSummaries[c.week_number].completed_days.push(c.day_name);
+    }
+    for (const m of missedDays) {
+      if (weekSummaries[m.week_number]) weekSummaries[m.week_number].missed_days.push({ day: m.day_name, reason: m.reason });
+    }
+
+    // Group logs by week + exercise
+    for (const log of logs) {
+      const ws = weekSummaries[log.week_number];
+      if (!ws) continue;
+      if (!ws.exercises[log.exercise_name]) ws.exercises[log.exercise_name] = { sessions: [] };
+      const exSessions = ws.exercises[log.exercise_name].sessions;
+      // Aggregate by set count per day
+      const lastSession = exSessions[exSessions.length - 1];
+      const actualReps = typeof log.actual_reps === "number" ? log.actual_reps : parseInt(String(log.actual_reps)) || 0;
+      const prescribedReps = log.prescribed_reps !== null
+        ? (typeof log.prescribed_reps === "number" ? log.prescribed_reps : parseInt(String(log.prescribed_reps)) || 0)
+        : null;
+      const hitReps = prescribedReps === null || actualReps >= prescribedReps;
+
+      if (!lastSession) {
+        exSessions.push({ sets_logged: 1, avg_weight: log.actual_weight ?? 0, hit_reps: hitReps });
+      } else {
+        lastSession.sets_logged++;
+        lastSession.avg_weight = Math.round(
+          (lastSession.avg_weight * (lastSession.sets_logged - 1) + (log.actual_weight ?? 0)) / lastSession.sets_logged
+        );
+        if (!hitReps) lastSession.hit_reps = false;
+      }
+    }
+
+    // Build human-readable training block summary
+    const weekLines: string[] = [];
+    for (let w = fromWeek; w <= currentWeek; w++) {
+      const ws = weekSummaries[w];
+      if (!ws) continue;
+      const prog = programs.find((p) => p.week_number === w);
+      const scheduledDays = prog
+        ? dayOrder.filter((d) => prog.program_data[d]?.exercises?.length > 0)
+        : [];
+      const completionRate = scheduledDays.length > 0
+        ? `${ws.completed_days.length}/${scheduledDays.length} days`
+        : `${ws.completed_days.length} days`;
+
+      const exLines = Object.entries(ws.exercises).map(([name, data]) => {
+        const s = data.sessions[0];
+        if (!s) return null;
+        const hitStr = s.hit_reps ? "✓" : "✗ missed reps";
+        return `    - ${name}: ${s.sets_logged} sets @ ~${s.avg_weight} lbs ${hitStr}`;
+      }).filter(Boolean);
+
+      const missedStr = ws.missed_days.length > 0
+        ? `\n  Missed: ${ws.missed_days.map((m) => `${m.day}${m.reason ? ` (${m.reason})` : ""}`).join(", ")}`
+        : "";
+
+      weekLines.push(
+        `Week ${w}: ${completionRate} completed${missedStr}` +
+        (exLines.length > 0 ? `\n  Exercises:\n${exLines.join("\n")}` : "")
+      );
+    }
+
+    const nextWeek = currentWeek + 1;
+
+    const summary = [
+      `Training History Summary for ${profile.name ?? "Athlete"} (Weeks ${fromWeek}–${currentWeek}):`,
+      `Current 1RMs: ${Object.entries(maxes).map(([k, v]) => `${k}: ${v} lbs`).join(", ") || "None on file"}`,
+      "",
+      weekLines.join("\n\n"),
+      "",
+      `Recommended next week: Week ${nextWeek}`,
+    ].join("\n");
+
+    return {
+      success: true,
+      message: summary,
+      data: {
+        current_week: currentWeek,
+        next_week: nextWeek,
+        from_week: fromWeek,
+        lookback_weeks: lookbackWeeks,
+        gym_id: resolvedGymId,
+        week_summaries: weekSummaries,
+        maxes,
+        profile_name: profile.name,
+        missed_days: missedDays,
+        programs_context: programs.map((p) => ({ week_number: p.week_number, ai_notes: p.ai_notes })),
+      },
+    };
+  }
+
   async function get_overload_recommendations(gymId?: string, lookbackWeeks: number = 4): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
@@ -899,6 +1056,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     get_stats,
     compare_weeks,
     get_overload_recommendations,
+    get_training_history_summary,
     // Expose helpers for other tool modules
     getMyGyms,
     resolveGymId,
