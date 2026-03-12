@@ -119,6 +119,7 @@ export default function SwolTracker() {
     generationWeek, weekCount, setWeekCount,
     previewWeek, setPreviewWeek,
     showAiGenerator, setShowAiGenerator,
+    generationContextLoading, trainingHistorySummary, overloadRecommendations,
     openAiGenerator, generateAiWorkout, confirmGeneratedWorkout,
   } = useAiGenerator({ currentUser, profiles, equipment, workoutProgram, gymId, toast, setWorkoutProgram, setCurrentWeek });
 
@@ -672,6 +673,8 @@ export default function SwolTracker() {
             user={user}
             groupRole={groupRole}
             groupLeader={groupLeader}
+            gymId={gymId}
+            exerciseLogSize={Object.keys(exerciseLog).length}
             onPreviousWeek={() => setCurrentWeek(w => Math.max(1, w - 1))}
             onNextWeek={() => setCurrentWeek(w => Math.min(actualCurrentWeek + 1, w + 1))}
             onDayChange={setCurrentDay}
@@ -798,6 +801,9 @@ export default function SwolTracker() {
         aiError={aiError}
         generatedPreview={generatedPreview}
         weekCount={weekCount}
+        generationContextLoading={generationContextLoading}
+        trainingHistorySummary={trainingHistorySummary}
+        overloadRecommendations={overloadRecommendations}
         onWeekCountChange={setWeekCount}
         previewWeek={previewWeek}
         onPreviewWeekChange={setPreviewWeek}

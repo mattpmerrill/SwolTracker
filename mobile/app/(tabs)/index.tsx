@@ -19,6 +19,7 @@ import { RestTimerModal } from '../../components/workout/RestTimerModal';
 import { loadHealthPrefs, writeWorkoutToHealth } from '../../lib/health';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { incrementAiGenerationCount } from '../../lib/purchases';
+import { db } from '../../lib/db';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
@@ -43,6 +44,7 @@ export default function WorkoutScreen() {
   const { profile, maxes, equipment, gymId, loadProfile } = useProfileStore();
   const { openAiGenerator } = useAiStore();
   const { canUseAi, openPaywall, refreshAiCount } = useSubscriptionStore();
+  const [overloadByExercise, setOverloadByExercise] = useState<Record<string, any>>({});
 
   const programStartDate = profile?.program_start_date || null;
   const actualCurrentWeek = programStartDate
@@ -59,6 +61,24 @@ export default function WorkoutScreen() {
     if (!user?.id || !gymId) return;
     loadWorkoutData(user.id, gymId);
   }, [user?.id, gymId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadOverloadRecommendations = async () => {
+      if (!user?.id || !gymId) return;
+      const overload = await db.getOverloadRecommendations(user.id, gymId, 4);
+      if (!isCancelled) {
+        setOverloadByExercise(overload?.byExercise || {});
+      }
+    };
+
+    loadOverloadRecommendations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, gymId, currentWeek, Object.keys(exerciseLog).length]);
 
   // Set initial day/week
   useEffect(() => {
@@ -187,6 +207,7 @@ export default function WorkoutScreen() {
               exercise={exercise}
               exerciseIndex={idx}
               userMaxes={maxes}
+              overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
               isSetLogged={handleIsSetLogged}
               onLogSet={handleLogSet}
               onSetCompleted={handleSetCompleted}

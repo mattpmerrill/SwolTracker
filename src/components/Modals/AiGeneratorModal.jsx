@@ -10,6 +10,9 @@ import {
   CheckCircle,
   Check,
   Clock,
+  TrendingUp,
+  ShieldAlert,
+  PauseCircle,
 } from 'lucide-react';
 import AvatarDisplay from '../Profile/AvatarDisplay';
 
@@ -27,6 +30,9 @@ export default function AiGeneratorModal({
   aiError,
   generatedPreview,
   weekCount,
+  generationContextLoading,
+  trainingHistorySummary,
+  overloadRecommendations,
   onWeekCountChange,
   previewWeek,
   onPreviewWeekChange,
@@ -41,9 +47,15 @@ export default function AiGeneratorModal({
   // Get the weeks in the preview (week1, week2, etc.)
   const previewWeeks = generatedPreview ? Object.keys(generatedPreview).filter(k => k.startsWith('week')).sort() : [];
   const currentPreviewData = generatedPreview && previewWeek ? generatedPreview[previewWeek] : null;
+  const weekSummaries = trainingHistorySummary?.weeks || [];
 
   // Get weeks to show as context
   const contextWeeks = [generationWeek - 3, generationWeek - 2, generationWeek - 1].filter(w => w > 0);
+  const recommendationIcon = {
+    increase: TrendingUp,
+    deload: ShieldAlert,
+    stale: PauseCircle,
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center overflow-y-auto">
@@ -122,7 +134,7 @@ export default function AiGeneratorModal({
               <div className="bg-zinc-800/50 rounded-xl p-4">
                 <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-blue-500" />
-                  Building From Previous Weeks
+                  Review Before Generate
                 </h3>
                 <div className="flex gap-2">
                   {contextWeeks.map(w => (
@@ -141,6 +153,87 @@ export default function AiGeneratorModal({
                     </div>
                   ))}
                 </div>
+                <p className="text-xs text-zinc-500 mt-3">
+                  The AI will also use your last 4 weeks of completed sessions, missed days, and overload flags.
+                </p>
+              </div>
+
+              <div className="bg-zinc-800/50 rounded-xl p-4">
+                <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-cyan-400" />
+                  Training History Review
+                </h3>
+                {generationContextLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading recent training history...
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {weekSummaries.length > 0 ? weekSummaries.slice().reverse().map((week) => (
+                      <div key={week.week_number} className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-white">Week {week.week_number}</p>
+                          <p className="text-xs text-zinc-400">
+                            {week.completed_days.length}/{week.scheduled_days.length || week.completed_days.length} days completed
+                          </p>
+                        </div>
+                        {week.missed_days.length > 0 && (
+                          <p className="mt-2 text-xs text-amber-300">
+                            Missed: {week.missed_days.map((day) => `${day.day_name}${day.reason ? ` (${day.reason})` : ''}`).join(', ')}
+                          </p>
+                        )}
+                        {week.exercise_sessions.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+                            {week.exercise_sessions.slice(0, 3).map((session) => (
+                              <li key={`${week.week_number}-${session.day_name}-${session.exercise_name}`}>
+                                {session.day_name} • {session.exercise_name} • {session.sets_logged} sets @ {session.avg_actual_weight || session.avg_prescribed_weight || 0} lbs • {session.hit_all_reps ? 'reps hit' : 'reps missed'}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )) : (
+                      <p className="text-sm text-zinc-400">No recent training history found yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-zinc-800/50 rounded-xl p-4">
+                <h3 className="font-semibold text-sm text-zinc-300 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  Progressive Overload Signals
+                </h3>
+                {generationContextLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading recommendations...
+                  </div>
+                ) : overloadRecommendations.length > 0 ? (
+                  <div className="space-y-2">
+                    {overloadRecommendations.slice(0, 5).map((recommendation) => {
+                      const Icon = recommendationIcon[recommendation.type] || TrendingUp;
+                      const tone = recommendation.type === 'increase'
+                        ? 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10'
+                        : recommendation.type === 'deload'
+                        ? 'text-amber-300 border-amber-500/20 bg-amber-500/10'
+                        : 'text-zinc-300 border-zinc-600/40 bg-zinc-700/20';
+
+                      return (
+                        <div key={recommendation.exercise_name} className={`rounded-lg border p-3 ${tone}`}>
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <Icon className="w-4 h-4" />
+                            {recommendation.status_label || recommendation.type}
+                          </div>
+                          <p className="mt-1 text-xs">{recommendation.message}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-400">No overload adjustments flagged right now.</p>
+                )}
               </div>
 
               {/* Program Length Selection */}
@@ -215,7 +308,7 @@ export default function AiGeneratorModal({
               ) : (
                 <>
                   <Zap className="w-5 h-5" />
-                  Generate {weekCount}-Week Program
+                  Review + Generate {weekCount}-Week Program
                 </>
               )}
             </button>

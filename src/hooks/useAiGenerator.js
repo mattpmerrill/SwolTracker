@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { db } from '../lib/supabase';
 import { generateWithLlm } from '../lib/llm';
 import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
@@ -16,6 +16,9 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
   const [weekCount, setWeekCount] = useState(4);
   const [previewWeek, setPreviewWeek] = useState('week1');
   const [showAiGenerator, setShowAiGenerator] = useState(false);
+  const [generationContextLoading, setGenerationContextLoading] = useState(false);
+  const [trainingHistorySummary, setTrainingHistorySummary] = useState(null);
+  const [overloadRecommendations, setOverloadRecommendations] = useState([]);
 
   const openAiGenerator = useCallback((weekNum) => {
     setGenerationWeek(weekNum);
@@ -24,8 +27,44 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
     setGeneratedPreview(null);
     setWeekCount(4);
     setPreviewWeek('week1');
+    setTrainingHistorySummary(null);
+    setOverloadRecommendations([]);
     setShowAiGenerator(true);
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadGenerationContext = async () => {
+      if (!showAiGenerator || !currentUser || !gymId) return;
+
+      setGenerationContextLoading(true);
+      try {
+        const [history, overload] = await Promise.all([
+          db.getTrainingHistorySummary(currentUser, gymId, 4),
+          db.getOverloadRecommendations(currentUser, gymId, 4),
+        ]);
+
+        if (isCancelled) return;
+        setTrainingHistorySummary(history);
+        setOverloadRecommendations(overload?.recommendations || []);
+      } catch (error) {
+        if (!isCancelled) {
+          setAiError(error.message || 'Failed to load training history.');
+        }
+      } finally {
+        if (!isCancelled) {
+          setGenerationContextLoading(false);
+        }
+      }
+    };
+
+    loadGenerationContext();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [showAiGenerator, currentUser, gymId]);
 
   const generateAiWorkout = useCallback(async () => {
     setAiLoading(true);
@@ -58,6 +97,10 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
       const recentWorkoutsFormatted = recentWorkoutLogs.length > 0
         ? JSON.stringify(recentWorkoutLogs, null, 2)
         : 'No recent workout data available';
+      const trainingHistoryText = trainingHistorySummary?.summary || 'No training history summary available';
+      const overloadText = overloadRecommendations.length > 0
+        ? overloadRecommendations.map((recommendation) => recommendation.message).join('\n')
+        : 'No overload recommendations right now';
 
       const userProfile = profiles[currentUser];
 
@@ -70,11 +113,13 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
           .replace(/\{\{week_count\}\}/g, String(validWeekCount))
           .replace(/\{\{user_notes\}\}/g, validNotes || 'None')
           .replace(/\{\{recent_workouts\}\}/g, recentWorkoutsFormatted)
-          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks));
+          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks))
+          .replace(/\{\{training_history_summary\}\}/g, trainingHistoryText)
+          .replace(/\{\{overload_recommendations\}\}/g, overloadText);
       }
 
       const systemPrompt = promptTemplate || `You are an elite strength and conditioning coach. Generate ${validWeekCount} weeks of workouts in JSON format.`;
-      const userPrompt = !promptTemplate ? `Generate a ${validWeekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${validNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.` : 'Generate the workout program based on the context provided.';
+      const userPrompt = !promptTemplate ? `Generate a ${validWeekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Training history summary: ${trainingHistoryText}. Progressive overload recommendations: ${overloadText}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${validNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.` : 'Generate the workout program based on the context provided.';
 
       const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
       await db.logApiUsage(currentUser, 'weekly_generation', result.model, result.usage.prompt_tokens, result.usage.completion_tokens, true, null);
@@ -124,7 +169,7 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
     } finally {
       setAiLoading(false);
     }
-  }, [currentUser, profiles, equipment, workoutProgram, gymId, generationWeek, weekCount, aiNotes, toast]);
+  }, [currentUser, profiles, equipment, workoutProgram, gymId, generationWeek, weekCount, aiNotes, toast, trainingHistorySummary, overloadRecommendations]);
 
   const confirmGeneratedWorkout = useCallback(async () => {
     if (!generatedPreview || !generationWeek) return;
@@ -163,6 +208,9 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
     setPreviewWeek,
     showAiGenerator,
     setShowAiGenerator,
+    generationContextLoading,
+    trainingHistorySummary,
+    overloadRecommendations,
     openAiGenerator,
     generateAiWorkout,
     confirmGeneratedWorkout,

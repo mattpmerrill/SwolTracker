@@ -7,11 +7,14 @@ interface AiState {
   aiNotes: string;
   aiLoading: boolean;
   aiError: string;
+  generationContextLoading: boolean;
   generatedPreview: any | null;
   generationWeek: number | null;
   weekCount: number;
   previewWeek: string;
   showAiGenerator: boolean;
+  trainingHistorySummary: any | null;
+  overloadRecommendations: any[];
 
   // Actions
   setAiNotes: (notes: string) => void;
@@ -19,6 +22,7 @@ interface AiState {
   setPreviewWeek: (week: string) => void;
   setShowAiGenerator: (show: boolean) => void;
   setGeneratedPreview: (preview: any | null) => void;
+  loadGenerationContext: (params: { currentUser: string; gymId: string; }) => Promise<void>;
 
   openAiGenerator: (weekNum: number) => void;
   generateAiWorkout: (params: {
@@ -41,26 +45,50 @@ export const useAiStore = create<AiState>((set, get) => ({
   aiNotes: '',
   aiLoading: false,
   aiError: '',
+  generationContextLoading: false,
   generatedPreview: null,
   generationWeek: null,
   weekCount: 4,
   previewWeek: 'week1',
   showAiGenerator: false,
+  trainingHistorySummary: null,
+  overloadRecommendations: [],
 
   setAiNotes: (notes) => set({ aiNotes: notes }),
   setWeekCount: (count) => set({ weekCount: count }),
   setPreviewWeek: (week) => set({ previewWeek: week }),
   setShowAiGenerator: (show) => set({ showAiGenerator: show }),
   setGeneratedPreview: (preview) => set({ generatedPreview: preview }),
+  loadGenerationContext: async ({ currentUser, gymId }) => {
+    set({ generationContextLoading: true, aiError: '' });
+    try {
+      const [history, overload] = await Promise.all([
+        db.getTrainingHistorySummary(currentUser, gymId, 4),
+        db.getOverloadRecommendations(currentUser, gymId, 4),
+      ]);
+
+      set({
+        trainingHistorySummary: history,
+        overloadRecommendations: overload?.recommendations || [],
+      });
+    } catch (error: any) {
+      set({ aiError: error.message || 'Failed to load training history.' });
+    } finally {
+      set({ generationContextLoading: false });
+    }
+  },
 
   openAiGenerator: (weekNum) => set({
     generationWeek: weekNum,
     aiNotes: '',
     aiError: '',
+    generationContextLoading: false,
     generatedPreview: null,
     weekCount: 4,
     previewWeek: 'week1',
     showAiGenerator: true,
+    trainingHistorySummary: null,
+    overloadRecommendations: [],
   }),
 
   generateAiWorkout: async ({ currentUser, profiles, equipment, workoutProgram, gymId }) => {
@@ -78,11 +106,7 @@ export const useAiStore = create<AiState>((set, get) => ({
 
     try {
       const provider = await db.getLlmProvider();
-      const apiKey = await db.getGlobalApiKey();
-      if (!apiKey) {
-        set({ aiError: 'No API key configured.', aiLoading: false });
-        return;
-      }
+      const apiKey = null;
 
       const recentWorkoutLogs = await db.getRecentWorkoutLogs(currentUser, 4);
 
@@ -100,6 +124,10 @@ export const useAiStore = create<AiState>((set, get) => ({
       const recentWorkoutsFormatted = recentWorkoutLogs?.length > 0
         ? JSON.stringify(recentWorkoutLogs, null, 2)
         : 'No recent workout data available';
+      const trainingHistoryText = get().trainingHistorySummary?.summary || 'No training history summary available';
+      const overloadText = get().overloadRecommendations.length > 0
+        ? get().overloadRecommendations.map((recommendation: any) => recommendation.message).join('\n')
+        : 'No overload recommendations right now';
 
       const userProfile = profiles[currentUser];
 
@@ -112,12 +140,14 @@ export const useAiStore = create<AiState>((set, get) => ({
           .replace(/\{\{week_count\}\}/g, String(validWeekCount))
           .replace(/\{\{user_notes\}\}/g, validNotes || 'None')
           .replace(/\{\{recent_workouts\}\}/g, recentWorkoutsFormatted)
-          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks));
+          .replace(/\{\{previous_weeks\}\}/g, JSON.stringify(recentWeeks))
+          .replace(/\{\{training_history_summary\}\}/g, trainingHistoryText)
+          .replace(/\{\{overload_recommendations\}\}/g, overloadText);
       }
 
       const systemPrompt = promptTemplate || `You are an elite strength and conditioning coach. Generate ${validWeekCount} weeks of workouts in JSON format.`;
       const userPrompt = !promptTemplate
-        ? `Generate a ${validWeekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${validNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.`
+        ? `Generate a ${validWeekCount}-week workout program starting from Week ${generationWeek}. Athletes: ${athletesInfo}. Equipment: ${equipment.join(', ')}. Previous weeks context: ${JSON.stringify(recentWeeks)}. Training history summary: ${trainingHistoryText}. Progressive overload recommendations: ${overloadText}. Recent workout performance: ${recentWorkoutsFormatted}. Notes: ${validNotes || 'None'}. Return JSON only with structure: { week1: { Monday-Sunday }, week2: {...}, ... } - each day having focus and exercises array.`
         : 'Generate the workout program based on the context provided.';
 
       const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
@@ -156,7 +186,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       updates[targetWeek] = generatedPreview[weekKey];
 
       if (gymId) {
-        await db.saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes);
+        await (db as any).saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes || null);
       }
     }
 
@@ -168,10 +198,13 @@ export const useAiStore = create<AiState>((set, get) => ({
     aiNotes: '',
     aiLoading: false,
     aiError: '',
+    generationContextLoading: false,
     generatedPreview: null,
     generationWeek: null,
     weekCount: 4,
     previewWeek: 'week1',
     showAiGenerator: false,
+    trainingHistorySummary: null,
+    overloadRecommendations: [],
   }),
 }));

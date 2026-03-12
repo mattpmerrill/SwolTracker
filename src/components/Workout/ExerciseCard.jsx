@@ -12,6 +12,7 @@ export default function ExerciseCard({
   exercise,
   exerciseIndex,
   userMaxes,
+  overloadRecommendation,
   isWorkoutComplete,
   isSetLogged,
   onLogSet,
@@ -53,6 +54,11 @@ export default function ExerciseCard({
   const allDone = loggedCount === totalSets;
   const inProgress = loggedCount > 0 && !allDone;
   const pct = totalSets > 0 ? Math.round((loggedCount / totalSets) * 100) : 0;
+  const recommendationTone = overloadRecommendation?.type === 'increase'
+    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+    : overloadRecommendation?.type === 'deload'
+    ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+    : 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50';
 
   return (
     <div className={`bg-zinc-900/50 rounded-2xl border overflow-hidden transition-colors ${
@@ -63,6 +69,11 @@ export default function ExerciseCard({
           <div className="flex-1">
             <h4 className="font-bold text-lg leading-tight">{exercise.name}</h4>
             <p className="text-sm text-zinc-400 mt-1">{exercise.muscleGroups}</p>
+            {overloadRecommendation && (
+              <div className={`mt-3 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${recommendationTone}`}>
+                {overloadRecommendation.status_label || overloadRecommendation.type}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Swap button */}
@@ -145,6 +156,12 @@ export default function ExerciseCard({
         {exercise.note && (
           <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
             <p className="text-xs text-zinc-400">{exercise.note}</p>
+          </div>
+        )}
+
+        {overloadRecommendation?.message && (
+          <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
+            <p className="text-xs text-zinc-300">{overloadRecommendation.message}</p>
           </div>
         )}
 

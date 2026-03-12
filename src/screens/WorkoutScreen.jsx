@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { db } from '../lib/supabase';
 import { getWeekDates, getTodayDayName } from '../utils/date';
 import { DAYS_OF_WEEK } from '../constants';
 import {
@@ -21,6 +23,8 @@ export default function WorkoutScreen({
   user,
   groupRole,
   groupLeader,
+  gymId,
+  exerciseLogSize,
   onPreviousWeek,
   onNextWeek,
   onDayChange,
@@ -37,11 +41,31 @@ export default function WorkoutScreen({
   onAcceptSwap,
   onCancelSwap,
 }) {
+  const [overloadByExercise, setOverloadByExercise] = useState({});
   const weekDates = getWeekDates(programStartDate, currentWeek);
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
   const todayDayName = getTodayDayName();
   const isViewingToday = currentWeek === actualCurrentWeek && currentDay === todayDayName;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadOverloadRecommendations = async () => {
+      if (!gymId || !user?.id) return;
+
+      const overload = await db.getOverloadRecommendations(user.id, gymId, 4);
+      if (!isCancelled) {
+        setOverloadByExercise(overload?.byExercise || {});
+      }
+    };
+
+    loadOverloadRecommendations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [gymId, user?.id, currentWeek, exerciseLogSize]);
 
   return (
     <>
@@ -104,6 +128,7 @@ export default function WorkoutScreen({
                 exercise={exercise}
                 exerciseIndex={exIdx}
                 userMaxes={user?.maxes}
+                overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
                 isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}

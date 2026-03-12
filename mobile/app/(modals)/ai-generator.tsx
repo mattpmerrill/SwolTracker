@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Brain, ChevronLeft, ChevronRight, X, Sparkles, RotateCcw } from 'lucide-react-native';
+import { Brain, X, Sparkles, RotateCcw, TrendingUp, ShieldAlert, PauseCircle } from 'lucide-react-native';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { useAiStore } from '../../stores/aiStore';
@@ -32,9 +32,12 @@ export default function AiGeneratorModal() {
   const {
     aiNotes, setAiNotes,
     aiLoading, aiError,
+    generationContextLoading,
     generatedPreview, generationWeek,
     weekCount, setWeekCount,
     previewWeek, setPreviewWeek,
+    trainingHistorySummary, overloadRecommendations,
+    loadGenerationContext,
     generateAiWorkout, confirmGeneratedWorkout,
     setShowAiGenerator,
   } = useAiStore();
@@ -51,6 +54,11 @@ export default function AiGeneratorModal() {
     }, 2500);
     return () => clearInterval(interval);
   }, [aiLoading]);
+
+  useEffect(() => {
+    if (!user?.id || !gymId) return;
+    loadGenerationContext({ currentUser: user.id, gymId });
+  }, [user?.id, gymId, generationWeek]);
 
   const handleGenerate = () => {
     if (!user?.id || !gymId) return;
@@ -81,6 +89,11 @@ export default function AiGeneratorModal() {
   const previewDays = generatedPreview?.[previewWeek]
     ? Object.keys(generatedPreview[previewWeek])
     : [];
+  const recommendationIcon = {
+    increase: TrendingUp,
+    deload: ShieldAlert,
+    stale: PauseCircle,
+  } as const;
 
   return (
     <View className="flex-1 bg-zinc-950">
@@ -130,8 +143,86 @@ export default function AiGeneratorModal() {
         {!generatedPreview && !aiLoading && (
           <>
             <Text className="text-zinc-50 text-lg font-bold">
-              Generate Week {generationWeek} Program
+              Review + Generate Week {generationWeek} Program
             </Text>
+
+            <View className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800/50">
+              <Text className="text-zinc-300 text-sm font-medium mb-3">Training History Review</Text>
+              {generationContextLoading ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator size="small" color="#f97316" />
+                  <Text className="text-zinc-400 text-sm">Loading recent training data...</Text>
+                </View>
+              ) : trainingHistorySummary?.weeks?.length ? (
+                <View className="gap-3">
+                  {[...trainingHistorySummary.weeks].reverse().map((week: any) => (
+                    <View key={week.week_number} className="rounded-xl bg-zinc-800 px-3 py-3">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-zinc-100 font-semibold">Week {week.week_number}</Text>
+                        <Text className="text-zinc-400 text-xs">
+                          {week.completed_days.length}/{week.scheduled_days.length || week.completed_days.length} days
+                        </Text>
+                      </View>
+                      {week.missed_days?.length > 0 && (
+                        <Text className="text-amber-300 text-xs mt-2">
+                          Missed: {week.missed_days.map((day: any) => `${day.day_name}${day.reason ? ` (${day.reason})` : ''}`).join(', ')}
+                        </Text>
+                      )}
+                      {week.exercise_sessions?.slice(0, 2).map((session: any) => (
+                        <Text key={`${week.week_number}-${session.day_name}-${session.exercise_name}`} className="text-zinc-400 text-xs mt-1">
+                          {session.day_name} • {session.exercise_name} • {session.sets_logged} sets @ {session.avg_actual_weight || session.avg_prescribed_weight || 0} lbs
+                        </Text>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text className="text-zinc-400 text-sm">No recent training history found yet.</Text>
+              )}
+            </View>
+
+            <View className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800/50">
+              <Text className="text-zinc-300 text-sm font-medium mb-3">Progressive Overload Signals</Text>
+              {generationContextLoading ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator size="small" color="#f97316" />
+                  <Text className="text-zinc-400 text-sm">Loading recommendations...</Text>
+                </View>
+              ) : overloadRecommendations.length > 0 ? (
+                <View className="gap-2">
+                  {overloadRecommendations.slice(0, 5).map((recommendation: any) => {
+                    const Icon = recommendationIcon[recommendation.type as keyof typeof recommendationIcon] || TrendingUp;
+                    const tone = recommendation.type === 'increase'
+                      ? 'border-emerald-500/30 bg-emerald-500/10'
+                      : recommendation.type === 'deload'
+                      ? 'border-amber-500/30 bg-amber-500/10'
+                      : 'border-zinc-700 bg-zinc-800';
+                    const iconColor = recommendation.type === 'increase'
+                      ? '#6ee7b7'
+                      : recommendation.type === 'deload'
+                      ? '#fcd34d'
+                      : '#d4d4d8';
+                    const textTone = recommendation.type === 'increase'
+                      ? 'text-emerald-300'
+                      : recommendation.type === 'deload'
+                      ? 'text-amber-300'
+                      : 'text-zinc-300';
+
+                    return (
+                      <View key={recommendation.exercise_name} className={`rounded-xl border px-3 py-3 ${tone}`}>
+                        <View className="flex-row items-center">
+                          <Icon size={14} color={iconColor} />
+                          <Text className={`ml-2 font-semibold ${textTone}`}>{recommendation.status_label || recommendation.type}</Text>
+                        </View>
+                        <Text className={`text-xs mt-1 ${textTone}`}>{recommendation.message}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text className="text-zinc-400 text-sm">No overload adjustments flagged right now.</Text>
+              )}
+            </View>
 
             {/* Week Count */}
             <View className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800/50">

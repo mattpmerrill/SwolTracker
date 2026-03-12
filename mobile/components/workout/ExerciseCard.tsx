@@ -15,6 +15,11 @@ interface ExerciseCardProps {
   exercise: Exercise;
   exerciseIndex: number;
   userMaxes: Record<string, number>;
+  overloadRecommendation?: {
+    type: 'increase' | 'deload' | 'stale';
+    status_label?: string;
+    message?: string;
+  } | null;
   isSetLogged: (exerciseIndex: number, setIndex: number) => boolean;
   onLogSet: (exerciseIndex: number, setIndex: number, data: any) => void;
   onAddMax?: (exerciseName: string) => void;
@@ -26,6 +31,7 @@ export function ExerciseCard({
   exercise,
   exerciseIndex,
   userMaxes,
+  overloadRecommendation,
   isSetLogged,
   onLogSet,
   onAddMax,
@@ -33,6 +39,16 @@ export function ExerciseCard({
   disabled = false,
 }: ExerciseCardProps) {
   const hasMax = !!findMaxKey(exercise.name, userMaxes);
+  const recommendationTone = overloadRecommendation?.type === 'increase'
+    ? 'bg-emerald-500/10 border-emerald-500/30'
+    : overloadRecommendation?.type === 'deload'
+    ? 'bg-amber-500/10 border-amber-500/30'
+    : 'bg-zinc-800 border-zinc-700';
+  const recommendationTextTone = overloadRecommendation?.type === 'increase'
+    ? 'text-emerald-300'
+    : overloadRecommendation?.type === 'deload'
+    ? 'text-amber-300'
+    : 'text-zinc-300';
 
   return (
     <View className="mx-4 bg-zinc-900 rounded-2xl p-4 border border-zinc-800/50">
@@ -42,6 +58,13 @@ export function ExerciseCard({
           <Text className="text-zinc-50 text-base font-bold">{exercise.name}</Text>
           {exercise.muscleGroups && (
             <Text className="text-zinc-500 text-xs mt-0.5">{exercise.muscleGroups}</Text>
+          )}
+          {overloadRecommendation && (
+            <View className={`self-start mt-2 rounded-full border px-2.5 py-1 ${recommendationTone}`}>
+              <Text className={`text-xs font-semibold ${recommendationTextTone}`}>
+                {overloadRecommendation.status_label || overloadRecommendation.type}
+              </Text>
+            </View>
           )}
         </View>
         <View className="bg-zinc-800 px-2.5 py-1 rounded-lg">
@@ -55,6 +78,12 @@ export function ExerciseCard({
       {exercise.note && (
         <View className="bg-zinc-800/50 rounded-lg px-3 py-2 mb-3">
           <Text className="text-zinc-400 text-xs">{exercise.note}</Text>
+        </View>
+      )}
+
+      {overloadRecommendation?.message && (
+        <View className="bg-zinc-800/50 rounded-lg px-3 py-2 mb-3">
+          <Text className="text-zinc-300 text-xs">{overloadRecommendation.message}</Text>
         </View>
       )}
 

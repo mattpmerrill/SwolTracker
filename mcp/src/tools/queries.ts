@@ -622,16 +622,16 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const currentWeek = await resolveCurrentWeek();
-    const fromWeek = Math.max(1, currentWeek - lookbackWeeks);
+    const safeLookbackWeeks = Math.max(1, lookbackWeeks || 4);
+    const fromWeek = Math.max(1, currentWeek - safeLookbackWeeks + 1);
 
-    // Fetch profile, maxes, recent logs, completions, missed days — all in parallel
     const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult] =
       await Promise.all([
         get_profile(),
         get_maxes(),
         supabase
           .from("workout_logs")
-          .select("week_number, day_name, exercise_name, set_index, actual_weight, actual_reps, prescribed_weight, prescribed_reps")
+          .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
           .eq("user_id", userId)
           .eq("gym_id", resolvedGymId)
           .eq("completed", true)
@@ -662,23 +662,43 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const maxes = (maxesResult.data as any)?.maxes ?? {};
     const logs = (logsResult.data ?? []) as Array<{
       week_number: number; day_name: string; exercise_name: string;
-      set_index: number; actual_weight: number; actual_reps: number | string;
+      actual_weight: number; actual_reps: number | string;
       prescribed_weight: number | null; prescribed_reps: number | string | null;
+      completed_at: string | null;
     }>;
     const completions = (completionsResult.data ?? []) as Array<{ week_number: number; day_name: string }>;
     const missedDays = (missedDaysResult.data ?? []) as Array<{ week_number: number; day_name: string; reason: string | null }>;
     const programs = (programsResult.data ?? []) as Array<{ week_number: number; program_data: Record<string, any>; ai_notes: string | null }>;
 
-    // Build per-week summaries
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+    const parseReps = (value: number | string | null | undefined) => {
+      if (typeof value === "number") return value;
+      const match = String(value ?? "").match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    const average = (values: number[]) =>
+      values.length > 0
+        ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+        : 0;
+
     const weekSummaries: Record<number, {
+      scheduled_days: string[];
       completed_days: string[];
       missed_days: Array<{ day: string; reason: string | null }>;
-      exercises: Record<string, { sessions: Array<{ sets_logged: number; avg_weight: number; hit_reps: boolean }> }>;
+      exercise_sessions: Array<{
+        day_name: string;
+        exercise_name: string;
+        sets_logged: number;
+        avg_actual_weight: number;
+        avg_prescribed_weight: number;
+        avg_actual_reps: number;
+        prescribed_reps: number | null;
+        hit_all_reps: boolean;
+      }>;
     }> = {};
 
     for (let w = fromWeek; w <= currentWeek; w++) {
-      weekSummaries[w] = { completed_days: [], missed_days: [], exercises: {} };
+      weekSummaries[w] = { scheduled_days: [], completed_days: [], missed_days: [], exercise_sessions: [] };
     }
 
     for (const c of completions) {
@@ -687,51 +707,87 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     for (const m of missedDays) {
       if (weekSummaries[m.week_number]) weekSummaries[m.week_number].missed_days.push({ day: m.day_name, reason: m.reason });
     }
+    for (const program of programs) {
+      const summary = weekSummaries[program.week_number];
+      if (!summary) continue;
+      summary.scheduled_days = dayOrder.filter((day) => program.program_data?.[day]?.exercises?.length > 0);
+    }
 
-    // Group logs by week + exercise
+    const sessionMap = new Map<string, {
+      week_number: number;
+      day_name: string;
+      exercise_name: string;
+      actual_weights: number[];
+      prescribed_weights: number[];
+      actual_reps: number[];
+      prescribed_reps: number[];
+      hit_all_reps: boolean;
+      completed_at: string | null;
+    }>();
     for (const log of logs) {
-      const ws = weekSummaries[log.week_number];
-      if (!ws) continue;
-      if (!ws.exercises[log.exercise_name]) ws.exercises[log.exercise_name] = { sessions: [] };
-      const exSessions = ws.exercises[log.exercise_name].sessions;
-      // Aggregate by set count per day
-      const lastSession = exSessions[exSessions.length - 1];
-      const actualReps = typeof log.actual_reps === "number" ? log.actual_reps : parseInt(String(log.actual_reps)) || 0;
-      const prescribedReps = log.prescribed_reps !== null
-        ? (typeof log.prescribed_reps === "number" ? log.prescribed_reps : parseInt(String(log.prescribed_reps)) || 0)
-        : null;
-      const hitReps = prescribedReps === null || actualReps >= prescribedReps;
+      const sessionKey = `${log.week_number}::${log.day_name}::${log.exercise_name}`;
+      if (!sessionMap.has(sessionKey)) {
+        sessionMap.set(sessionKey, {
+          week_number: log.week_number,
+          day_name: log.day_name,
+          exercise_name: log.exercise_name,
+          actual_weights: [],
+          prescribed_weights: [],
+          actual_reps: [],
+          prescribed_reps: [],
+          hit_all_reps: true,
+          completed_at: log.completed_at,
+        });
+      }
 
-      if (!lastSession) {
-        exSessions.push({ sets_logged: 1, avg_weight: log.actual_weight ?? 0, hit_reps: hitReps });
-      } else {
-        lastSession.sets_logged++;
-        lastSession.avg_weight = Math.round(
-          (lastSession.avg_weight * (lastSession.sets_logged - 1) + (log.actual_weight ?? 0)) / lastSession.sets_logged
-        );
-        if (!hitReps) lastSession.hit_reps = false;
+      const session = sessionMap.get(sessionKey)!;
+      const actualReps = parseReps(log.actual_reps);
+      const prescribedReps = log.prescribed_reps === null ? null : parseReps(log.prescribed_reps);
+      if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
+      if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
+      session.actual_reps.push(actualReps);
+      if (prescribedReps !== null) session.prescribed_reps.push(prescribedReps);
+      if (prescribedReps !== null && actualReps < prescribedReps) {
+        session.hit_all_reps = false;
       }
     }
 
-    // Build human-readable training block summary
+    Array.from(sessionMap.values())
+      .sort((a, b) => {
+        if (a.week_number !== b.week_number) return b.week_number - a.week_number;
+        return dayOrder.indexOf(a.day_name) - dayOrder.indexOf(b.day_name);
+      })
+      .forEach((session) => {
+        const summary = weekSummaries[session.week_number];
+        if (!summary) return;
+
+        summary.exercise_sessions.push({
+          day_name: session.day_name,
+          exercise_name: session.exercise_name,
+          sets_logged: session.actual_reps.length,
+          avg_actual_weight: average(session.actual_weights),
+          avg_prescribed_weight: average(session.prescribed_weights),
+          avg_actual_reps: average(session.actual_reps),
+          prescribed_reps: session.prescribed_reps[0] ?? null,
+          hit_all_reps: session.hit_all_reps,
+        });
+      });
+
     const weekLines: string[] = [];
     for (let w = fromWeek; w <= currentWeek; w++) {
       const ws = weekSummaries[w];
       if (!ws) continue;
-      const prog = programs.find((p) => p.week_number === w);
-      const scheduledDays = prog
-        ? dayOrder.filter((d) => prog.program_data[d]?.exercises?.length > 0)
-        : [];
-      const completionRate = scheduledDays.length > 0
-        ? `${ws.completed_days.length}/${scheduledDays.length} days`
+      const completionRate = ws.scheduled_days.length > 0
+        ? `${ws.completed_days.length}/${ws.scheduled_days.length} days`
         : `${ws.completed_days.length} days`;
 
-      const exLines = Object.entries(ws.exercises).map(([name, data]) => {
-        const s = data.sessions[0];
-        if (!s) return null;
-        const hitStr = s.hit_reps ? "✓" : "✗ missed reps";
-        return `    - ${name}: ${s.sets_logged} sets @ ~${s.avg_weight} lbs ${hitStr}`;
-      }).filter(Boolean);
+      const exLines = ws.exercise_sessions
+        .slice(0, 4)
+        .map((session) => {
+          const targetWeight = session.avg_actual_weight || session.avg_prescribed_weight || 0;
+          const hitStr = session.hit_all_reps ? "hit reps" : "missed reps";
+          return `    - ${session.day_name} ${session.exercise_name}: ${session.sets_logged} sets @ ~${targetWeight} lbs, ${hitStr}`;
+        });
 
       const missedStr = ws.missed_days.length > 0
         ? `\n  Missed: ${ws.missed_days.map((m) => `${m.day}${m.reason ? ` (${m.reason})` : ""}`).join(", ")}`
@@ -761,8 +817,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         current_week: currentWeek,
         next_week: nextWeek,
         from_week: fromWeek,
-        lookback_weeks: lookbackWeeks,
+        lookback_weeks: safeLookbackWeeks,
         gym_id: resolvedGymId,
+        summary_text: summary,
         week_summaries: weekSummaries,
         maxes,
         profile_name: profile.name,
@@ -779,119 +836,146 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const currentWeek = await resolveCurrentWeek();
-    const fromWeek = Math.max(1, currentWeek - lookbackWeeks);
+    const safeLookbackWeeks = Math.max(1, lookbackWeeks || 4);
+    const fromWeek = Math.max(1, currentWeek - safeLookbackWeeks + 1);
 
-    // Fetch all completed logs in lookback window with weight data
     const { data: logsRaw } = await supabase
       .from("workout_logs")
-      .select("week_number, day_name, exercise_name, set_index, actual_weight, actual_reps, prescribed_weight, prescribed_reps")
+      .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
       .eq("user_id", userId)
       .eq("gym_id", resolvedGymId)
       .eq("completed", true)
       .gte("week_number", fromWeek)
-      .order("week_number", { ascending: true });
+      .order("week_number", { ascending: false });
 
     const logs = (logsRaw ?? []) as Array<{
       week_number: number;
       day_name: string;
       exercise_name: string;
-      set_index: number;
       actual_weight: number;
       actual_reps: number | string;
       prescribed_weight: number | null;
       prescribed_reps: number | string | null;
+      completed_at: string | null;
     }>;
 
     if (logs.length === 0) {
       return { success: true, message: "Not enough training history to make recommendations yet.", data: { recommendations: [] } };
     }
 
-    // Group logs by exercise, then by week
-    const byExercise: Record<string, Record<number, { totalSets: number; hitAllReps: boolean; maxWeight: number }>> = {};
-
+    const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+    const parseReps = (value: number | string | null | undefined) => {
+      if (typeof value === "number") return value;
+      const match = String(value ?? "").match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    const sessionMap = new Map<string, {
+      week_number: number;
+      day_name: string;
+      exercise_name: string;
+      hit_all_reps: boolean;
+      actual_weights: number[];
+      prescribed_weights: number[];
+    }>();
     for (const log of logs) {
-      const ex = log.exercise_name;
-      const wk = log.week_number;
-      if (!byExercise[ex]) byExercise[ex] = {};
-      if (!byExercise[ex][wk]) byExercise[ex][wk] = { totalSets: 0, hitAllReps: true, maxWeight: 0 };
+      const sessionKey = `${log.week_number}::${log.day_name}::${log.exercise_name}`;
+      if (!sessionMap.has(sessionKey)) {
+        sessionMap.set(sessionKey, {
+          week_number: log.week_number,
+          day_name: log.day_name,
+          exercise_name: log.exercise_name,
+          hit_all_reps: true,
+          actual_weights: [],
+          prescribed_weights: [],
+        });
+      }
 
-      const session = byExercise[ex][wk];
-      session.totalSets++;
-      if (log.actual_weight > session.maxWeight) session.maxWeight = log.actual_weight;
-
-      // Check if reps hit prescribed
-      const actualReps = typeof log.actual_reps === "number" ? log.actual_reps : parseInt(String(log.actual_reps)) || 0;
-      const prescribedReps = log.prescribed_reps !== null
-        ? (typeof log.prescribed_reps === "number" ? log.prescribed_reps : parseInt(String(log.prescribed_reps)) || 0)
-        : null;
-
+      const session = sessionMap.get(sessionKey)!;
+      const actualReps = parseReps(log.actual_reps);
+      const prescribedReps = log.prescribed_reps == null ? null : parseReps(log.prescribed_reps);
+      if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
+      if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
       if (prescribedReps !== null && actualReps < prescribedReps) {
-        session.hitAllReps = false;
+        session.hit_all_reps = false;
       }
     }
-
-    const maxes = await getUserMaxes();
 
     interface Recommendation {
       exercise_name: string;
       type: "increase" | "deload" | "stale";
+      status_label: string;
       message: string;
-      current_max?: number;
       suggested_increment?: number;
-      weeks_consecutive?: number;
+      streak_count?: number;
       last_seen_week?: number;
+      weeks_since_last_seen?: number;
     }
 
     const recommendations: Recommendation[] = [];
-    const allExercises = Object.keys(byExercise);
+    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; hit_all_reps: boolean }>>();
+    Array.from(sessionMap.values()).forEach((session) => {
+      const sessions = byExercise.get(session.exercise_name) ?? [];
+      sessions.push({
+        week_number: session.week_number,
+        day_name: session.day_name,
+        hit_all_reps: session.hit_all_reps,
+      });
+      byExercise.set(session.exercise_name, sessions);
+    });
+
+    const allExercises = Array.from(byExercise.keys());
 
     for (const ex of allExercises) {
-      const weekData = byExercise[ex];
-      const weeks = Object.keys(weekData).map(Number).sort((a, b) => a - b);
-      const recentWeeks = weeks.slice(-3); // last 3 weeks this exercise appeared
+      const sessions = (byExercise.get(ex) ?? []).sort((a, b) => {
+        if (a.week_number !== b.week_number) return b.week_number - a.week_number;
+        return dayOrder.indexOf(b.day_name) - dayOrder.indexOf(a.day_name);
+      });
+      const latest = sessions[0];
+      if (!latest) continue;
 
-      if (recentWeeks.length === 0) continue;
-
-      const lastWeek = recentWeeks[recentWeeks.length - 1];
-      const weeksSinceLastSeen = currentWeek - lastWeek;
-
-      // STALE: not logged in 2+ weeks
+      const weeksSinceLastSeen = currentWeek - latest.week_number;
       if (weeksSinceLastSeen >= 2) {
         recommendations.push({
           exercise_name: ex,
           type: "stale",
+          status_label: "Stale",
           message: `${ex} hasn't been logged in ${weeksSinceLastSeen} weeks. Consider adding it back or removing it from the program.`,
-          last_seen_week: lastWeek,
+          last_seen_week: latest.week_number,
+          weeks_since_last_seen: weeksSinceLastSeen,
         });
         continue;
       }
 
-      // Need at least 2 recent weeks to evaluate trends
-      if (recentWeeks.length < 2) continue;
+      let consecutiveHits = 0;
+      let consecutiveMisses = 0;
+      for (const session of sessions) {
+        if (session.hit_all_reps) {
+          if (consecutiveMisses > 0) break;
+          consecutiveHits += 1;
+        } else {
+          if (consecutiveHits > 0) break;
+          consecutiveMisses += 1;
+        }
+      }
 
-      const hitAllInRecent = recentWeeks.every((wk) => weekData[wk].hitAllReps);
-      const missedInRecent = recentWeeks.every((wk) => !weekData[wk].hitAllReps);
-      const currentMax = maxes[ex] ?? null;
-
-      if (hitAllInRecent && recentWeeks.length >= 2) {
-        // Determine increment: 5 lbs for upper body, 10 lbs for lower body / compounds
-        const lowerBodyExercises = ["Back Squat", "Front Squat", "Romanian Deadlift", "Deadlift", "Leg Press", "Bulgarian Split Squat"];
-        const increment = lowerBodyExercises.some((e) => ex.toLowerCase().includes(e.toLowerCase().split(" ")[0])) ? 10 : 5;
-
+      if (consecutiveHits >= 3) {
         recommendations.push({
           exercise_name: ex,
           type: "increase",
-          message: `${ex}: Hit all prescribed reps for ${recentWeeks.length} consecutive weeks. Ready to add ${increment} lbs.${currentMax ? ` Current 1RM: ${currentMax} lbs.` : ""}`,
-          current_max: currentMax ?? undefined,
-          suggested_increment: increment,
-          weeks_consecutive: recentWeeks.length,
+          status_label: "Ready to level up",
+          message: `${ex}: Hit all prescribed reps for ${consecutiveHits} straight sessions. Ready to add 5 lbs.`,
+          suggested_increment: 5,
+          streak_count: consecutiveHits,
+          last_seen_week: latest.week_number,
         });
-      } else if (missedInRecent && recentWeeks.length >= 2) {
+      } else if (consecutiveMisses >= 2) {
         recommendations.push({
           exercise_name: ex,
           type: "deload",
-          message: `${ex}: Missed prescribed reps for ${recentWeeks.length} consecutive weeks. Consider a deload or form check before increasing weight.`,
-          weeks_consecutive: recentWeeks.length,
+          status_label: "Check load",
+          message: `${ex}: Missed prescribed reps for ${consecutiveMisses} straight sessions. Consider a deload or form check before increasing weight.`,
+          streak_count: consecutiveMisses,
+          last_seen_week: latest.week_number,
         });
       }
     }
@@ -911,11 +995,17 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Overload recommendations (last ${lookbackWeeks} weeks):\n\n${lines.join("\n\n")}`,
+      message: `Overload recommendations (last ${safeLookbackWeeks} weeks):\n\n${lines.join("\n\n")}`,
       data: {
         recommendations,
+        recommendations_by_exercise: Object.fromEntries(
+          recommendations.map((recommendation) => [
+            recommendation.exercise_name.toLowerCase(),
+            recommendation,
+          ])
+        ),
         exercises_analyzed: allExercises.length,
-        lookback_weeks: lookbackWeeks,
+        lookback_weeks: safeLookbackWeeks,
         current_week: currentWeek,
       },
     };

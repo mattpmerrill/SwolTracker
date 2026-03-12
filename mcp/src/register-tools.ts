@@ -458,7 +458,7 @@ export function registerTools(
 
   server.tool(
     "get_overload_recommendations",
-    "Analyze recent training history and return progressive overload recommendations. Flags exercises where the user has: (1) hit all prescribed reps for 2+ weeks → ready to increase weight, (2) missed prescribed reps for 2+ weeks → consider deload, (3) not logged in 2+ weeks → stale. Call this before generating a new program or during weekly check-ins.",
+    "Analyze recent training history and return progressive overload recommendations. Flags exercises where the user has: (1) hit all prescribed reps for 3+ straight sessions → ready to increase weight, (2) missed prescribed reps for 2+ straight sessions → consider deload, (3) not logged in 2+ weeks → stale. Call this before generating a new program or during weekly check-ins.",
     {
       gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       lookback_weeks: z.number().int().min(1).max(12).optional().describe("How many weeks to look back (default 4)"),
