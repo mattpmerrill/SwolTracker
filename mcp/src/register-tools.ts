@@ -390,6 +390,34 @@ export function registerTools(
   );
 
   server.tool(
+    "log_missed_day",
+    "Log a workout day as intentionally missed/skipped. Differentiates 'not logged yet' from 'intentionally skipped' — adaptive program generation uses this to understand why days were missed. Common reasons: injury, travel, illness, rest, life.",
+    {
+      day_name: z.string().optional().describe("Day name (e.g. 'Monday'). Defaults to today."),
+      week_number: z.number().int().min(1).optional().describe("Week number. Defaults to current week."),
+      reason: z.string().optional().describe("Why the day was missed: 'injury', 'travel', 'illness', 'rest', 'life', or free text."),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ day_name, week_number, reason, gym_id }) => {
+      const result = await actions.log_missed_day(day_name, week_number, reason, gym_id);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "get_missed_days",
+    "Get a list of workout days that were logged as intentionally missed. Optionally filter by week. Used by adaptive program generation to understand training history.",
+    {
+      week_number: z.number().int().min(1).optional().describe("Filter to a specific week number. Omit for all weeks."),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ week_number, gym_id }) => {
+      const result = await actions.get_missed_days(week_number, gym_id);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
     "check_workout_reminder",
     "Check if a workout reminder should fire for today. If the user has a scheduled workout, hasn't logged any sets, and the current time is past the threshold hour (default 4 PM MT), emits a swoltracker.workout_reminder event that get_pending_events will surface. Safe to call repeatedly — deduplicates reminders. Use on heartbeat to proactively nudge the user.",
     {

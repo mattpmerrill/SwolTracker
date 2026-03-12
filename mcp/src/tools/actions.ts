@@ -741,6 +741,124 @@ export function createActionTools(
     return weekStart.toISOString();
   }
 
+  async function log_missed_day(
+    dayName?: string,
+    weekNumber?: number,
+    reason?: string,
+    gymId?: string
+  ): Promise<ToolResult> {
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName ?? getTodayName());
+    if (!slot) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    // Verify it's actually a workout day (not a rest day)
+    const todayResult = await queries.get_todays_workout(slot.gymId, slot.dayName, slot.weekNumber);
+    const todayData = todayResult.data as Record<string, unknown>;
+    const exercises = (todayData.exercises as unknown[]) ?? [];
+    const isRestDay = todayData.rest_day === true || exercises.length === 0;
+    if (isRestDay) {
+      return {
+        success: false,
+        message: `${slot.dayName} (Week ${slot.weekNumber}) is a rest day — no need to log it as missed.`,
+        data: { reason: "rest_day" },
+      };
+    }
+
+    // Check if workout was already completed
+    const { data: existing } = await supabase
+      .from("workout_completions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("gym_id", slot.gymId)
+      .eq("week_number", slot.weekNumber)
+      .eq("day_name", slot.dayName)
+      .maybeSingle();
+
+    if (existing) {
+      return {
+        success: false,
+        message: `${slot.dayName} (Week ${slot.weekNumber}) was already marked complete — can't log it as missed.`,
+        data: {},
+      };
+    }
+
+    // Upsert missed day record
+    const { error } = await supabase
+      .from("missed_days")
+      .upsert(
+        {
+          user_id: userId,
+          gym_id: slot.gymId,
+          week_number: slot.weekNumber,
+          day_name: slot.dayName,
+          reason: reason ?? null,
+        },
+        { onConflict: "user_id,gym_id,week_number,day_name" }
+      );
+
+    if (error) {
+      return { success: false, message: `Failed to log missed day: ${error.message}`, data: {} };
+    }
+
+    const reasonStr = reason ? ` Reason: ${reason}.` : "";
+    return {
+      success: true,
+      message: `${slot.dayName} (Week ${slot.weekNumber}) logged as missed.${reasonStr} This will be factored into your next program.`,
+      data: {
+        day_name: slot.dayName,
+        week_number: slot.weekNumber,
+        gym_id: slot.gymId,
+        reason: reason ?? null,
+      },
+    };
+  }
+
+  async function get_missed_days(weekNumber?: number, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await queries.resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    let query = supabase
+      .from("missed_days")
+      .select("week_number, day_name, reason, logged_at")
+      .eq("user_id", userId)
+      .eq("gym_id", resolvedGymId)
+      .order("week_number", { ascending: false })
+      .order("logged_at", { ascending: false });
+
+    if (weekNumber) {
+      query = query.eq("week_number", weekNumber);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return { success: false, message: `Failed to fetch missed days: ${error.message}`, data: {} };
+    }
+
+    const rows = data ?? [];
+    if (rows.length === 0) {
+      return {
+        success: true,
+        message: weekNumber
+          ? `No missed days recorded for Week ${weekNumber}.`
+          : "No missed days recorded.",
+        data: { missed_days: [] },
+      };
+    }
+
+    const lines = rows.map((r: any) =>
+      `Week ${r.week_number} ${r.day_name}${r.reason ? ` (${r.reason})` : ""}`
+    );
+
+    return {
+      success: true,
+      message: `Missed days:\n${lines.map((l: string) => `  • ${l}`).join("\n")}`,
+      data: { missed_days: rows },
+    };
+  }
+
   return {
     log_set,
     log_many_sets,
@@ -753,5 +871,7 @@ export function createActionTools(
     get_pending_events,
     generate_weekly_summary,
     check_workout_reminder,
+    log_missed_day,
+    get_missed_days,
   };
 }
