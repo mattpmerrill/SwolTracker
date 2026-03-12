@@ -615,6 +615,155 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
+  async function get_overload_recommendations(gymId?: string, lookbackWeeks: number = 4): Promise<ToolResult> {
+    const resolvedGymId = await resolveGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found.", data: {} };
+    }
+
+    const currentWeek = await resolveCurrentWeek();
+    const fromWeek = Math.max(1, currentWeek - lookbackWeeks);
+
+    // Fetch all completed logs in lookback window with weight data
+    const { data: logsRaw } = await supabase
+      .from("workout_logs")
+      .select("week_number, day_name, exercise_name, set_index, actual_weight, actual_reps, prescribed_weight, prescribed_reps")
+      .eq("user_id", userId)
+      .eq("gym_id", resolvedGymId)
+      .eq("completed", true)
+      .gte("week_number", fromWeek)
+      .order("week_number", { ascending: true });
+
+    const logs = (logsRaw ?? []) as Array<{
+      week_number: number;
+      day_name: string;
+      exercise_name: string;
+      set_index: number;
+      actual_weight: number;
+      actual_reps: number | string;
+      prescribed_weight: number | null;
+      prescribed_reps: number | string | null;
+    }>;
+
+    if (logs.length === 0) {
+      return { success: true, message: "Not enough training history to make recommendations yet.", data: { recommendations: [] } };
+    }
+
+    // Group logs by exercise, then by week
+    const byExercise: Record<string, Record<number, { totalSets: number; hitAllReps: boolean; maxWeight: number }>> = {};
+
+    for (const log of logs) {
+      const ex = log.exercise_name;
+      const wk = log.week_number;
+      if (!byExercise[ex]) byExercise[ex] = {};
+      if (!byExercise[ex][wk]) byExercise[ex][wk] = { totalSets: 0, hitAllReps: true, maxWeight: 0 };
+
+      const session = byExercise[ex][wk];
+      session.totalSets++;
+      if (log.actual_weight > session.maxWeight) session.maxWeight = log.actual_weight;
+
+      // Check if reps hit prescribed
+      const actualReps = typeof log.actual_reps === "number" ? log.actual_reps : parseInt(String(log.actual_reps)) || 0;
+      const prescribedReps = log.prescribed_reps !== null
+        ? (typeof log.prescribed_reps === "number" ? log.prescribed_reps : parseInt(String(log.prescribed_reps)) || 0)
+        : null;
+
+      if (prescribedReps !== null && actualReps < prescribedReps) {
+        session.hitAllReps = false;
+      }
+    }
+
+    const maxes = await getUserMaxes();
+
+    interface Recommendation {
+      exercise_name: string;
+      type: "increase" | "deload" | "stale";
+      message: string;
+      current_max?: number;
+      suggested_increment?: number;
+      weeks_consecutive?: number;
+      last_seen_week?: number;
+    }
+
+    const recommendations: Recommendation[] = [];
+    const allExercises = Object.keys(byExercise);
+
+    for (const ex of allExercises) {
+      const weekData = byExercise[ex];
+      const weeks = Object.keys(weekData).map(Number).sort((a, b) => a - b);
+      const recentWeeks = weeks.slice(-3); // last 3 weeks this exercise appeared
+
+      if (recentWeeks.length === 0) continue;
+
+      const lastWeek = recentWeeks[recentWeeks.length - 1];
+      const weeksSinceLastSeen = currentWeek - lastWeek;
+
+      // STALE: not logged in 2+ weeks
+      if (weeksSinceLastSeen >= 2) {
+        recommendations.push({
+          exercise_name: ex,
+          type: "stale",
+          message: `${ex} hasn't been logged in ${weeksSinceLastSeen} weeks. Consider adding it back or removing it from the program.`,
+          last_seen_week: lastWeek,
+        });
+        continue;
+      }
+
+      // Need at least 2 recent weeks to evaluate trends
+      if (recentWeeks.length < 2) continue;
+
+      const hitAllInRecent = recentWeeks.every((wk) => weekData[wk].hitAllReps);
+      const missedInRecent = recentWeeks.every((wk) => !weekData[wk].hitAllReps);
+      const currentMax = maxes[ex] ?? null;
+
+      if (hitAllInRecent && recentWeeks.length >= 2) {
+        // Determine increment: 5 lbs for upper body, 10 lbs for lower body / compounds
+        const lowerBodyExercises = ["Back Squat", "Front Squat", "Romanian Deadlift", "Deadlift", "Leg Press", "Bulgarian Split Squat"];
+        const increment = lowerBodyExercises.some((e) => ex.toLowerCase().includes(e.toLowerCase().split(" ")[0])) ? 10 : 5;
+
+        recommendations.push({
+          exercise_name: ex,
+          type: "increase",
+          message: `${ex}: Hit all prescribed reps for ${recentWeeks.length} consecutive weeks. Ready to add ${increment} lbs.${currentMax ? ` Current 1RM: ${currentMax} lbs.` : ""}`,
+          current_max: currentMax ?? undefined,
+          suggested_increment: increment,
+          weeks_consecutive: recentWeeks.length,
+        });
+      } else if (missedInRecent && recentWeeks.length >= 2) {
+        recommendations.push({
+          exercise_name: ex,
+          type: "deload",
+          message: `${ex}: Missed prescribed reps for ${recentWeeks.length} consecutive weeks. Consider a deload or form check before increasing weight.`,
+          weeks_consecutive: recentWeeks.length,
+        });
+      }
+    }
+
+    if (recommendations.length === 0) {
+      return {
+        success: true,
+        message: `No overload recommendations right now. Keep training and check back after a couple more sessions.`,
+        data: { recommendations: [], exercises_analyzed: allExercises.length },
+      };
+    }
+
+    const lines = recommendations.map((r) => {
+      const icon = r.type === "increase" ? "📈" : r.type === "deload" ? "⚠️" : "💤";
+      return `${icon} ${r.message}`;
+    });
+
+    return {
+      success: true,
+      message: `Overload recommendations (last ${lookbackWeeks} weeks):\n\n${lines.join("\n\n")}`,
+      data: {
+        recommendations,
+        exercises_analyzed: allExercises.length,
+        lookback_weeks: lookbackWeeks,
+        current_week: currentWeek,
+      },
+    };
+  }
+
   async function compare_weeks(week1?: number, week2?: number, gymId?: string): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
@@ -749,6 +898,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     get_recent_sessions,
     get_stats,
     compare_weeks,
+    get_overload_recommendations,
     // Expose helpers for other tool modules
     getMyGyms,
     resolveGymId,
