@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap, Globe } from 'lucide-react';
+import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap, Globe, ChevronDown } from 'lucide-react';
 
 const PROVIDERS = [
   {
@@ -72,6 +72,8 @@ const AdminApiSettings = ({ db }) => {
   const [message, setMessage] = useState(null);
   const [editingKey, setEditingKey] = useState(false);
   const [newKeyValue, setNewKeyValue] = useState('');
+  const [openrouterModel, setOpenrouterModel] = useState('openrouter/auto');
+  const [savingModel, setSavingModel] = useState(false);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -106,6 +108,12 @@ const AdminApiSettings = ({ db }) => {
           existingKeys[provider.id] = true;
           maskedKeys[provider.id] = `${key.slice(0, 7)}...${key.slice(-4)}`;
         }
+      }
+
+      // Load OpenRouter model override
+      const savedModel = settingsMap['llm_model_openrouter'];
+      if (savedModel && savedModel.trim() !== '') {
+        setOpenrouterModel(savedModel.trim());
       }
 
       setHasExistingKeys(existingKeys);
@@ -206,6 +214,24 @@ const AdminApiSettings = ({ db }) => {
     setEditingKey(false);
     setNewKeyValue('');
     setShowKey(false);
+  };
+
+  const handleSaveOpenRouterModel = async (model) => {
+    setSavingModel(true);
+    setMessage(null);
+    try {
+      const success = await db.saveAppSetting('llm_model_openrouter', model);
+      if (success) {
+        setOpenrouterModel(model);
+        setMessage({ type: 'success', text: `OpenRouter model updated to ${model}` });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save model selection' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to save model selection' });
+    } finally {
+      setSavingModel(false);
+    }
   };
 
   if (loading) {
@@ -392,6 +418,86 @@ const AdminApiSettings = ({ db }) => {
           </div>
         )}
       </div>
+
+      {/* OpenRouter Model Selector — only shown when OpenRouter is selected */}
+      {selectedProvider === 'openrouter' && hasExistingKeys['openrouter'] && (
+        <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-purple-500/20 shadow-xl shadow-black/20">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-3 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl shadow-lg">
+              <Globe className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">OpenRouter Model</h3>
+              <p className="text-sm text-zinc-400">Choose which model powers workout generation</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {currentProvider.models.map((model) => (
+              <button
+                key={model}
+                onClick={() => handleSaveOpenRouterModel(model)}
+                disabled={savingModel}
+                className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between
+                  ${openrouterModel === model
+                    ? 'border-purple-500 bg-purple-500/10'
+                    : 'border-white/5 bg-zinc-950/50 hover:border-purple-500/30'
+                  }
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                `}
+              >
+                <div>
+                  <span className="text-sm font-medium text-white">{model}</span>
+                  {model === 'openrouter/auto' && (
+                    <span className="ml-2 text-xs text-zinc-500">(OpenRouter picks best available)</span>
+                  )}
+                </div>
+                {openrouterModel === model && (
+                  <CheckCircle className="w-5 h-5 text-purple-400" />
+                )}
+              </button>
+            ))}
+
+            {/* Custom model input */}
+            <div className="pt-4 border-t border-white/5">
+              <p className="text-xs text-zinc-500 mb-3">
+                Want a specific model? Enter any OpenRouter model ID directly.
+              </p>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="e.g. openrouter/mistralai/mistral-7b-instruct"
+                  className="flex-1 px-4 py-3 bg-zinc-950/50 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all text-sm text-white placeholder:text-zinc-600"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      handleSaveOpenRouterModel(e.target.value.trim());
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const input = document.querySelector('input[placeholder*="mistralai"]');
+                    if (input?.value.trim()) {
+                      handleSaveOpenRouterModel(input.value.trim());
+                    }
+                  }}
+                  disabled={savingModel}
+                  className="px-5 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-purple-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingModel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Apply
+                </button>
+              </div>
+              <p className="text-xs text-zinc-600 mt-2">
+                Browse all available models at{' '}
+                <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+                  openrouter.ai/models
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Available Models Info */}
       <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-white/5 shadow-xl shadow-black/20">

@@ -245,6 +245,17 @@ export default async function handler(req, res) {
         if (allowed === false) {
           return res.status(429).json({ error: `Daily AI generation limit reached (${AI_DAILY_LIMIT}/day). Try again tomorrow.` });
         }
+
+        // Check for per-provider model override in app_settings
+        const modelOverrideKey = `llm_model_${provider}`;
+        const { data: modelOverride } = await supabase
+          .rpc('get_app_setting', { p_key: modelOverrideKey });
+
+        if (modelOverride && typeof modelOverride === 'string' && modelOverride.trim() !== '') {
+          // Override the default model for this provider
+          config.models[requestType] = modelOverride.trim();
+          config.defaultModel = modelOverride.trim();
+        }
       }
     }
 
