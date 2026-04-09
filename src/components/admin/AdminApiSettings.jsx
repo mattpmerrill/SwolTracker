@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap } from 'lucide-react';
+import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap, Globe } from 'lucide-react';
 
 const PROVIDERS = [
   {
@@ -37,6 +37,18 @@ const PROVIDERS = [
     placeholder: 'AIza...',
     link: 'https://aistudio.google.com/app/apikey',
     models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    icon: Globe,
+    color: 'from-purple-500 to-violet-600',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/20',
+    textColor: 'text-purple-400',
+    placeholder: 'sk-or-...',
+    link: 'https://openrouter.ai/keys',
+    models: ['openrouter/auto', 'openrouter/anthropic/claude-3-haiku', 'openrouter/anthropic/claude-3-sonnet', 'openrouter/google/gemini-2.0-flash-exp', 'openrouter/meta-llama/llama-3-8b-instruct']
   }
 ];
 
@@ -45,12 +57,14 @@ const AdminApiSettings = ({ db }) => {
   const [apiKeys, setApiKeys] = useState({
     openai: '',
     claude: '',
-    gemini: ''
+    gemini: '',
+    openrouter: ''
   });
   const [hasExistingKeys, setHasExistingKeys] = useState({
     openai: false,
     claude: false,
-    gemini: false
+    gemini: false,
+    openrouter: false
   });
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -76,12 +90,14 @@ const AdminApiSettings = ({ db }) => {
       const existingKeys = {
         openai: false,
         claude: false,
-        gemini: false
+        gemini: false,
+        openrouter: false,
       };
       const maskedKeys = {
         openai: '',
         claude: '',
-        gemini: ''
+        gemini: '',
+        openrouter: '',
       };
 
       for (const provider of PROVIDERS) {

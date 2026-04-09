@@ -11,56 +11,111 @@ SwolTracker helps users track their workouts, log 1RM (one-rep max) lifts, and g
 - **Frontend**: React 18 with Vite
 - **Styling**: Tailwind CSS 4.0
 - **Database/Auth**: Supabase (PostgreSQL + Auth)
-- **AI Providers**: OpenAI, Claude (Anthropic), Gemini (configurable)
+- **AI Providers**: OpenAI, Claude (Anthropic), Gemini, OpenRouter (configurable)
 - **Icons**: lucide-react
-- **Deployment**: Vercel
+- **Deployment**: Vercel (web), Expo (mobile)
+- **Offline-first (mobile)**: PowerSync for React Native
 
 ## Project Structure
 
 ```
-src/
-├── App.jsx              # Root component, wraps with ToastProvider
-├── main.jsx             # React entry point
-├── swoltracker.jsx      # Main app (~3500 lines, contains most UI components)
-├── index.css            # Tailwind imports + base styles
-├── lib/
-│   ├── supabase.js      # Supabase client + all database helpers (db.*)
-│   ├── llm.js           # Multi-provider LLM calling with timeout/retry
-│   └── errorService.js  # Error handling utilities + user-friendly messages
-└── components/
-    ├── Onboarding.jsx   # New user onboarding flow
-    ├── Toast.jsx        # Toast notification system (ToastProvider + useToast)
-    └── admin/
-        ├── AdminArea.jsx          # Admin route wrapper with tabs
-        ├── AdminDashboard.jsx     # Usage stats
-        ├── AdminApiSettings.jsx   # API key + provider config
-        ├── AdminPromptEditor.jsx  # Edit AI prompt templates
-        └── AdminErrorLogs.jsx     # Error log viewer for admins
+SwolTracker/
+├── src/
+│   ├── App.jsx                  # Root component — wraps with ToastProvider
+│   ├── main.jsx                 # React entry point
+│   ├── swoltracker.jsx          # Main app component (~850 lines) — auth, app state, screen routing
+│   ├── index.css                # Tailwind imports + base styles
+│   ├── lib/
+│   │   ├── supabase.js          # Supabase client + composed db object
+│   │   ├── llm.js              # Client-side LLM call wrapper (calls /api/llm)
+│   │   ├── errorService.js     # Error logging, categories, user-friendly messages
+│   │   ├── validation.js       # Zod schemas for form + API validation
+│   │   └── repositories/        # Domain-specific database repositories
+│   │       ├── profiles.js     # User profile operations
+│   │       ├── workouts.js      # Workout programs, maxes, logs (largest repo)
+│   │       ├── social.js       # Buddies, groups, group chat
+│   │       └── admin.js        # Admin checks, app settings, prompts, errors
+│   ├── components/
+│   │   ├── Onboarding.jsx       # New user onboarding flow
+│   │   ├── Toast.jsx            # Toast notification system (ToastProvider + useToast)
+│   │   ├── admin/               # Admin panel components
+│   │   │   ├── AdminArea.jsx            # Route wrapper with tab navigation
+│   │   │   ├── AdminDashboard.jsx        # Usage stats
+│   │   │   ├── AdminApiSettings.jsx     # API key + LLM provider config
+│   │   │   ├── AdminPromptEditor.jsx    # Edit AI prompt templates
+│   │   │   └── AdminErrorLogs.jsx       # Error log viewer
+│   │   ├── Group/               # Group/buddy UI components
+│   │   ├── Layout/              # Header, BottomNav
+│   │   ├── Maxes/              # Max tracking: AddLiftModal, MaxCard, QuickReference
+│   │   ├── Modals/             # AiGeneratorModal, EquipmentModal, SettingsModal
+│   │   ├── Progress/           # ProgressStats, StrengthLevels
+│   │   └── Workout/            # WorkoutScreen sub-components: ExerciseCard, SetRow, DaySelector, WeekSelector, WorkoutFocus, RestTimer
+│   ├── screens/                 # Top-level screen components
+│   │   ├── WorkoutScreen.jsx   # Main workout view
+│   │   ├── MaxesScreen.jsx     # 1RM tracking view
+│   │   ├── ProgressScreen.jsx  # Progress/charts view
+│   │   └── BuddiesScreen.jsx  # Buddies + groups view
+│   ├── hooks/                   # Custom React hooks
+│   │   ├── useAdmin.js         # Admin state + check
+│   │   ├── useAiGenerator.js   # AI workout generation state + logic
+│   │   ├── useWorkoutLogger.js # Set logging logic
+│   │   └── useExerciseSwap.js  # Exercise swap request flow
+│   ├── constants/               # App constants (equipment list, etc.)
+│   └── utils/
+│       ├── date.js             # Week/date calculations
+│       ├── workout.js          # Workout math helpers
+│       └── storage.js          # LocalStorage helpers
 
-migrations/              # SQL migrations for Supabase
-supabase/               # Supabase local dev config
+├── api/                         # Vercel serverless functions
+│   ├── llm.js                  # LLM proxy — calls OpenAI/Claude/Gemini/OpenRouter server-side
+│   └── mcp.js                  # MCP (Model Context Protocol) endpoint for external AI agents
+
+├── mcp/                         # MCP server source (TypeScript)
+│   └── dist/                   # Compiled MCP tools
+
+├── migrations/                 # SQL migrations (numbered: 001–022 + named)
+│   └── supabase/              # Supabase local dev config
+
+├── mobile/                      # React Native/Expo mobile app
+│   ├── app/                   # Expo Router screens
+│   ├── components/            # Native components
+│   ├── lib/                   # Mobile-specific lib (PowerSync, Supabase)
+│   ├── stores/               # React Native state stores
+│   └── contexts/             # React contexts
+
+├── files/                      # File storage (avatars)
+└── public/                    # Static assets
 ```
 
 ## Key Patterns
 
 ### Database Access
-All database operations go through `db.*` helpers in `src/lib/supabase.js`:
+All database operations go through the composed `db` object from `src/lib/supabase.js`:
 ```javascript
 import { db } from './lib/supabase';
 await db.getProfile(userId);
 await db.getUserMaxes(userId);
 await db.saveWorkoutProgram(gymId, weekNumber, programData, userId, aiGenerated, aiNotes);
+await db.getBuddyRequests(userId);
+await db.getLlmProvider();         // returns: 'openai' | 'claude' | 'gemini' | 'openrouter'
 ```
 
+Domain repositories (`src/lib/repositories/`):
+- `profiles.js` — profile CRUD, onboarding
+- `workouts.js` — maxes, programs, workout logs, overload recommendations
+- `social.js` — buddies, gym groups, group chat
+- `admin.js` — admin RPC, app settings, prompt templates, error logging
+
 ### State Management
-- Uses React useState hooks (no external state library)
-- Main state lives in the SwolTracker component
-- Demo mode available for testing without auth
+- React useState hooks (no external state library)
+- Main auth + app state lives in `swoltracker.jsx`
+- Screen-specific state in each screen component
+- Custom hooks for complex state: `useAiGenerator`, `useWorkoutLogger`, `useExerciseSwap`, `useAdmin`
 
 ### Component Organization
-- Most UI components are defined inline in `swoltracker.jsx`
-- Components are separated by comment blocks: `// ============================================`
-- Major components: LoginPage, ProfileSwitcher, BuddiesModal, EquipmentModal, WorkoutDay, MaxesView, etc.
+- Screen-level components in `src/screens/`
+- Shared UI components in `src/components/`
+- `swoltracker.jsx` handles auth + app-level state + screen routing
 
 ### Styling
 - Tailwind utility classes throughout
@@ -76,11 +131,12 @@ await db.saveWorkoutProgram(gymId, weekNumber, programData, userId, aiGenerated,
 1. **User Authentication** - Google OAuth via Supabase
 2. **1RM Tracking** - Log and track personal records for lifts
 3. **Weekly Programs** - 4-week workout cycles with percentage-based weights
-4. **AI Workout Generation** - Generate personalized workouts based on user profile
+4. **AI Workout Generation** - Generate personalized workouts based on user profile (OpenAI, Claude, Gemini, or OpenRouter)
 5. **Workout Groups** - Leaders create programs, members follow
 6. **Buddy System** - Send/accept buddy requests
 7. **Onboarding Flow** - Collects user info for AI workout generation
-8. **Admin Panel** - Manage API keys, prompt templates, view stats
+8. **Admin Panel** - Manage API keys, prompt templates, view stats, error logs
+9. **MCP Server** — External AI agents can interact with SwolTracker via Model Context Protocol
 
 ## Environment Variables
 
@@ -89,6 +145,14 @@ Required in `.env`:
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_ADMIN_EMAIL=admin@example.com  # Email for admin access
+```
+
+Server-side (Vercel env vars for `api/llm.js`):
+```
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+OPENROUTER_API_KEY=sk-or-...
 ```
 
 ## Running Locally
@@ -108,16 +172,30 @@ Key tables (see `swoltracker-schema.sql` for full schema):
 - `workout_programs` - Weekly workout programs (JSON)
 - `workout_logs` - Individual set logs
 - `buddy_requests` - Buddy/group relationships
-- `error_logs` - Application error tracking (see migrations/009-error-logging.sql)
+- `error_logs` - Application error tracking (migrations/009-error-logging.sql)
+- `app_settings` - Key-value store for LLM provider config and API keys
+- `api_usage_logs` - Token usage tracking
 
 ## AI Integration
 
-The app supports multiple LLM providers (`src/lib/llm.js`):
-- **OpenAI**: gpt-4o-mini (onboarding), gpt-4o (weekly programs)
-- **Claude**: claude-3-haiku (onboarding), claude-3-5-sonnet (weekly)
-- **Gemini**: gemini-1.5-flash (onboarding), gemini-1.5-pro (weekly)
+The app supports multiple LLM providers via the serverless proxy at `/api/llm` (API keys never leave the server):
 
-Prompt templates are stored in the database and editable via admin panel.
+| Provider | Onboarding Model | Weekly Program Model |
+|----------|-----------------|---------------------|
+| OpenAI | `gpt-4o-mini` | `gpt-4o` |
+| Claude | `claude-3-haiku-20240307` | `claude-3-5-sonnet-latest` |
+| Gemini | `gemini-1.5-flash` | `gemini-1.5-pro` |
+| OpenRouter | `openrouter/auto` | `openrouter/auto` |
+
+The active provider is stored in `app_settings` (key: `llm_provider`) and can be changed in **Admin → API Settings**. API keys for each provider are stored in `app_settings` with keys like `llm_api_key_openai`, `llm_api_key_claude`, etc.
+
+Prompt templates are stored in the `prompt_templates` table and are editable via the admin panel (**Admin → Prompt Templates**).
+
+### Client-side LLM call (src/lib/llm.js)
+```javascript
+import { generateWithLlm } from './lib/llm';
+const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
+```
 
 ## Current Week Calculation
 
@@ -153,9 +231,9 @@ import { logError, ErrorCategory, ErrorSeverity } from './lib/errorService';
 await logError(db, {
   category: ErrorCategory.LLM,        // or DATABASE, PARSING, AVATAR, NETWORK, AUTH
   message: 'Human-readable error description',
-  severity: ErrorSeverity.ERROR,      // or WARNING, CRITICAL
+  severity: ErrorSeverity.ERROR,        // or WARNING, CRITICAL
   userId: currentUser,                // optional
-  component: 'swoltracker.jsx',       // file where error occurred
+  component: 'swoltracker.jsx',        // file where error occurred
   operation: 'generateAiWorkout',     // function/operation name
   originalError: error,               // the caught error object
   context: { /* additional data */ }  // optional metadata
@@ -176,14 +254,14 @@ toast.info('New feature available');
 
 ### LLM Error Handling
 The LLM service (`src/lib/llm.js`) has built-in:
-- **60-second timeout** - Prevents hanging requests
+- **65-second timeout** - Prevents hanging requests
 - **Retry logic** - 2 retries with exponential backoff
 - **Automatic error logging** - Pass `db` and `userId` to enable
 - **User-friendly messages** - Errors are translated to helpful messages
 
 ```javascript
 // Pass db and userId to enable automatic error logging
-const result = await callLlmProvider(provider, apiKey, systemPrompt, userPrompt, 'weekly', db, currentUser);
+const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
 ```
 
 ### Admin Error Viewer
@@ -209,4 +287,4 @@ await db.cleanupOldErrors();
 - File upload failures (avatars)
 - Authentication/session issues
 
-Keep error handling focused on the top failure points - don't over-engineer by adding try/catch everywhere.
+Keep error handling focused on the top failure points — don't over-engineer by adding try/catch everywhere.

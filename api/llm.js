@@ -16,13 +16,18 @@ const PROVIDER_CONFIGS = {
   },
   claude: {
     endpoint: 'https://api.anthropic.com/v1/messages',
-    models: { onboarding: 'claude-haiku-4-5', weekly: 'claude-sonnet-4-6' },
-    defaultModel: 'claude-sonnet-4-6',
+    models: { onboarding: 'claude-3-haiku-20240307', weekly: 'claude-3-5-sonnet-latest' },
+    defaultModel: 'claude-3-5-sonnet-latest',
   },
   gemini: {
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
     models: { onboarding: 'gemini-1.5-flash', weekly: 'gemini-1.5-pro' },
     defaultModel: 'gemini-1.5-flash',
+  },
+  openrouter: {
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    models: { onboarding: 'openrouter/auto', weekly: 'openrouter/auto' },
+    defaultModel: 'openrouter/auto',
   },
 };
 
@@ -30,6 +35,7 @@ const ENV_KEYS = {
   openai: 'OPENAI_API_KEY',
   claude: 'ANTHROPIC_API_KEY',
   gemini: 'GEMINI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
 };
 
 async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
@@ -155,6 +161,40 @@ async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType =
   };
 }
 
+async function callOpenRouter(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+  const maxTokens = requestType === 'weekly' ? 8000 : 4000;
+  const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://swoltracker.com',
+      'X-Title': 'SwolTracker',
+    },
+    body: JSON.stringify({
+      model: model || 'openrouter/auto',
+      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      temperature: 0.7,
+      max_tokens: maxTokens,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `OpenRouter API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    usage: {
+      prompt_tokens: data.usage?.prompt_tokens || 0,
+      completion_tokens: data.usage?.completion_tokens || 0,
+    },
+    model: data.model || model,
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -215,6 +255,7 @@ export default async function handler(req, res) {
         case 'openai': return await callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType);
         case 'claude': return await callClaude(apiKey, systemPrompt, userPrompt, model, requestType);
         case 'gemini': return await callGemini(apiKey, systemPrompt, userPrompt, model, requestType);
+        case 'openrouter': return await callOpenRouter(apiKey, systemPrompt, userPrompt, model, requestType);
         default: throw new Error(`Provider ${provider} not implemented`);
       }
     });
