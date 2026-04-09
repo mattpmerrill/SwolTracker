@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Users, Dumbbell, Zap, DollarSign, Activity, TrendingUp, Loader2, RefreshCw } from 'lucide-react';
+import { Users, Dumbbell, Zap, DollarSign, Activity, TrendingUp, Loader2, RefreshCw, X, Mail, CheckCircle, Clock } from 'lucide-react';
 
-const StatCard = ({ icon: Icon, label, value, subValue, color, trend }) => (
-  <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/5 shadow-xl shadow-black/20 hover:bg-zinc-800/50 hover:scale-[1.02] hover:border-white/10 transition-all duration-300 group">
+const StatCard = ({ icon: Icon, label, value, subValue, color, trend, onClick, clickable }) => (
+  <div
+    onClick={onClick}
+    className={`bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/5 shadow-xl shadow-black/20 transition-all duration-300 group ${clickable ? 'hover:bg-zinc-800/50 hover:scale-[1.02] hover:border-white/10 cursor-pointer' : 'opacity-75'}`}
+  >
     <div className="flex items-center gap-4 mb-4">
       <div className={`p-3 rounded-xl ${color} shadow-lg ring-1 ring-inset ring-black/20`}>
         <Icon className="w-6 h-6" />
       </div>
       <span className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">{label}</span>
+      {clickable && (
+        <span className="ml-auto text-xs text-zinc-600 group-hover:text-zinc-400 transition-colors">Click to view</span>
+      )}
     </div>
     <div className="flex items-end justify-between">
       <div>
@@ -33,6 +39,9 @@ const AdminDashboard = ({ db }) => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const loadStats = async () => {
     setLoading(true);
@@ -49,6 +58,25 @@ const AdminDashboard = ({ db }) => {
       setError(err.message || 'Failed to load stats');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const data = await db.getAllUsers();
+      setUsers(data || []);
+    } catch (err) {
+      console.error('Error loading users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const openUsersModal = () => {
+    setShowUsersModal(true);
+    if (users.length === 0) {
+      loadUsers();
     }
   };
 
@@ -124,6 +152,8 @@ const AdminDashboard = ({ db }) => {
           subValue={`${stats.onboarding_completed_count} completed onboarding`}
           color="bg-gradient-to-br from-blue-500 to-blue-600 text-white"
           trend={stats.users_last_7_days}
+          clickable={true}
+          onClick={openUsersModal}
         />
 
         <StatCard
@@ -186,6 +216,99 @@ const AdminDashboard = ({ db }) => {
           </div>
         </div>
       </div>
+
+      {/* Users Modal */}
+      {showUsersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowUsersModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative w-full max-w-2xl max-h-[80vh] bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">All Users</h3>
+                  <p className="text-sm text-zinc-500">{users.length} total users</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUsersModal(false)}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingUsers ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                </div>
+              ) : users.length === 0 ? (
+                <div className="text-center text-zinc-500 py-8">No users found</div>
+              ) : (
+                <div className="space-y-3">
+                  {users.map((user) => (
+                    <div
+                      key={user.user_id}
+                      className="flex items-center gap-4 p-4 bg-zinc-800/50 rounded-xl border border-white/5 hover:border-white/10 transition-all"
+                    >
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        {user.avatar_url ? (
+                          <img
+                            src={user.avatar_url}
+                            alt={user.display_name}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white font-bold text-sm">
+                            {(user.display_name || user.email || '?')[0].toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-white truncate">
+                            {user.display_name || 'Unnamed'}
+                          </p>
+                          {user.onboarding_completed ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+                          <Mail className="w-3.5 h-3.5" />
+                          <span className="truncate">{user.email}</span>
+                        </div>
+                      </div>
+
+                      {/* Date */}
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-xs text-zinc-500">
+                          Joined {new Date(user.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

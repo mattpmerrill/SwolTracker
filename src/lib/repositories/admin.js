@@ -78,6 +78,19 @@ export function createAdminRepo(supabase, { getProfile }) {
     return data
   }
 
+  // All Users
+  const getAllUsers = async () => {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_all_users')
+
+    if (error) {
+      console.error('Error getting all users:', error)
+      return []
+    }
+    return data || []
+  }
+
   // API Usage
   const logApiUsage = async (userId, requestType, model, promptTokens, completionTokens, success = true, errorMessage = null) => {
     if (!supabase) return null
@@ -289,6 +302,8 @@ export function createAdminRepo(supabase, { getProfile }) {
     getAppSetting, saveAppSetting, getAllAppSettings,
     // Dashboard
     getAdminDashboardStats,
+    // Users
+    getAllUsers,
     // API Usage
     logApiUsage,
     // Prompts
