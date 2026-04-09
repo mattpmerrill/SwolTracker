@@ -14,6 +14,8 @@ export default function WeekSelector({
   workoutProgram,
   isWorkoutComplete,
   userId,
+  minAvailableWeek = 1,
+  maxAvailableWeek = actualCurrentWeek,
 }) {
   // Count days with workouts this week and how many are completed
   const programmedDays = DAYS_OF_WEEK.filter(
@@ -32,7 +34,7 @@ export default function WeekSelector({
         <button
           onClick={onPreviousWeek}
           className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors disabled:opacity-30"
-          disabled={currentWeek === 1}
+          disabled={currentWeek <= minAvailableWeek}
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -48,7 +50,7 @@ export default function WeekSelector({
         <button
           onClick={onNextWeek}
           className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center hover:bg-zinc-700 transition-colors disabled:opacity-30"
-          disabled={currentWeek >= actualCurrentWeek + 1}
+          disabled={currentWeek >= maxAvailableWeek}
         >
           <ChevronRight className="w-5 h-5" />
         </button>

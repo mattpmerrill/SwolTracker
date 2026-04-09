@@ -90,6 +90,13 @@ export default function WorkoutScreen() {
     }
   }, [programStartDate]);
 
+  const availableWeeks = Object.keys(workoutProgram || {})
+    .map((week) => Number(week))
+    .filter((week) => Number.isFinite(week))
+    .sort((a, b) => a - b);
+  const minAvailableWeek = availableWeeks[0] || 1;
+  const maxAvailableWeek = availableWeeks[availableWeeks.length - 1] || actualCurrentWeek;
+
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
   const exercises = todayWorkout?.exercises || [];
   const focus = todayWorkout?.focus || '';
@@ -168,8 +175,10 @@ export default function WorkoutScreen() {
         currentWeek={currentWeek}
         actualCurrentWeek={actualCurrentWeek}
         programStartDate={programStartDate}
-        onPreviousWeek={() => setCurrentWeek(Math.max(1, currentWeek - 1))}
-        onNextWeek={() => setCurrentWeek(currentWeek + 1)}
+        canGoPrevious={currentWeek > minAvailableWeek}
+        canGoNext={currentWeek < maxAvailableWeek}
+        onPreviousWeek={() => setCurrentWeek(Math.max(minAvailableWeek, currentWeek - 1))}
+        onNextWeek={() => setCurrentWeek(Math.min(maxAvailableWeek, currentWeek + 1))}
       />
 
       <DaySelector

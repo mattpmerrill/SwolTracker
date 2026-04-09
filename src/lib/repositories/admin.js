@@ -81,8 +81,11 @@ export function createAdminRepo(supabase, { getProfile }) {
   // All Users
   const getAllUsers = async () => {
     if (!supabase) return []
+    // Get current user ID from session
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
     const { data, error } = await supabase
-      .rpc('get_all_users')
+      .rpc('get_all_users', { p_user_id: user.id })
 
     if (error) {
       console.error('Error getting all users:', error)

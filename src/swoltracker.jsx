@@ -676,7 +676,7 @@ export default function SwolTracker() {
             gymId={gymId}
             exerciseLogSize={Object.keys(exerciseLog).length}
             onPreviousWeek={() => setCurrentWeek(w => Math.max(1, w - 1))}
-            onNextWeek={() => setCurrentWeek(w => Math.min(actualCurrentWeek + 1, w + 1))}
+            onNextWeek={() => setCurrentWeek(w => Math.min(Math.max(...Object.keys(workoutProgram || {}).map(Number).filter(Number.isFinite), actualCurrentWeek), w + 1))}
             onDayChange={setCurrentDay}
             onGoToCurrentWeek={() => {
               setCurrentWeek(actualCurrentWeek);

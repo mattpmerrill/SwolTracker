@@ -12,7 +12,7 @@ import { createNaturalLanguageTools } from '../mcp/dist/tools/natural-language.j
 import { createGenerationTools } from '../mcp/dist/tools/generation.js';
 import { registerTools } from '../mcp/dist/register-tools.js';
 
-const MCP_RATE_LIMIT = 100;       // requests per hour
+const MCP_RATE_LIMIT = 500;       // requests per hour — bumped up 2026-04-07
 const MCP_RATE_WINDOW_MINUTES = 60;
 
 function getSupabase() {

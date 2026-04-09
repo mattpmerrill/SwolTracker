@@ -6,6 +6,8 @@ interface WeekSelectorProps {
   currentWeek: number;
   actualCurrentWeek: number;
   programStartDate: string | null;
+  canGoPrevious?: boolean;
+  canGoNext?: boolean;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
 }
@@ -14,6 +16,8 @@ export function WeekSelector({
   currentWeek,
   actualCurrentWeek,
   programStartDate,
+  canGoPrevious = true,
+  canGoNext = true,
   onPreviousWeek,
   onNextWeek,
 }: WeekSelectorProps) {
@@ -24,8 +28,8 @@ export function WeekSelector({
     <View className="flex-row items-center justify-between px-4 py-3">
       <Pressable
         onPress={onPreviousWeek}
-        disabled={currentWeek <= 1}
-        className={`w-10 h-10 rounded-xl items-center justify-center bg-zinc-800 ${currentWeek <= 1 ? 'opacity-30' : ''}`}
+        disabled={!canGoPrevious}
+        className={`w-10 h-10 rounded-xl items-center justify-center bg-zinc-800 ${!canGoPrevious ? 'opacity-30' : ''}`}
       >
         <ChevronLeft size={20} color="#a1a1aa" />
       </Pressable>
@@ -46,7 +50,8 @@ export function WeekSelector({
 
       <Pressable
         onPress={onNextWeek}
-        className="w-10 h-10 rounded-xl items-center justify-center bg-zinc-800"
+        disabled={!canGoNext}
+        className={`w-10 h-10 rounded-xl items-center justify-center bg-zinc-800 ${!canGoNext ? 'opacity-30' : ''}`}
       >
         <ChevronRight size={20} color="#a1a1aa" />
       </Pressable>

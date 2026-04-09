@@ -1,0 +1,8 @@
+node_modules
+mcp/node_modules
+mobile
+.vercel
+.env
+.env*.local
+*.md
+files

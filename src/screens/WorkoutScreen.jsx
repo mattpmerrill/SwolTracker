@@ -42,6 +42,13 @@ export default function WorkoutScreen({
   onCancelSwap,
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
+  const availableWeeks = Object.keys(workoutProgram || {})
+    .map((week) => Number(week))
+    .filter((week) => Number.isFinite(week))
+    .sort((a, b) => a - b);
+  const minAvailableWeek = availableWeeks[0] || 1;
+  const maxAvailableWeek = availableWeeks[availableWeeks.length - 1] || actualCurrentWeek;
+
   const weekDates = getWeekDates(programStartDate, currentWeek);
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
@@ -79,6 +86,8 @@ export default function WorkoutScreen({
         workoutProgram={workoutProgram}
         isWorkoutComplete={isWorkoutComplete}
         userId={user?.id}
+        minAvailableWeek={minAvailableWeek}
+        maxAvailableWeek={maxAvailableWeek}
       />
 
       {/* Day Selector */}

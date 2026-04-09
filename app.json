@@ -1,0 +1,31 @@
+{
+  "name": "swoltracker",
+  "version": "0.1.0",
+  "displayName": "SwolTracker",
+  "description": "AI-powered workout tracking — log sets, track PRs, generate programs, and monitor progress.",
+  "author": "SnappyClaw",
+  "skillFile": "./SKILL.md",
+  "transport": "stdio",
+  "entrypoint": "mcp/dist/server.js",
+  "events": [
+    {
+      "name": "swoltracker.pr_detected",
+      "description": "Emitted when a user sets a new personal record on any exercise"
+    },
+    {
+      "name": "swoltracker.workout_completed",
+      "description": "Emitted when a user marks a workout day as complete"
+    },
+    {
+      "name": "swoltracker.streak_at_risk",
+      "description": "Emitted when a user's workout streak is at risk of breaking (future)"
+    },
+    {
+      "name": "swoltracker.weekly_summary_ready",
+      "description": "Emitted at end of week with compiled stats (future)"
+    }
+  ],
+  "contextBundle": {
+    "refreshIntervalMs": 60000
+  }
+}
