@@ -182,7 +182,8 @@ CREATE OR REPLACE FUNCTION complete_onboarding(
   p_workout_days TEXT[],
   p_workout_duration TEXT,
   p_workout_location TEXT,
-  p_equipment TEXT[]
+  p_equipment TEXT[],
+  p_program_start_date DATE DEFAULT CURRENT_DATE
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -202,6 +203,7 @@ BEGIN
     workout_days = p_workout_days,
     workout_duration = p_workout_duration,
     workout_location = p_workout_location,
+    program_start_date = p_program_start_date,
     onboarding_completed = TRUE,
     onboarding_completed_at = NOW(),
     updated_at = NOW()

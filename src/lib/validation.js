@@ -24,9 +24,9 @@ export const searchQuerySchema = z.string().min(1).max(100).trim()
 // Onboarding schema
 export const onboardingSchema = z.object({
   displayName: z.string().min(1).max(100).trim(),
-  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']),
-  age: z.string().min(1).max(3),
-  weightLbs: z.string().min(1).max(4),
+  gender: z.enum(['male', 'female', 'other']),
+  age: z.union([z.number().int().min(13).max(99), z.string().min(1).max(3)]),
+  weightLbs: z.union([z.number().min(50).max(500), z.string().min(1).max(4)]),
   workoutLocation: z.string().min(1).max(100),
   fitnessGoals: z.array(z.string().max(100)).min(1).max(10),
   workoutDays: z.array(z.string().max(20)).min(1).max(7),

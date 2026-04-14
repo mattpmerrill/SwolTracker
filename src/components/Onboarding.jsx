@@ -335,6 +335,17 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
                 <div className="text-6xl mb-4 transform group-hover:scale-110 transition-transform duration-300">👩</div>
                 <p className="font-bold text-xl relative z-10">Female</p>
               </button>
+              <button
+                onClick={() => setGender('other')}
+                className={`flex-1 p-8 rounded-3xl border transition-all duration-300 relative group overflow-hidden ${gender === 'other'
+                  ? 'bg-purple-500/10 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/20'
+                  : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50'
+                  }`}
+              >
+                <div className={`absolute inset-0 bg-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${gender === 'other' ? 'opacity-100' : ''}`} />
+                <div className="text-6xl mb-4 transform group-hover:scale-110 transition-transform duration-300">🧑</div>
+                <p className="font-bold text-xl relative z-10">Other</p>
+              </button>
             </div>
           </div>
         );

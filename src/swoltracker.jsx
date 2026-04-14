@@ -362,6 +362,12 @@ export default function SwolTracker() {
     if (!authUser) return false;
 
     try {
+      // Create gym first so complete_onboarding RPC can find it for equipment
+      const gym = await db.createGym('Personal Gym', authUser.id);
+      if (!gym?.id) { console.error('Failed to create gym during onboarding'); return false; }
+      const onboardingGymId = gym.id;
+      setGymId(onboardingGymId);
+
       const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
       if (!profileSaved) { console.error('Failed to save onboarding profile'); return false; }
 
@@ -409,18 +415,10 @@ export default function SwolTracker() {
         throw new Error('The AI returned an invalid response. Please try again.');
       }
 
-      let userGymId = gymId;
-      if (!userGymId) {
-        const profile = await db.getProfile(authUser.id);
-        userGymId = profile?.gym_id;
-      }
-
-      if (userGymId) {
-        for (let week = 1; week <= 4; week++) {
-          const weekKey = `week${week}`;
-          if (generatedProgram[weekKey]) {
-            await db.saveWorkoutProgram(userGymId, week, generatedProgram[weekKey], authUser.id, true, 'Generated during onboarding');
-          }
+      for (let week = 1; week <= 4; week++) {
+        const weekKey = `week${week}`;
+        if (generatedProgram[weekKey]) {
+          await db.saveWorkoutProgram(onboardingGymId, week, generatedProgram[weekKey], authUser.id, true, 'Generated during onboarding');
         }
       }
 
