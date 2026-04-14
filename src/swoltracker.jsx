@@ -363,10 +363,14 @@ export default function SwolTracker() {
 
     try {
       // Create gym first so complete_onboarding RPC can find it for equipment
-      const gym = await db.createGym('Personal Gym', authUser.id);
-      if (!gym?.id) { console.error('Failed to create gym during onboarding'); return false; }
-      const onboardingGymId = gym.id;
-      setGymId(onboardingGymId);
+      // (may already exist if user connected an agent and fell back to standard generation)
+      let onboardingGymId = gymId;
+      if (!onboardingGymId) {
+        const gym = await db.createGym('Personal Gym', authUser.id);
+        if (!gym?.id) { console.error('Failed to create gym during onboarding'); return false; }
+        onboardingGymId = gym.id;
+        setGymId(onboardingGymId);
+      }
 
       const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
       if (!profileSaved) { console.error('Failed to save onboarding profile'); return false; }
@@ -436,6 +440,28 @@ export default function SwolTracker() {
         context: { onboardingData }
       });
       return false;
+    }
+  };
+
+  const handlePrepareForAgent = async (onboardingData) => {
+    if (!authUser) return null;
+
+    try {
+      let onboardingGymId = gymId;
+      if (!onboardingGymId) {
+        const gym = await db.createGym('Personal Gym', authUser.id);
+        if (!gym?.id) return null;
+        onboardingGymId = gym.id;
+        setGymId(onboardingGymId);
+      }
+
+      const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
+      if (!profileSaved) return null;
+
+      return { gymId: onboardingGymId };
+    } catch (error) {
+      console.error('Error preparing for agent:', error);
+      return null;
     }
   };
 
@@ -649,7 +675,7 @@ export default function SwolTracker() {
   }
 
   if (showOnboarding) {
-    return <Onboarding user={onboardingData} onComplete={handleOnboardingComplete} onGenerateWorkout={handleGenerateOnboardingWorkout} />;
+    return <Onboarding user={onboardingData} onComplete={handleOnboardingComplete} onGenerateWorkout={handleGenerateOnboardingWorkout} onPrepareForAgent={handlePrepareForAgent} supabase={supabase} db={db} />;
   }
 
   return (

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   Dumbbell, User, Heart, Flame, Scale, Wind, Target,
   Calendar, Clock, Home, Building2, ChevronRight, ChevronLeft,
-  Sparkles, Check, Loader2, AlertCircle, RotateCcw
+  Sparkles, Check, Loader2, AlertCircle, RotateCcw,
+  Bot, Copy
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -42,6 +43,7 @@ const LOADING_PHRASES = [
 
 const STEPS = [
   'welcome',
+  'agent',
   'name',
   'gender',
   'age',
@@ -97,12 +99,24 @@ const EQUIPMENT = [
   { id: 'Weight Machines', label: 'Machines' },
 ];
 
-export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
+export default function Onboarding({ user, onComplete, onGenerateWorkout, onPrepareForAgent, supabase, db }) {
   const [step, setStep] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationFailed, setGenerationFailed] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
   const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
+
+  // Agent state
+  const [hasAgent, setHasAgent] = useState(false);
+  const [agentChoice, setAgentChoice] = useState(null); // null | 'yes' | 'no'
+  const [apiKey, setApiKey] = useState(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [configCopied, setConfigCopied] = useState(false);
+  const [contextCopied, setContextCopied] = useState(false);
+  const [agentWeeksReceived, setAgentWeeksReceived] = useState(0);
+  const [agentGymId, setAgentGymId] = useState(null);
+  const [agentPollingTimeout, setAgentPollingTimeout] = useState(false);
+  const [pollingGeneration, setPollingGeneration] = useState(0);
 
   // Rotate through fun loading phrases while generating
   useEffect(() => {
@@ -117,6 +131,43 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
 
     return () => clearInterval(interval);
   }, [isGenerating]);
+
+  // Poll for agent-saved workout programs
+  useEffect(() => {
+    if (!hasAgent || !agentGymId || agentWeeksReceived >= 4) return;
+
+    const startTime = Date.now();
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+    const interval = setInterval(async () => {
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        setAgentPollingTimeout(true);
+        clearInterval(interval);
+        return;
+      }
+
+      try {
+        const programs = await db.getAllWorkoutPrograms(agentGymId);
+        const weekCount = Object.keys(programs).length;
+        if (weekCount > agentWeeksReceived) {
+          setAgentWeeksReceived(weekCount);
+        }
+
+        if (weekCount >= 4) {
+          clearInterval(interval);
+          confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+          setTimeout(() => {
+            confetti({ particleCount: 100, angle: 60, spread: 55, origin: { x: 0 } });
+            confetti({ particleCount: 100, angle: 120, spread: 55, origin: { x: 1 } });
+          }, 250);
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [hasAgent, agentGymId, agentWeeksReceived, pollingGeneration]);
 
   // Form data
   const [displayName, setDisplayName] = useState(user?.name || user?.email?.split('@')[0] || '');
@@ -138,6 +189,7 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
   const canProceed = () => {
     switch (currentStep) {
       case 'welcome': return true;
+      case 'agent': return true;
       case 'name': return displayName.trim().length > 0;
       case 'gender': return gender !== '';
       case 'age': return age > 0;
@@ -155,9 +207,12 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
   const handleNext = async () => {
     if (step < STEPS.length - 1) {
       if (STEPS[step + 1] === 'generating') {
-        // Start generation process
         setStep(step + 1);
-        await handleGenerateWorkout();
+        if (hasAgent) {
+          await handlePrepareAndPoll();
+        } else {
+          await handleGenerateWorkout();
+        }
       } else {
         setStep(step + 1);
       }
@@ -262,6 +317,87 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
     }
   };
 
+  const compileOnboardingData = () => ({
+    displayName, gender, age, weightLbs: weight,
+    fitnessGoals, workoutDays, workoutDuration,
+    workoutLocation, equipment, programStartDate
+  });
+
+  const handleConnectAgent = async () => {
+    setAgentChoice('yes');
+    setHasAgent(true);
+
+    try {
+      const { data, error } = await supabase.rpc('create_api_key', {
+        p_name: 'Onboarding Agent',
+      });
+
+      if (error || !data?.success) {
+        console.error('Failed to create API key:', error || data?.error);
+        return;
+      }
+
+      setApiKey(data.key);
+    } catch (err) {
+      console.error('Error creating API key:', err);
+    }
+  };
+
+  const handlePrepareAndPoll = async () => {
+    setIsGenerating(true);
+    setGenerationFailed(false);
+    setGenerationProgress('Setting up your profile...');
+
+    try {
+      const onboardingData = compileOnboardingData();
+      const result = await onPrepareForAgent(onboardingData);
+
+      if (!result?.gymId) {
+        setGenerationFailed(true);
+        setGenerationProgress('Failed to set up profile. Please try again.');
+        setIsGenerating(false);
+        return;
+      }
+
+      setAgentGymId(result.gymId);
+      setIsGenerating(false);
+      setGenerationProgress('');
+    } catch (error) {
+      console.error('Error preparing for agent:', error);
+      setGenerationFailed(true);
+      setGenerationProgress('Something went wrong. Please try again.');
+      setIsGenerating(false);
+    }
+  };
+
+  const handleFallbackGenerate = async () => {
+    setHasAgent(false);
+    setAgentGymId(null);
+    setAgentWeeksReceived(0);
+    setAgentPollingTimeout(false);
+    await handleGenerateWorkout();
+  };
+
+  const copyToClipboard = (text, setter) => {
+    navigator.clipboard.writeText(text);
+    setter(true);
+    setTimeout(() => setter(false), 2000);
+  };
+
+  const buildAgentContextBlock = () => {
+    return `I just set up my SwolTracker profile. Here are my details:
+
+- Name: ${displayName}
+- Gender: ${gender} | Age: ${age} | Weight: ${weight} lbs
+- Goals: ${fitnessGoals.join(', ')}
+- Workout Days: ${workoutDays.join(', ')}
+- Duration: ${workoutDuration}
+- Equipment: ${equipment.join(', ')}
+- Location: ${workoutLocation}
+
+Please use the SwolTracker MCP tools to create my 4-week workout program. Start with \`get_profile\` to confirm my details, then use \`generate_workout_program\` to save weeks 1 through 4.`;
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 'welcome':
@@ -282,6 +418,117 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
                 Let's set up your profile and create a personalized workout plan that will help you crush your fitness goals.
               </p>
             </div>
+          </div>
+        );
+
+      case 'agent':
+        const mcpUrl = `${window.location.origin}/api/mcp`;
+        const configJson = apiKey ? JSON.stringify({
+          swoltracker: {
+            url: mcpUrl,
+            headers: { Authorization: `Bearer ${apiKey}` },
+          },
+        }, null, 2) : '';
+
+        return (
+          <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-teal-500/20 rounded-3xl flex items-center justify-center mx-auto mb-8 ring-1 ring-cyan-500/20 shadow-2xl shadow-cyan-500/10">
+              <Bot className="w-10 h-10 text-cyan-400" />
+            </div>
+
+            <h2 className="text-4xl font-black mb-3 tracking-tight">
+              Do you have an{' '}
+              <span className="bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent">AI Agent</span>?
+            </h2>
+            <p className="text-zinc-400 text-lg mb-10 max-w-md mx-auto">
+              Connect your AI assistant to build your workouts, or let SwolTracker handle it
+            </p>
+
+            {!agentChoice && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto">
+                <button
+                  onClick={handleConnectAgent}
+                  className="p-8 rounded-3xl border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10 transition-all duration-300 group relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <Bot className="w-10 h-10 text-cyan-400 mx-auto mb-4 relative z-10" />
+                  <p className="font-bold text-white text-lg relative z-10">Yes, connect my agent</p>
+                  <p className="text-zinc-500 text-sm mt-2 relative z-10">I'll send it the MCP config</p>
+                </button>
+
+                <button
+                  onClick={() => { setAgentChoice('no'); setHasAgent(false); }}
+                  className="p-8 rounded-3xl border border-zinc-700/50 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-300 group relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-zinc-700/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <Sparkles className="w-10 h-10 text-orange-400 mx-auto mb-4 relative z-10" />
+                  <p className="font-bold text-white text-lg relative z-10">No, SwolTracker handles it</p>
+                  <p className="text-zinc-500 text-sm mt-2 relative z-10">AI generates your plan automatically</p>
+                </button>
+              </div>
+            )}
+
+            {agentChoice === 'no' && (
+              <div className="bg-zinc-800/50 rounded-2xl p-6 max-w-md mx-auto border border-zinc-700/30 animate-in fade-in duration-500">
+                <Check className="w-8 h-8 text-green-400 mx-auto mb-3" />
+                <p className="text-white font-semibold text-lg">Got it!</p>
+                <p className="text-zinc-400 text-sm mt-2">SwolTracker's AI will create your personalized workout plan at the end.</p>
+                <button
+                  onClick={() => setAgentChoice(null)}
+                  className="mt-4 text-zinc-500 hover:text-zinc-300 text-sm underline underline-offset-2 transition-colors"
+                >
+                  Change my mind
+                </button>
+              </div>
+            )}
+
+            {agentChoice === 'yes' && apiKey && (
+              <div className="space-y-4 max-w-lg mx-auto text-left animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* API Key */}
+                <div className="bg-zinc-900 rounded-2xl p-5 border border-cyan-500/20">
+                  <label className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Your API Key</label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <code className="flex-1 text-sm text-cyan-300 bg-zinc-800 rounded-xl px-4 py-3 font-mono overflow-x-auto">{apiKey}</code>
+                    <button
+                      onClick={() => copyToClipboard(apiKey, setApiKeyCopied)}
+                      className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors"
+                    >
+                      {apiKeyCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-zinc-400" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Save this — it won't be shown again</p>
+                </div>
+
+                {/* MCP Config */}
+                <div className="bg-zinc-900 rounded-2xl p-5 border border-cyan-500/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">MCP Config</label>
+                    <button
+                      onClick={() => copyToClipboard(configJson, setConfigCopied)}
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                    >
+                      {configCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+                      {configCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <pre className="text-sm text-zinc-300 bg-zinc-800 rounded-xl px-4 py-3 font-mono overflow-x-auto whitespace-pre">{configJson}</pre>
+                </div>
+
+                <div className="bg-zinc-800/50 rounded-2xl p-4 border border-zinc-700/30 text-center">
+                  <p className="text-zinc-300 text-sm">
+                    Add this to your agent's MCP settings, then continue setting up your profile.
+                    Your agent will create your workout plan at the end.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {agentChoice === 'yes' && !apiKey && (
+              <div className="flex items-center justify-center gap-3 text-zinc-400 animate-in fade-in duration-500">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Generating your API key...</span>
+              </div>
+            )}
           </div>
         );
 
@@ -673,6 +920,147 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
 
       case 'generating':
         const currentPhrase = LOADING_PHRASES[loadingPhraseIndex];
+
+        // Agent-aware generating step
+        if (hasAgent) {
+          const agentContextBlock = buildAgentContextBlock();
+          const agentComplete = agentWeeksReceived >= 4;
+
+          return (
+            <div className="text-center animate-in fade-in zoom-in duration-500">
+              {/* Icon */}
+              <div className={`w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl ${
+                isGenerating
+                  ? 'bg-gradient-to-br from-cyan-500 to-teal-600 shadow-cyan-500/30 animate-pulse-slow'
+                  : generationFailed
+                    ? 'bg-gradient-to-br from-red-500 to-red-700 shadow-red-500/30'
+                    : agentComplete
+                      ? 'bg-gradient-to-br from-cyan-500 to-teal-600 shadow-cyan-500/30'
+                      : 'bg-gradient-to-br from-cyan-500/80 to-teal-600/80 shadow-cyan-500/20'
+              }`}>
+                {isGenerating ? (
+                  <Loader2 className="w-12 h-12 text-white animate-spin" />
+                ) : generationFailed ? (
+                  <AlertCircle className="w-12 h-12 text-white" />
+                ) : agentComplete ? (
+                  <Sparkles className="w-12 h-12 text-white" />
+                ) : (
+                  <Bot className="w-12 h-12 text-white" />
+                )}
+              </div>
+
+              {/* Heading */}
+              <h2 className={`text-4xl font-black mb-4 tracking-tight ${
+                generationFailed
+                  ? 'text-red-400'
+                  : agentComplete
+                    ? 'bg-gradient-to-r from-cyan-400 via-teal-400 to-green-400 bg-clip-text text-transparent'
+                    : 'bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent'
+              }`}>
+                {isGenerating ? 'Setting Up...' : generationFailed ? 'Oops!' : agentComplete ? 'Your Agent Crushed It!' : 'Send to Your Agent'}
+              </h2>
+
+              {generationFailed ? (
+                <div className="max-w-sm mx-auto mt-4">
+                  <p className="text-xl text-zinc-300 mb-8 font-medium">{generationProgress}</p>
+                  <button
+                    onClick={handlePrepareAndPoll}
+                    className="w-full flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-bold text-lg bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-all"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                    Try Again
+                  </button>
+                </div>
+              ) : isGenerating ? (
+                <div className="max-w-sm mx-auto">
+                  <p className="text-xl text-zinc-300 mb-6 font-medium">{generationProgress}</p>
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-cyan-500 to-teal-500 rounded-full animate-progress" style={{ width: '100%' }} />
+                  </div>
+                </div>
+              ) : agentComplete ? (
+                <div className="max-w-sm mx-auto mt-4">
+                  <p className="text-xl text-zinc-300 mb-8 font-medium">All 4 weeks are loaded and ready to go!</p>
+                  <button
+                    onClick={onComplete}
+                    className="w-full px-8 py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-cyan-500 to-teal-600 hover:from-cyan-400 hover:to-teal-500 text-white shadow-xl shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all"
+                  >
+                    Start Your Journey
+                  </button>
+                </div>
+              ) : (
+                <div className="max-w-lg mx-auto mt-2 space-y-6">
+                  {/* Context block */}
+                  <p className="text-zinc-400 text-sm">Copy this to your agent to kick things off:</p>
+                  <div className="relative bg-zinc-900 rounded-2xl border border-cyan-500/20 overflow-hidden">
+                    <div className="absolute top-3 right-3 z-10">
+                      <button
+                        onClick={() => copyToClipboard(agentContextBlock, setContextCopied)}
+                        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/50 transition-colors backdrop-blur-sm"
+                      >
+                        {contextCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+                        {contextCopied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="text-sm text-zinc-300 font-mono px-5 py-4 pr-24 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto text-left leading-relaxed">{agentContextBlock}</pre>
+                  </div>
+
+                  {/* Week progress dots */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      {[1, 2, 3, 4].map(week => (
+                        <div key={week} className="flex flex-col items-center gap-2">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all duration-500 ${
+                            agentWeeksReceived >= week
+                              ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30 scale-110'
+                              : 'bg-zinc-800 text-zinc-600 border border-zinc-700'
+                          }`}>
+                            {agentWeeksReceived >= week ? <Check className="w-5 h-5" /> : week}
+                          </div>
+                          <span className={`text-xs font-medium transition-colors duration-500 ${
+                            agentWeeksReceived >= week ? 'text-cyan-400' : 'text-zinc-600'
+                          }`}>
+                            Wk {week}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-zinc-400 text-sm font-medium mt-4">
+                      {agentWeeksReceived === 0
+                        ? 'Waiting for your agent...'
+                        : agentWeeksReceived < 4
+                          ? `Week ${agentWeeksReceived} received! Waiting for more...`
+                          : 'All weeks received!'}
+                    </p>
+
+                    {agentPollingTimeout && (
+                      <div className="mt-4 p-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/30 animate-in fade-in duration-500">
+                        <p className="text-zinc-300 text-sm mb-3">Still waiting? Make sure your agent has the MCP config and try sending the context again.</p>
+                        <button
+                          onClick={() => { setAgentPollingTimeout(false); setPollingGeneration(prev => prev + 1); }}
+                          className="text-cyan-400 hover:text-cyan-300 text-sm font-medium underline underline-offset-2 transition-colors"
+                        >
+                          Keep waiting
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Fallback */}
+                  <button
+                    onClick={handleFallbackGenerate}
+                    className="text-zinc-500 hover:text-zinc-300 text-sm underline underline-offset-2 transition-colors"
+                  >
+                    Generate for me instead
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Standard (non-agent) generating step
         return (
           <div className="text-center animate-in fade-in zoom-in duration-500">
             <div className={`w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl ${
@@ -777,7 +1165,7 @@ export default function Onboarding({ user, onComplete, onGenerateWorkout }) {
           </div>
           <span className="font-bold text-lg tracking-tight">SwolTracker</span>
         </div>
-        {currentStep !== 'welcome' && currentStep !== 'generating' && (
+        {currentStep !== 'welcome' && currentStep !== 'agent' && currentStep !== 'generating' && (
           <div className="text-sm font-medium text-zinc-500 bg-zinc-900/50 px-4 py-2 rounded-full backdrop-blur-sm border border-zinc-800">
             Step {step} of {STEPS.length - 2}
           </div>
