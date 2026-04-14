@@ -81,9 +81,26 @@ export function createAgentChatRepo(supabase) {
     return (count || 0) > 0
   }
 
+  const deleteAgentMessage = async (userId, messageId) => {
+    if (!supabase) return false
+    const { error } = await supabase
+      .from('agent_messages')
+      .delete()
+      .eq('id', messageId)
+      .eq('user_id', userId)
+      .eq('role', 'user')
+
+    if (error) {
+      console.error('Error deleting agent message:', error)
+      return false
+    }
+    return true
+  }
+
   return {
     getAgentMessages,
     sendUserMessage,
+    deleteAgentMessage,
     hasUnreadAgentMessages,
     markAgentMessagesRead,
     getLatestCoachNote,

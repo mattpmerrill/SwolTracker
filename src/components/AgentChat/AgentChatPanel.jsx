@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Bot, X, Send, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Bot, X, Send, Loader2, Trash2 } from 'lucide-react';
 
 /**
  * Coach Board — shared async notes between user and their AI coach
@@ -13,7 +13,9 @@ export default function AgentChatPanel({
   onClose,
   onInputChange,
   onSend,
+  onDelete,
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   // Auto-scroll on new messages
   useEffect(() => {
     if (isOpen && chatEndRef?.current) {
@@ -90,7 +92,33 @@ export default function AgentChatPanel({
             )}
           </p>
           {isUser && !msg._optimistic && (
-            <p className="text-[10px] text-cyan-500/60 mt-0.5 italic">Your coach will see this on their next review</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-[10px] text-cyan-500/60 italic">Your coach will see this on their next review</p>
+              {confirmDeleteId === msg.id ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { onDelete(msg.id); setConfirmDeleteId(null); }}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-medium"
+                  >
+                    Delete
+                  </button>
+                  <span className="text-zinc-600 text-[10px]">|</span>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(msg.id)}
+                  className="text-zinc-600 hover:text-red-400 transition-colors p-0.5"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

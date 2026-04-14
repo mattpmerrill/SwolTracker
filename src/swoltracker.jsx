@@ -416,6 +416,15 @@ export default function SwolTracker() {
     }
   };
 
+  const deleteAgentMessage = async (messageId) => {
+    const deleted = await db.deleteAgentMessage(currentUser, messageId);
+    if (deleted) {
+      setAgentMessages(prev => prev.filter(m => m.id !== messageId));
+    } else {
+      toast.error('Failed to delete note');
+    }
+  };
+
   // ==========================================
   // CONFETTI FOR ACCEPTED REQUESTS
   // ==========================================
@@ -900,6 +909,7 @@ export default function SwolTracker() {
         onClose={() => setShowAgentChat(false)}
         onInputChange={setAgentChatInput}
         onSend={sendAgentMessage}
+        onDelete={deleteAgentMessage}
       />
 
       <SettingsModal
