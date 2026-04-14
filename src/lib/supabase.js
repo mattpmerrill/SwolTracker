@@ -3,6 +3,7 @@ import { createProfilesRepo } from './repositories/profiles'
 import { createWorkoutsRepo } from './repositories/workouts'
 import { createSocialRepo } from './repositories/social'
 import { createAdminRepo } from './repositories/admin'
+import { createAgentChatRepo } from './repositories/agent-chat'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -48,10 +49,12 @@ const socialRepo = createSocialRepo(supabase, {
 const adminRepo = createAdminRepo(supabase, {
   getProfile: profilesRepo.getProfile,
 })
+const agentChatRepo = createAgentChatRepo(supabase)
 
 export const db = {
   ...profilesRepo,
   ...workoutsRepo,
   ...socialRepo,
   ...adminRepo,
+  ...agentChatRepo,
 }

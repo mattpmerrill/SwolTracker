@@ -35,6 +35,9 @@ export const onboardingSchema = z.object({
   programStartDate: z.string().optional(),
 })
 
+// Agent chat schemas
+export const agentChatMessageSchema = z.string().trim().min(1, 'Message cannot be empty').max(5000, 'Message too long (max 5000 characters)')
+
 // AI generation schemas
 export const aiNotesSchema = z.string().max(1000).optional()
 

@@ -111,6 +111,9 @@ export default function SettingsModal({
         {/* Connect Agent Section */}
         {supabase && <AgentKeysSection supabase={supabase} />}
 
+        {/* Agent Weekly Review Setup */}
+        {supabase && <AgentCronPromptSection supabase={supabase} />}
+
         {/* Admin Section - Only visible to admins */}
         {isAdmin && (
           <div className="mb-6">
@@ -376,6 +379,67 @@ function AgentKeysSection({ supabase }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Agent Cron Prompt Section ─────────────────────────────────
+
+const CRON_PROMPT_TEXT = `Set up a weekly cron job (every Sunday at 8 PM) to review my SwolTracker progress. Each week:
+
+1. Call \`get_training_history_summary\` to see my recent workout data
+2. Call \`get_overload_recommendations\` to check which lifts are ready to progress
+3. Call \`generate_weekly_summary\` for my completion stats
+4. Call \`get_streak\` for my consistency streak
+5. Analyze my performance and write a personalized coach note using \`send_coach_message\` with message_type "weekly_review" and include the week_number
+6. If I need program adjustments based on my progress, use \`save_workout_program\` to update next week's exercises, then note the changes with \`send_coach_message\` using message_type "program_update"
+
+Be encouraging but honest. Reference specific exercises and numbers from my data. Keep reviews under 500 words.`;
+
+function AgentCronPromptSection({ supabase }) {
+  const [keys, setKeys] = useState([]);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    async function checkKeys() {
+      const { data } = await supabase
+        .from('api_keys')
+        .select('id')
+        .is('revoked_at', null)
+        .limit(1);
+      setKeys(data || []);
+    }
+    checkKeys();
+  }, []);
+
+  if (keys.length === 0) return null;
+
+  return (
+    <div className="mb-6 bg-gradient-to-br from-cyan-500/5 to-teal-500/5 rounded-2xl border border-cyan-500/15 p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center ring-1 ring-cyan-500/20">
+          <Bot className="w-5 h-5 text-cyan-400" />
+        </div>
+        <div>
+          <h3 className="font-bold text-cyan-400 text-sm">Set Up Weekly Reviews</h3>
+          <p className="text-xs text-zinc-400">Copy this prompt to your agent to enable weekly coaching</p>
+        </div>
+      </div>
+
+      <div className="relative">
+        <pre className="text-xs text-zinc-300 bg-zinc-800/80 rounded-xl p-4 pr-16 font-mono whitespace-pre-wrap overflow-y-auto max-h-40 leading-relaxed">{CRON_PROMPT_TEXT}</pre>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(CRON_PROMPT_TEXT);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }}
+          className="absolute top-3 right-3 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-700/80 hover:bg-zinc-600 border border-zinc-600/50 transition-colors backdrop-blur-sm"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { useAdmin } from './hooks/useAdmin';
 import { useAiGenerator } from './hooks/useAiGenerator';
 import { useWorkoutLogger } from './hooks/useWorkoutLogger';
 import { useExerciseSwap } from './hooks/useExerciseSwap';
-import { validate, profileUpdateSchema, maxWeightSchema, chatMessageSchema, equipmentNameSchema, searchQuerySchema } from './lib/validation';
+import { validate, profileUpdateSchema, maxWeightSchema, chatMessageSchema, equipmentNameSchema, searchQuerySchema, agentChatMessageSchema } from './lib/validation';
 
 // Components
 import LoginPage from './components/LoginPage';
@@ -18,6 +18,9 @@ const AdminArea = lazy(() => import('./components/admin/AdminArea'));
 import ProfileArea from './components/Profile/ProfileArea';
 import { Header, BottomNav } from './components/Layout';
 import { SettingsModal, EquipmentModal, AiGeneratorModal } from './components/Modals';
+import AgentChatFAB from './components/AgentChat/AgentChatFAB';
+import AgentChatPanel from './components/AgentChat/AgentChatPanel';
+import CoachNoteCard from './components/AgentChat/CoachNoteCard';
 import { AddLiftModal } from './components/Maxes';
 
 // Screens
@@ -101,6 +104,18 @@ export default function SwolTracker() {
   const [chatLoading, setChatLoading] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const chatEndRef = useRef(null);
+
+  // ==========================================
+  // AGENT CHAT STATE
+  // ==========================================
+  const [agentMessages, setAgentMessages] = useState([]);
+  const [agentChatInput, setAgentChatInput] = useState('');
+  const [showAgentChat, setShowAgentChat] = useState(false);
+  const [agentChatLoading, setAgentChatLoading] = useState(false);
+  const [hasUnreadAgentMessages, setHasUnreadAgentMessages] = useState(false);
+  const [latestCoachNote, setLatestCoachNote] = useState(null);
+  const [hasAgentKey, setHasAgentKey] = useState(false);
+  const agentChatEndRef = useRef(null);
 
   // ==========================================
   // DOMAIN HOOKS
@@ -269,6 +284,16 @@ export default function SwolTracker() {
         setCompletedWorkouts(completedMap);
       }
 
+      // Load agent chat data
+      const [unreadAgent, coachNote, agentKey] = await Promise.all([
+        db.hasUnreadAgentMessages(userId),
+        db.getLatestCoachNote(userId),
+        db.hasAgentKey(userId),
+      ]);
+      setHasUnreadAgentMessages(unreadAgent);
+      setLatestCoachNote(coachNote);
+      setHasAgentKey(agentKey);
+
       checkAdmin(authUser.id);
     } catch (e) {
       console.error("Error loading Supabase data:", e);
@@ -320,6 +345,76 @@ export default function SwolTracker() {
     const cleanup = setupSubscription();
     return () => { cleanup?.then(fn => fn?.()); };
   }, [currentUser, groupRole, groupLeader?.id, showChat]);
+
+  // ==========================================
+  // AGENT CHAT SUBSCRIPTION
+  // ==========================================
+  useEffect(() => {
+    if (!supabase || !currentUser) return;
+
+    const channel = supabase
+      .channel(`agent_chat_${currentUser}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'agent_messages',
+        filter: `user_id=eq.${currentUser}`
+      }, (payload) => {
+        const newMsg = payload.new;
+        if (newMsg.role === 'agent') {
+          setAgentMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          if (!showAgentChat) setHasUnreadAgentMessages(true);
+          if (['weekly_review', 'program_update'].includes(newMsg.message_type)) {
+            setLatestCoachNote(newMsg);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [currentUser, showAgentChat]);
+
+  // Agent chat handlers
+  const loadAgentMessages = async () => {
+    if (!currentUser) return;
+    setAgentChatLoading(true);
+    const messages = await db.getAgentMessages(currentUser, 50);
+    setAgentMessages(messages.reverse());
+    setAgentChatLoading(false);
+    await db.markAgentMessagesRead(currentUser);
+    setHasUnreadAgentMessages(false);
+  };
+
+  const sendAgentMessage = async () => {
+    if (!currentUser || !agentChatInput.trim()) return;
+    const result = agentChatMessageSchema.safeParse(agentChatInput);
+    if (!result.success) { toast.error(result.error.errors[0]?.message); return; }
+
+    const content = result.data;
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId, role: 'user', content, message_type: 'chat',
+      message_created_at: new Date().toISOString(), _optimistic: true
+    };
+    setAgentMessages(prev => [...prev, optimisticMsg]);
+    setAgentChatInput('');
+
+    const response = await db.sendUserMessage(currentUser, content);
+    if (!response?.success) {
+      setAgentMessages(prev => prev.filter(m => m.id !== tempId));
+      toast.error('Failed to send message');
+    }
+  };
+
+  const openAgentChat = () => {
+    setShowAgentChat(true);
+    if (agentMessages.length === 0) loadAgentMessages();
+    else {
+      db.markAgentMessagesRead(currentUser);
+      setHasUnreadAgentMessages(false);
+    }
+  };
 
   // ==========================================
   // CONFETTI FOR ACCEPTED REQUESTS
@@ -717,6 +812,8 @@ export default function SwolTracker() {
             onRequestSwap={requestSwap}
             onAcceptSwap={acceptSwap}
             onCancelSwap={clearSwap}
+            latestCoachNote={latestCoachNote}
+            onOpenAgentChat={openAgentChat}
           />
         )}
 
@@ -785,6 +882,24 @@ export default function SwolTracker() {
         onTabChange={setActiveTab}
         user={user}
         hasUnreadMessages={hasUnreadMessages}
+      />
+
+      {hasAgentKey && (
+        <AgentChatFAB
+          hasUnread={hasUnreadAgentMessages}
+          onClick={openAgentChat}
+        />
+      )}
+
+      <AgentChatPanel
+        isOpen={showAgentChat}
+        messages={agentMessages}
+        loading={agentChatLoading}
+        input={agentChatInput}
+        chatEndRef={agentChatEndRef}
+        onClose={() => setShowAgentChat(false)}
+        onInputChange={setAgentChatInput}
+        onSend={sendAgentMessage}
       />
 
       <SettingsModal

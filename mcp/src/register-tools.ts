@@ -6,6 +6,7 @@ import type { createActionTools } from "./tools/actions.js";
 import type { createContextTools } from "./tools/context.js";
 import type { createNaturalLanguageTools } from "./tools/natural-language.js";
 import type { createGenerationTools } from "./tools/generation.js";
+import type { createCoachingTools } from "./tools/coaching.js";
 
 const repsSchema = z.union([z.number().int().min(0), z.string()]);
 const weightSchema = z.union([z.number().min(0), z.literal("prescribed")]);
@@ -24,7 +25,8 @@ export function registerTools(
   actions: ReturnType<typeof createActionTools>,
   context: ReturnType<typeof createContextTools>,
   nlTools: ReturnType<typeof createNaturalLanguageTools>,
-  generation: ReturnType<typeof createGenerationTools>
+  generation: ReturnType<typeof createGenerationTools>,
+  coaching: ReturnType<typeof createCoachingTools>
 ) {
   // ── Read-only query tools ────────────────────────────────
 
@@ -515,6 +517,47 @@ export function registerTools(
           text: `${names.length} canonical exercises:\n${names.join("\n")}`,
         }],
       };
+    }
+  );
+
+  // ── Coaching & messaging tools ──────────────────────────
+
+  server.tool(
+    "send_coach_message",
+    "Send a message to the user. Use for weekly reviews, program update notes, milestone celebrations, or general chat responses. The message appears in the user's agent chat panel.",
+    {
+      content: z.string().min(1).max(5000).describe("Message content"),
+      message_type: z.enum(["chat", "weekly_review", "program_update", "milestone"]).default("chat").describe("Type of message: chat (default), weekly_review (weekly analysis), program_update (workout changes), milestone (achievement)"),
+      week_number: z.number().int().min(1).optional().describe("Week number this note relates to (optional)"),
+      metadata: z.record(z.unknown()).optional().describe("Optional structured data (e.g. program changes)"),
+    },
+    async ({ content, message_type, week_number, metadata }) => {
+      const result = await coaching.send_coach_message(content, message_type, week_number, metadata);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "get_user_messages",
+    "Check for unread messages from the user. Call this periodically or before composing a response to see what the user has said.",
+    {
+      limit: z.number().int().min(1).max(50).default(10).optional().describe("Max messages to return (default 10)"),
+    },
+    async ({ limit }) => {
+      const result = await coaching.get_user_messages(limit);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "get_conversation_history",
+    "Get the full conversation history between you and the user. Includes both user messages and your previous responses. Useful for maintaining context across sessions.",
+    {
+      limit: z.number().int().min(1).max(100).default(50).optional().describe("Max messages to return (default 50)"),
+    },
+    async ({ limit }) => {
+      const result = await coaching.get_conversation_history(limit);
+      return { content: [{ type: "text", text: result.message }] };
     }
   );
 }

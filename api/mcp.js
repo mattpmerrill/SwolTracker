@@ -10,6 +10,7 @@ import { createActionTools } from '../mcp/dist/tools/actions.js';
 import { createContextTools } from '../mcp/dist/tools/context.js';
 import { createNaturalLanguageTools } from '../mcp/dist/tools/natural-language.js';
 import { createGenerationTools } from '../mcp/dist/tools/generation.js';
+import { createCoachingTools } from '../mcp/dist/tools/coaching.js';
 import { registerTools } from '../mcp/dist/register-tools.js';
 
 const MCP_RATE_LIMIT = 500;       // requests per hour — bumped up 2026-04-07
@@ -94,9 +95,10 @@ export default async function handler(req, res) {
     const context = createContextTools(supabase, userId, queries);
     const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions);
     const generation = createGenerationTools(supabase, userId, queries, actions);
+    const coaching = createCoachingTools(supabase, userId);
 
     const server = new McpServer({ name: 'swoltracker', version: '0.1.0' });
-    registerTools(server, queries, actions, context, nlTools, generation);
+    registerTools(server, queries, actions, context, nlTools, generation, coaching);
 
     // 6. Handle via stateless StreamableHTTP transport
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

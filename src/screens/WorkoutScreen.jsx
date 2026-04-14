@@ -10,6 +10,7 @@ import {
   NoWorkoutState,
   RestDayState,
 } from '../components/Workout';
+import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
 
 /**
  * Workout tab screen composition
@@ -40,6 +41,8 @@ export default function WorkoutScreen({
   onRequestSwap,
   onAcceptSwap,
   onCancelSwap,
+  latestCoachNote,
+  onOpenAgentChat,
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
   const availableWeeks = Object.keys(workoutProgram || {})
@@ -76,6 +79,11 @@ export default function WorkoutScreen({
 
   return (
     <>
+      {/* Coach Note Card */}
+      {latestCoachNote && (
+        <CoachNoteCard note={latestCoachNote} onOpenChat={onOpenAgentChat} />
+      )}
+
       {/* Week Selector */}
       <WeekSelector
         currentWeek={currentWeek}
