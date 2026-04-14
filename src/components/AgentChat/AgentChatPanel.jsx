@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Bot, X, Send, Loader2 } from 'lucide-react';
 
 /**
- * Slide-up chat panel for agent messaging
+ * Coach Board — shared async notes between user and their AI coach
  */
 export default function AgentChatPanel({
   isOpen,
@@ -89,6 +89,9 @@ export default function AgentChatPanel({
               new Date(msg.message_created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             )}
           </p>
+          {isUser && !msg._optimistic && (
+            <p className="text-[10px] text-cyan-500/60 mt-0.5 italic">Your coach will see this on their next review</p>
+          )}
         </div>
       </div>
     );
@@ -108,8 +111,8 @@ export default function AgentChatPanel({
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-semibold text-white">Your Agent</p>
-              <p className="text-xs text-zinc-400">AI Coach</p>
+              <p className="font-semibold text-white">Coach Board</p>
+              <p className="text-xs text-zinc-400">Notes are picked up on your coach's next check-in</p>
             </div>
           </div>
           <button
@@ -131,8 +134,8 @@ export default function AgentChatPanel({
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center mb-4 ring-1 ring-cyan-500/20">
                 <Bot className="w-8 h-8 text-cyan-400" />
               </div>
-              <p className="text-zinc-400 text-sm mb-1">No messages yet</p>
-              <p className="text-zinc-600 text-xs">Your agent will send coaching notes here.<br />You can also message them directly.</p>
+              <p className="text-zinc-400 text-sm mb-1">No notes yet</p>
+              <p className="text-zinc-600 text-xs">Your coach will post weekly reviews here.<br />You can also leave notes, questions, or feedback.</p>
             </div>
           ) : (
             <>
@@ -155,7 +158,7 @@ export default function AgentChatPanel({
                   onSend();
                 }
               }}
-              placeholder="Message your agent..."
+              placeholder="Leave a note for your coach..."
               maxLength={5000}
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-4 focus:outline-none focus:border-cyan-500/50 transition-colors text-sm"
             />
