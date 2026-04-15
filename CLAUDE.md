@@ -23,7 +23,7 @@ SwolTracker/
 ├── src/
 │   ├── App.jsx                  # Root component — wraps with ToastProvider
 │   ├── main.jsx                 # React entry point
-│   ├── swoltracker.jsx          # Main app component (~850 lines) — auth, app state, screen routing
+│   ├── swoltracker.jsx          # Main app component (~1000 lines) — auth, app state, screen routing, agent chat
 │   ├── index.css                # Tailwind imports + base styles
 │   ├── lib/
 │   │   ├── supabase.js          # Supabase client + composed db object
@@ -34,10 +34,15 @@ SwolTracker/
 │   │       ├── profiles.js     # User profile operations
 │   │       ├── workouts.js      # Workout programs, maxes, logs (largest repo)
 │   │       ├── social.js       # Buddies, groups, group chat
-│   │       └── admin.js        # Admin checks, app settings, prompts, errors
+│   │       ├── admin.js        # Admin checks, app settings, prompts, errors
+│   │       └── agent-chat.js   # Agent messaging, coach notes, read status
 │   ├── components/
-│   │   ├── Onboarding.jsx       # New user onboarding flow
+│   │   ├── Onboarding.jsx       # New user onboarding flow (13 steps, agent-native)
 │   │   ├── Toast.jsx            # Toast notification system (ToastProvider + useToast)
+│   │   ├── AgentChat/           # Coach Board — async notes between user and AI agent
+│   │   │   ├── AgentChatPanel.jsx    # Slide-up panel with message history + input
+│   │   │   ├── CoachNoteCard.jsx     # Compact preview card for workout screen
+│   │   │   └── AgentChatFAB.jsx      # Floating action button with unread badge
 │   │   ├── admin/               # Admin panel components
 │   │   │   ├── AdminArea.jsx            # Route wrapper with tab navigation
 │   │   │   ├── AdminDashboard.jsx        # Usage stats
@@ -71,9 +76,17 @@ SwolTracker/
 │   └── mcp.js                  # MCP (Model Context Protocol) endpoint for external AI agents
 
 ├── mcp/                         # MCP server source (TypeScript)
+│   ├── src/tools/
+│   │   ├── queries.ts          # Read-only data access (30+ tools)
+│   │   ├── actions.ts          # Write operations (log sets, save programs)
+│   │   ├── context.ts          # Compressed state bundles
+│   │   ├── generation.ts       # AI program generation & saving
+│   │   ├── coaching.ts         # Coach Board messaging (send/read notes)
+│   │   └── natural-language.ts # NL exercise logging with fuzzy matching
+│   ├── src/register-tools.ts   # Tool registration with schemas
 │   └── dist/                   # Compiled MCP tools
 
-├── migrations/                 # SQL migrations (numbered: 001–022 + named)
+├── migrations/                 # SQL migrations (numbered: 001–024 + named)
 │   └── supabase/              # Supabase local dev config
 
 ├── mobile/                      # React Native/Expo mobile app
@@ -105,6 +118,7 @@ Domain repositories (`src/lib/repositories/`):
 - `workouts.js` — maxes, programs, workout logs, overload recommendations
 - `social.js` — buddies, gym groups, group chat
 - `admin.js` — admin RPC, app settings, prompt templates, error logging
+- `agent-chat.js` — agent messages, coach notes, read status, API key detection
 
 ### State Management
 - React useState hooks (no external state library)
@@ -115,7 +129,7 @@ Domain repositories (`src/lib/repositories/`):
 ### Component Organization
 - Screen-level components in `src/screens/`
 - Shared UI components in `src/components/`
-- `swoltracker.jsx` handles auth + app-level state + screen routing
+- `swoltracker.jsx` handles auth + app-level state + screen routing + agent chat realtime
 
 ### Styling
 - Tailwind utility classes throughout
@@ -125,6 +139,7 @@ Domain repositories (`src/lib/repositories/`):
   - `bg-zinc-900`, `bg-zinc-800` for cards
   - `text-orange-500` for accents
   - `rounded-xl`, `rounded-2xl`, `rounded-3xl` for border radius
+  - Cyan/teal (`text-cyan-400`, `from-cyan-500 to-teal-600`) for AI agent features
 
 ## Features
 
@@ -134,9 +149,12 @@ Domain repositories (`src/lib/repositories/`):
 4. **AI Workout Generation** - Generate personalized workouts based on user profile (OpenAI, Claude, Gemini, or OpenRouter)
 5. **Workout Groups** - Leaders create programs, members follow
 6. **Buddy System** - Send/accept buddy requests
-7. **Onboarding Flow** - Collects user info for AI workout generation
+7. **Onboarding Flow** - 13-step wizard collecting user info + optional AI agent connection
 8. **Admin Panel** - Manage API keys, prompt templates, view stats, error logs
-9. **MCP Server** — External AI agents can interact with SwolTracker via Model Context Protocol
+9. **MCP Server** — External AI agents can interact with SwolTracker via Model Context Protocol (30+ tools)
+10. **AI Agent-Native Onboarding** — Users can connect their AI agent (OpenClaw, Hermes, etc.) during signup via MCP API key generation. Agent can generate workout programs during onboarding with live progress polling.
+11. **Coach Board** — Async messaging between user and their AI agent. Agents post weekly reviews and program updates via `send_coach_message` MCP tool. Users can leave notes for their agent. Coach note card appears on workout screen.
+12. **Weekly Agent Reviews** — Agents run weekly crons to analyze training data (`get_training_history_summary`, `get_overload_recommendations`, `generate_weekly_summary`) and post coaching notes with formatted markdown rendering.
 
 ## Environment Variables
 
@@ -165,16 +183,23 @@ npm run dev
 ## Database Schema
 
 Key tables (see `swoltracker-schema.sql` for full schema):
-- `profiles` - User profiles (extends Supabase auth.users)
+- `profiles` - User profiles (extends Supabase auth.users), includes onboarding fields
 - `gyms` - Workout groups
 - `gym_members` - Many-to-many gym membership
+- `gym_equipment` - Equipment per gym (populated during onboarding)
 - `user_maxes` - 1RM records
-- `workout_programs` - Weekly workout programs (JSON)
+- `workout_programs` - Weekly workout programs (JSONB)
 - `workout_logs` - Individual set logs
+- `workout_completions` - Whole workout marked complete
 - `buddy_requests` - Buddy/group relationships
-- `error_logs` - Application error tracking (migrations/009-error-logging.sql)
+- `group_messages` - Group chat messages (migrations/013)
+- `error_logs` - Application error tracking (migrations/009)
 - `app_settings` - Key-value store for LLM provider config and API keys
 - `api_usage_logs` - Token usage tracking
+- `api_keys` - MCP API keys for external agents (migrations/021). SHA-256 hashed, `swol_` prefix, max 5 per user
+- `agent_messages` - Coach Board messages between user and agent (migrations/024). Fields: role (user/agent), message_type (chat/weekly_review/program_update/milestone), content (max 5000), week_number, metadata (JSONB)
+- `agent_read_status` - Tracks when user last read agent messages (migrations/024)
+- `app_events` - Bot-native event stream for PRs, completions (migrations/020)
 
 ## AI Integration
 
@@ -196,6 +221,68 @@ Prompt templates are stored in the `prompt_templates` table and are editable via
 import { generateWithLlm } from './lib/llm';
 const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser);
 ```
+
+## AI Agent-Native Architecture
+
+SwolTracker is designed to be **AI agent-native** — users can connect their own AI agents (OpenClaw, Hermes, Claude Desktop, etc.) during onboarding to interact with the app via MCP.
+
+### Onboarding Agent Flow
+1. Step 2 of onboarding ("Connect Your Agent") generates an MCP API key via `create_api_key` RPC
+2. User copies the API key + MCP config JSON to their agent
+3. User completes remaining profile steps (name, gender, age, goals, etc.)
+4. At the generating step, agent-connected users see a copyable context block + live polling for workout programs
+5. As the agent saves programs via `generate_workout_program` MCP tool, week-progress dots fill in real-time
+6. Fallback: "Generate for me instead" uses SwolTracker's built-in LLM proxy
+
+### MCP Server (`api/mcp.js`)
+- **Auth**: `Authorization: Bearer swol_<key>` — SHA-256 hashed lookup in `api_keys` table
+- **Rate limit**: 500 requests/hour per user
+- **Stateless**: Each request creates an isolated MCP server with user-scoped tools
+- **Service role**: Uses `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS for agent writes)
+- **Build**: `cd mcp && npm run build` compiles TypeScript to `mcp/dist/`
+
+### MCP Tools (33+ tools across 6 modules)
+
+| Module | Tools | Purpose |
+|--------|-------|---------|
+| `queries.ts` | `get_profile`, `get_todays_workout`, `get_weekly_workout`, `get_training_history_summary`, `get_overload_recommendations`, `get_streak`, etc. | Read-only data access |
+| `actions.ts` | `log_set`, `save_workout_program`, `mark_workout_complete`, `update_max`, `generate_weekly_summary`, etc. | Write operations |
+| `context.ts` | `get_context_bundle`, `get_streak` | Compressed state (<500 tokens) |
+| `generation.ts` | `get_prompt_template`, `generate_workout_program` | Multi-week program saving |
+| `coaching.ts` | `send_coach_message`, `get_user_messages`, `get_conversation_history` | Coach Board messaging |
+| `natural-language.ts` | `log_exercise`, `log_workout_summary` | NL parsing with fuzzy matching |
+
+### Coach Board
+Async messaging between user and their AI agent, displayed in a slide-up panel (AgentChatPanel) accessible via floating action button (AgentChatFAB). Coach note preview card (CoachNoteCard) shows on the workout screen.
+
+**Message types:**
+- `chat` — general notes between user and agent
+- `weekly_review` — agent's weekly training analysis (rendered as green-accented card)
+- `program_update` — agent's workout program changes (rendered as orange-accented card with optional change metadata)
+- `milestone` — achievement celebrations
+
+**Agent weekly review cron workflow** (prompted via Settings → "Set Up Weekly Reviews"):
+1. Agent calls `get_training_history_summary` for workout data
+2. Agent calls `get_overload_recommendations` for lift progression
+3. Agent calls `generate_weekly_summary` for completion stats
+4. Agent calls `get_streak` for consistency
+5. Agent sends analysis via `send_coach_message` (type: `weekly_review`)
+6. If program adjustments needed: `save_workout_program` + `send_coach_message` (type: `program_update`)
+
+**Content rendering:** Messages support literal `\n` → line breaks and `**bold**` → bold text via the `FormattedText` component in `AgentChatPanel.jsx`.
+
+**Database helpers:**
+```javascript
+await db.getAgentMessages(userId, limit, beforeId);
+await db.sendUserMessage(userId, content);       // role='user'
+await db.deleteAgentMessage(userId, messageId);   // user messages only
+await db.hasUnreadAgentMessages(userId);           // boolean
+await db.markAgentMessagesRead(userId);
+await db.getLatestCoachNote(userId);               // most recent weekly_review/program_update
+await db.hasAgentKey(userId);                      // boolean — has active API key
+```
+
+**Realtime:** `agent_messages` table is added to `supabase_realtime` publication. `swoltracker.jsx` subscribes to INSERT events filtered by user_id for live updates.
 
 ## Current Week Calculation
 
