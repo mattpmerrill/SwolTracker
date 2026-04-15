@@ -2,6 +2,34 @@ import { useEffect, useState } from 'react';
 import { Bot, X, Send, Loader2, Trash2 } from 'lucide-react';
 
 /**
+ * Renders text with basic markdown: **bold**, literal \n → line breaks
+ */
+function FormattedText({ text, className }) {
+  // Replace literal \n with actual newlines
+  const normalized = text.replace(/\\n/g, '\n');
+
+  // Split into segments: bold (**text**) and plain text
+  const parts = normalized.split(/(\*\*[^*]+\*\*)/g);
+
+  return (
+    <span className={className}>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+        }
+        // Convert newlines to <br> within plain text segments
+        return part.split('\n').map((line, j, arr) => (
+          <span key={`${i}-${j}`}>
+            {line}
+            {j < arr.length - 1 && <br />}
+          </span>
+        ));
+      })}
+    </span>
+  );
+}
+
+/**
  * Coach Board — shared async notes between user and their AI coach
  */
 export default function AgentChatPanel({
@@ -44,7 +72,7 @@ export default function AgentChatPanel({
             <span className={`text-xs font-semibold uppercase tracking-wider ${accentText}`}>{label}</span>
             {msg.week_number && <span className="text-xs text-zinc-500">Week {msg.week_number}</span>}
           </div>
-          <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+          <div className="text-sm text-zinc-200 leading-relaxed"><FormattedText text={msg.content} /></div>
           {msg.metadata?.changes && Array.isArray(msg.metadata.changes) && (
             <div className="mt-3 space-y-1">
               {msg.metadata.changes.map((change, i) => (
@@ -83,7 +111,7 @@ export default function AgentChatPanel({
               : 'bg-cyan-500/10 border-cyan-500/20'
           }`}
         >
-          <p className="text-sm break-words whitespace-pre-wrap">{msg.content}</p>
+          <div className="text-sm break-words"><FormattedText text={msg.content} /></div>
           <p className="text-[10px] text-zinc-500 mt-1">
             {msg._optimistic ? (
               <span className="italic">Sending...</span>

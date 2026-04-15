@@ -16,9 +16,11 @@ export default function CoachNoteCard({ note, onOpenChat }) {
   const borderColor = isReview ? 'border-cyan-500/30' : 'border-orange-500/30';
   const labelColor = isReview ? 'text-cyan-400' : 'text-orange-400';
 
-  const truncated = note.content.length > 120
-    ? note.content.slice(0, 120).trimEnd() + '...'
-    : note.content;
+  // Clean up literal \n and markdown for the preview
+  const cleaned = note.content.replace(/\\n/g, ' ').replace(/\*\*/g, '');
+  const truncated = cleaned.length > 120
+    ? cleaned.slice(0, 120).trimEnd() + '...'
+    : cleaned;
 
   const timeAgo = (date) => {
     const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
