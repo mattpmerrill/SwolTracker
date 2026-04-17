@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { Bot, X, ChevronRight } from 'lucide-react';
+import { getString, setString } from '../../utils/storage';
+
+const DISMISSED_KEY = 'swoltracker-dismissed-coach-note';
 
 /**
- * Small card on the workout screen showing the latest coach note
+ * Small card on the workout screen showing the latest coach note.
+ * Dismissal is keyed to the note's id, so dismissing hides the card until
+ * a new coach note arrives (which will have a different id).
  */
 export default function CoachNoteCard({ note, onOpenChat }) {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedId, setDismissedId] = useState(() => getString(DISMISSED_KEY));
 
-  if (!note || dismissed) return null;
+  if (!note || dismissedId === note.id) return null;
+
+  const handleDismiss = () => {
+    setString(DISMISSED_KEY, note.id);
+    setDismissedId(note.id);
+  };
 
   const isReview = note.message_type === 'weekly_review';
   const label = isReview ? 'Weekly Review' : 'Program Update';
@@ -33,7 +43,7 @@ export default function CoachNoteCard({ note, onOpenChat }) {
   return (
     <div className={`mb-4 bg-gradient-to-br ${accentFrom} ${accentTo} rounded-2xl border ${borderColor} p-4 relative`}>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={handleDismiss}
         className="absolute top-3 right-3 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
       >
         <X className="w-4 h-4" />
