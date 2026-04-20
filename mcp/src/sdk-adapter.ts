@@ -19,6 +19,8 @@ import {
   type BotNativeApp,
   type DefinedTool,
   type AppToolResult,
+  type AppToolError,
+  type AppToolErrorCode,
 } from "@bot-native/sdk";
 import { createEventEmitter } from "./bot-native-shim.js";
 import { createQueryTools } from "./tools/queries.js";
@@ -62,21 +64,54 @@ function buildToolKit(supabase: SupabaseClient, userId: string): ToolKit {
 
 type LegacyResult = { success: boolean; message: string; data?: unknown };
 
+/**
+ * Best-effort code inference for legacy `{success: false, message}` results
+ * that haven't been migrated to throw `AppError` yet. Conservative — falls
+ * back to `internal` on anything ambiguous. Tools with a clear failure mode
+ * should throw `AppError.notFound()` / `.invalidArgs()` / etc. directly
+ * instead of relying on this.
+ */
+export function inferLegacyErrorCode(message: string): AppToolErrorCode {
+  const msg = message.toLowerCase();
+  if (/\bnot found\b|\bno\s+\w+\s+found\b|doesn'?t exist/.test(msg)) return "not_found";
+  if (/\bpermission\b|\bforbidden\b|\bnot allowed\b|\bunauthorized\b/.test(msg)) return "forbidden";
+  if (/\brate limit|too many\b/.test(msg)) return "rate_limited";
+  if (/\balready\b|\bduplicate\b|\bconflict\b/.test(msg)) return "conflict";
+  if (/\bmust be\b|\binvalid\b|\brequired\b|\bcannot be\b/.test(msg)) return "invalid_args";
+  return "internal";
+}
+
+const RETRYABLE_BY_CODE: Record<AppToolErrorCode, boolean> = {
+  not_found: false,
+  forbidden: false,
+  invalid_args: false,
+  conflict: false,
+  rate_limited: true,
+  internal: true,
+};
+
+export function legacyErrorEnvelope(message: string): AppToolError {
+  const code = inferLegacyErrorCode(message);
+  return { code, message, retryable: RETRYABLE_BY_CODE[code] };
+}
+
 function toAppResult(r: LegacyResult): AppToolResult {
-  return {
+  const base: AppToolResult = {
     ok: r.success,
     message: r.message,
     data: (r.data ?? {}) as Record<string, unknown>,
   };
+  return r.success ? base : { ...base, error: legacyErrorEnvelope(r.message) };
 }
 
 /** For tools whose wire format is the JSON-stringified `data` payload. */
 function toAppResultAsJson(r: LegacyResult): AppToolResult {
-  return {
+  const base: AppToolResult = {
     ok: r.success,
     message: JSON.stringify(r.data ?? {}),
     data: (r.data ?? {}) as Record<string, unknown>,
   };
+  return r.success ? base : { ...base, error: legacyErrorEnvelope(r.message) };
 }
 
 export function buildApp(supabase: SupabaseClient): BotNativeApp {

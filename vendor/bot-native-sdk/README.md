@@ -13,7 +13,13 @@ This is a vendored build of `@bot-native/sdk` from
 cd ~/Work/bot-native-sdk && npm run build:sdk
 rm -rf /Users/Joi/Work/SwolTracker/vendor/bot-native-sdk/dist
 cp -R packages/sdk/dist /Users/Joi/Work/SwolTracker/vendor/bot-native-sdk/
+find /Users/Joi/Work/SwolTracker/vendor/bot-native-sdk/dist -name "*.map" -delete
 ```
+
+Sourcemaps are stripped — they point at source paths under
+`~/Work/bot-native-sdk/` that don't exist in this repo, and Vitest
+warns about them. Agents debugging SDK internals should reach for the
+source repo directly.
 
 Update `version` in the vendored `package.json` to match the new SDK
 commit, then run `npm install` in SwolTracker to refresh the lockfile.
