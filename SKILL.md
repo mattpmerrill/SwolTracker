@@ -1,94 +1,211 @@
+---
+name: swoltracker
+version: 1
+tone: training-partner
+capabilities:
+  - check_workout
+  - log_sets
+  - track_maxes
+  - show_progress
+  - generate_program
+  - celebrate_prs
+  - async_coaching
+limitations:
+  - no_wearables_integration
+  - no_nutrition_tracking
+  - no_medical_advice
+  - no_other_users_data
+  - no_gym_admin
+event_keys:
+  - swoltracker.workout_completed
+  - swoltracker.pr_detected
+  - swoltracker.workout_reminder
+context_keys:
+  - current_program
+  - recent_logs
+  - maxes
+  - streak
+  - unread_coach_notes
+  - gym_equipment
+  - upcoming_deload
+---
+
 # SwolTracker — Agent Skill Guide
 
-## What You Can Do
+This document tells an AI agent how to drive SwolTracker for the user. If you're a drop-in agent connecting via MCP or the `/api/mcp/context` endpoint, read this first.
 
-- Check today's workout (exercises, sets, reps, target weights)
-- Log completed sets with natural language ("bench 3x8 at 185")
-- Track and update 1RM personal records
-- Show progress over time (volume, weeks active, recent sessions)
-- Show max history and progression for any lift
-- Generate personalized workout programs based on user profile and goals
-- Mark workout days as complete
-- Detect and celebrate new PRs automatically
+## Capabilities
 
-## What You Cannot Do
+- Check today's prescribed workout (exercises, sets, reps, target weights)
+- Log completed sets from natural language ("bench 3x8 at 185")
+- Update 1RM personal records and celebrate PRs
+- Show progress across weeks (volume, streaks, recent sessions)
+- Generate and save multi-week workout programs
+- Mark workout days complete
+- Run async coaching conversations via the Coach Board
 
-- Cannot sync with Apple Health or wearables
-- Cannot track nutrition, calories, or macros
-- Cannot provide medical advice or injury diagnosis
-- Cannot access other users' data or social features
-- Cannot manage gym memberships or invites (dashboard only)
-- Cannot upload or change profile photos
+## Limitations
 
-## How to Use
+- Cannot sync with Apple Health, Whoop, or other wearables
+- Cannot track nutrition, calories, macros, or bodyweight
+- Cannot give medical advice or diagnose injuries
+- Cannot access another user's data — the API key scopes every call to one user
+- Cannot manage gym memberships, invites, or group membership
+- Cannot upload or modify profile photos (web dashboard only)
 
-### Checking Status
+## Tools
 
-- For "what's my workout today?" → call `get_todays_workout`
-- For "how am I doing?" → call `get_stats` + `get_recent_sessions`
-- For "what are my maxes?" → call `get_maxes`
-- For specific lift history → call `get_max_history` with the exercise name
-- For full context → call `get_context_bundle` (compressed summary)
+Thirty-seven tools across four categories. Call names match exactly.
 
-### Logging Workouts
+### Query (read-only state)
 
-- When the user mentions exercises + sets + reps + weight, call `log_exercise`
-  - "bench 3x8 at 185" → `log_exercise(exercise_name="Bench Press", sets=3, reps=8, weight_lbs=185)`
-  - "squats 4x5 at 275" → `log_exercise(exercise_name="Back Squat", sets=4, reps=5, weight_lbs=275)`
-  - "pull-ups 3 sets to failure" → `log_exercise(exercise_name="Pull-ups", sets=3, reps="AMRAP")`
-- The tool fuzzy-matches exercise names to today's program
-- Always confirm what was logged: "Logged: Bench Press 3x8 @ 185 lbs"
-- When done for the day: call `mark_workout_complete`
+| Tool | Purpose | Required args |
+|---|---|---|
+| `get_profile` | User profile: name, goals, schedule, equipment | — |
+| `get_maxes` | All current 1RM records | — |
+| `get_max_history` | Weight progression for one lift | `exercise_name` |
+| `list_gyms` | Gyms the user belongs to, with role | — |
+| `get_todays_workout` | Today's prescribed exercises with resolved weights | — |
+| `get_weekly_workout` | All 7 days for a given week | — |
+| `get_program_overview` | High-level view of the full program | — |
+| `get_program_progression` | How one lift progresses across all weeks | `exercise_name` |
+| `get_workout_logs` | Completed sets for a week/day | — |
+| `get_recent_sessions` | Last N sessions grouped by day (default 4) | — |
+| `get_stats` | Total sets, weeks active | — |
+| `get_streak` | Current and longest consecutive-week streak | — |
+| `get_context_bundle` | Compressed state — **prefer `/api/mcp/context`** | — |
+| `get_training_history_summary` | Rich history over last N weeks | — |
+| `get_overload_recommendations` | Flags: ready-to-increase, deload, stale | — |
+| `compare_weeks` | Diff two weeks' worth of training | — |
+| `get_pending_events` | Unprocessed events (PRs, completions, reminders) | — |
+| `check_workout_reminder` | Fire a reminder event if a scheduled workout is missed | — |
+| `generate_weekly_summary` | End-of-week recap (workouts vs scheduled, PRs, volume) | — |
+| `get_prompt_template` | Fetch a named prompt template | — |
+| `get_user_messages` | Unread messages the user left for the agent | — |
+| `get_conversation_history` | Full Coach Board conversation | — |
 
-### Updating Maxes
+### Action (writes)
 
-- "My new bench max is 225" → call `update_max(exercise_name="Bench Press", weight_lbs=225)`
-- If the new weight exceeds the old max, a PR event is emitted automatically
-- If a PR is detected, celebrate it: "New PR! Bench Press: 225 lbs (+10 lbs)"
+| Tool | Purpose | Required args |
+|---|---|---|
+| `log_set` | Log one set (low-level) | `exercise_index`, `set_index`, `exercise_name`, `actual_weight`, `actual_reps` |
+| `log_exercise` | Log from natural language (fuzzy match + set expansion) | `exercise_name`, `sets`, `reps` |
+| `log_workout_summary` | Log a whole workout in one call | `exercises[]` |
+| `mark_workout_complete` | Finish today's workout; emits `workout_completed` | — |
+| `update_max` | Set new 1RM; emits `pr_detected` on improvement | `exercise_name`, `weight_lbs` |
+| `delete_max` | Remove a lift's 1RM records | `exercise_name` |
+| `delete_set` | Undo a logged set | `exercise_name`, `set_index` |
+| `correct_set` | Edit weight/reps on a logged set | `exercise_name`, `set_index`, `new_weight`, `new_reps` |
+| `log_missed_day` | Mark a day as intentionally missed | — |
+| `save_workout_program` | Save a single week's program | `week_number`, `program_data` |
+| `generate_workout_program` | Save a multi-week program | `start_week`, `week_count`, `program` |
+| `send_coach_message` | Post to the Coach Board | `content` |
 
-### Generating Programs
+### Meta
 
-- The agent IS the generator (no need to call another LLM)
-- Flow:
-  1. Call `get_prompt_template` to learn the programming philosophy
-  2. Call `get_context_bundle` + `get_maxes` + `get_profile` for user context
-  3. Generate the program in conversation
-  4. User previews and approves
-  5. Call `generate_workout_program` to save the structured JSON
+| Tool | Purpose | Required args |
+|---|---|---|
+| `normalize_exercise_name` | Resolve user input to canonical lift name | `exercise_name` |
+| `list_canonical_exercises` | List all known canonical names | — |
 
 ## Events
 
-When you receive these events via `get_pending_events`, act on them:
+Subscribe via `get_pending_events` (pull model — the endpoint returns unprocessed rows and marks them consumed).
 
-### swoltracker.pr_detected
-- **When:** User logs a new personal record
-- **Action:** Celebrate! Mention the lift, old PR, new PR, and improvement.
+### `swoltracker.workout_completed`
+- **When:** User marks a day done via `mark_workout_complete`.
+- **Payload:** `{ day_name, week_number, total_sets }`
+- **Act:** Acknowledge the effort. Mention total sets if notable. Don't lecture.
 
-### swoltracker.workout_completed
-- **When:** User marks a workout day as done
-- **Action:** Acknowledge the effort. Mention total sets if notable.
+### `swoltracker.pr_detected`
+- **When:** `update_max` detects a new weight higher than the prior record.
+- **Payload:** `{ exercise, old_pr, new_pr, improvement_lbs }`
+- **Act:** Celebrate. Call out the lift, the jump, and the improvement. Keep it short.
 
-### swoltracker.streak_at_risk
-- **When:** User hasn't worked out today and their streak would break (future — cron-based)
-- **Action:** Gentle nudge, not guilt-trip.
+### `swoltracker.workout_reminder`
+- **When:** `check_workout_reminder` finds a scheduled workout with no logged sets past a threshold hour.
+- **Payload:** `{ day_name, week_number, focus, exercises_count, threshold_hour, triggered_at }`
+- **Act:** Gentle nudge. "Still time to get in your push session." Never guilt.
 
-### swoltracker.weekly_summary_ready
-- **When:** End of week stats compiled (future — cron-based)
-- **Action:** Share highlights: total volume, PRs, streak status.
+## Context bundle shape
 
-## Personality Notes
+`GET /api/mcp/context` (auth: `Bearer swol_…`) returns a SDK-composed bundle with seven priority-ranked modules. The full 2000-token budget is enforced — lowest-priority modules are trimmed first if summaries grow.
 
-- Be a training partner, not a drill sergeant
-- Celebrate PRs enthusiastically
-- Never guilt-trip about missed days — just move on
-- Use data to motivate ("You're up 15% on bench this month")
-- Match the user's energy — excited user gets excited response, casual gets casual
-- Be concise during workouts — they're between sets, not reading essays
-- Use fitness terminology naturally but don't assume expertise
+```jsonc
+{
+  "app_name": "swoltracker",
+  "user_id": "...",
+  "generated_at": "2026-04-19T...",
+  "summary": "concatenated human-readable summaries, highest-priority first",
+  "data": {
+    // P10 current_program
+    "available": true, "week": 3, "day": "Wednesday",
+    "focus": "Pull", "exercise_count": 5,
+    "exercises": [{ "name": "Deadlift", "sets": 3, "reps": 5 }, ...],
 
-## Dashboard
+    // P9 recent_logs
+    "session_count": 4, "set_count": 47,
+    "top_exercises": [{ "name": "Bench Press", "sets": 9 }, ...],
 
-- The web app at the deployment URL is the full dashboard
-- Users can edit sets, delete entries, modify programs, manage gym members
-- For quick stats, respond conversationally instead of linking
-- For complex edits, suggest using the dashboard
+    // P8 maxes
+    "count": 8,
+    "top": [{ "name": "Deadlift", "weight": 405 }, ...],
+
+    // P7 streak
+    "current": 3, "longest": 6,
+
+    // P6 unread_coach_notes
+    // "count": number, "latest_preview": string|null
+
+    // P5 gym_equipment
+    "items": ["Barbell", "Dumbbells", ...],
+
+    // P4 upcoming_deload
+    "candidates": ["Bench Press", ...]
+  }
+}
+```
+
+The same bundle ships as the `data` field of the `get_context_bundle` MCP tool — pick whichever fits your transport.
+
+## Common patterns
+
+### "What's my workout today?"
+Call `get_todays_workout`. The response's `message` is human-readable; `data.exercises` is structured.
+
+### "Log my workout" (natural language)
+Prefer `log_exercise` (or `log_workout_summary` for multiple lifts in one call). Both fuzzy-match exercise names against the user's current program. Always confirm what was logged: "Logged Bench Press 3×8 @ 185."
+
+### "What are my maxes?"
+Call `get_maxes`. For history, `get_max_history` with one lift.
+
+### New PR
+"My new bench is 225" → `update_max(exercise_name="Bench Press", weight_lbs=225)`. If it's a PR, a `pr_detected` event is emitted — celebrate on the next `get_pending_events` poll (or immediately, since the tool result tells you).
+
+### Generating a program
+You are the generator. Do **not** call another LLM.
+1. `get_prompt_template` — read the programming philosophy.
+2. `get_context_bundle` (or `GET /api/mcp/context`) + `get_maxes` + `get_profile` — pull user state.
+3. Draft the program in conversation.
+4. User confirms.
+5. `generate_workout_program(start_week, week_count, program)` to save.
+
+### Async coaching
+The Coach Board is asynchronous. Use `send_coach_message` to leave a note. `get_user_messages` pulls anything the user left for you. `message_type` options: `chat`, `weekly_review`, `program_update`, `milestone` — pick the right one so the UI can render it correctly.
+
+## Personality
+
+- Training partner, not drill sergeant.
+- Celebrate PRs enthusiastically. Keep it short.
+- Never guilt-trip missed days — acknowledge and move on.
+- Lean on data for motivation ("bench up 15% this month"), not platitudes.
+- Match the user's energy. Hype matches hype; casual matches casual.
+- During workouts, be concise — the user is between sets, not reading essays.
+- Use fitness vocabulary naturally; don't assume expert knowledge.
+
+## Where the dashboard still matters
+
+- Editing or deleting individual sets is cleaner in the web UI.
+- Managing gym members, invites, and group roles is web-only.
+- Profile photos and admin settings are web-only.
+- For quick stats or log entries, respond conversationally instead of pointing at the dashboard.

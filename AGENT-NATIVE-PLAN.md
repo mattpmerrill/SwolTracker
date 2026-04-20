@@ -177,10 +177,10 @@ Goal: the things that make the agent a driver, not just an assistant.
 - [ ] Kill the onboarding polling loop in `Onboarding.jsx` — replace with an event subscription. **Effort: M**
   - **Done when:** Agent gets push-style notifications for the six events; onboarding live-dots driven by events not polling.
 
-### 3.3 SKILL.md for SwolTracker
-- [ ] Author a structured `SKILL.md` at repo root (replace the existing one if it's just a stub). Sections: What you can do, What you can't do, Tools, Events you'll receive, Context bundle shape, Personality/tone guidance. **Effort: M**
-- [ ] Serve it from `/api/mcp/skill` so agents can fetch at connect time. **Effort: S**
-  - **Done when:** A new agent with no SwolTracker-specific prompting can be dropped in and drive the app correctly.
+### 3.3 SKILL.md for SwolTracker — ✅ DONE
+- [x] Author a structured `SKILL.md` at repo root (replace the existing one if it's just a stub). Sections: What you can do, What you can't do, Tools, Events you'll receive, Context bundle shape, Personality/tone guidance. **Effort: M**
+- [x] Serve it from `/api/mcp/skill` so agents can fetch at connect time. **Effort: S**
+  - **Result:** Rewritten `SKILL.md` with YAML frontmatter (name, version, tone, capabilities, limitations, event_keys, context_keys) aligning with the Phase 4.2 schema target. Tool catalog grounded in the actual 37 tools registered in `sdk-adapter.ts`, grouped by category (query / action / meta). Events list reflects only the three actually emitted today (`workout_completed`, `pr_detected`, `workout_reminder`) — the two aspirational entries (`streak_at_risk`, `weekly_summary_ready`) were removed until cron work lands. Context bundle section mirrors the 7 modules from 3.1. New `/api/mcp/skill` endpoint serves either `text/markdown` or `application/json` (with parsed frontmatter) based on Accept header; publicly cacheable for 5min. Frontmatter + content invariants covered by a new test file.
 
 ### 3.4 Agent-initiated multi-step write tools
 - [ ] `shift_program(weeks_forward: number)` — shifts program start date, handles week rollover. **Effort: S**
@@ -334,3 +334,4 @@ This is the order of pickup when someone sits down to work:
 - 2026-04-19: **Task 0.1 complete** — security review done. Grade D, 4 critical + 6 high findings. New Phase 0 tasks 0.7–0.12 created. Pivoting off 0.6 (audit log) to fix the criticals first.
 - 2026-04-19: **Task 0.6 complete** — `tool_call_audit` table + RLS + `get_my_tool_call_audit` RPC live via migration 028. `api/mcp.js` writes one audit row per `tools/call` (args hashed). Settings → Agent Activity renders last 50 calls. Build clean.
 - 2026-04-19: **Task 3.1 complete** — First-class ContextBundle endpoint shipped. New `/api/mcp/context` HTTP route returns a SDK-composed bundle with 7 priority-ordered modules (current_program P10 → upcoming_deload P4) under a 2000-token budget. `get_context_bundle` MCP tool rewritten to share the same module factory, replacing ~100 lines of ad-hoc summary code. Shared MCP auth/rate-limit/audit helpers extracted to `api/_mcp-shared.js`. 9 new tests (58 total, all green).
+- 2026-04-19: **Task 3.3 complete** — SKILL.md rewritten with YAML frontmatter (forward-compat with Phase 4.2 validator) + sections for Capabilities, Limitations, Tools (37 catalogued by category), Events (grounded — 3 real, 2 aspirational removed), Context bundle shape (mirrors the 7 modules), and Personality. New `/api/mcp/skill` endpoint serves markdown or JSON (with parsed frontmatter) based on Accept header. 5 new tests pin the frontmatter shape and prevent aspirational-event drift. 63 tests green.
