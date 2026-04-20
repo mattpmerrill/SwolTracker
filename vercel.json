@@ -8,6 +8,9 @@
     },
     "api/mcp.js": {
       "maxDuration": 30
+    },
+    "api/mcp/context.js": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

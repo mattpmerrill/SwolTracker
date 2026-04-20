@@ -165,11 +165,11 @@ Goal: SwolTracker's MCP layer becomes the first real consumer of `bot-native-sdk
 
 Goal: the things that make the agent a driver, not just an assistant.
 
-### 3.1 First-class ContextBundle endpoint
-- [ ] `get_context_bundle` becomes its own HTTP endpoint under `/api/mcp/context`, returning the compressed bundle in one call. **Effort: M**
-- [ ] Use SDK's `ContextModule` with priorities: current program (P10), last 7 days logs (P9), maxes (P8), streak (P7), unread coach notes (P6), gym equipment (P5), upcoming deload (P4). **Effort: M**
-- [ ] Enforce 2000-token budget via SDK's `buildContextBundleFromModules`. **Effort: S**
-  - **Done when:** Single call returns ≤2000 tokens; tests prove priority-based trimming kicks in at budget.
+### 3.1 First-class ContextBundle endpoint — ✅ DONE
+- [x] `get_context_bundle` becomes its own HTTP endpoint under `/api/mcp/context`, returning the compressed bundle in one call. **Effort: M**
+- [x] Use SDK's `ContextModule` with priorities: current program (P10), last 7 days logs (P9), maxes (P8), streak (P7), unread coach notes (P6), gym equipment (P5), upcoming deload (P4). **Effort: M**
+- [x] Enforce 2000-token budget via SDK's `buildContextBundleFromModules`. **Effort: S**
+  - **Result:** Both the `/api/mcp/context` HTTP endpoint and the `get_context_bundle` MCP tool share a single source of truth — `createContextModules()` in `mcp/src/context-modules.ts`. Tests cover per-module happy-path + priority trimming when budget is exceeded. Shared MCP auth/rate-limit/audit helpers extracted to `api/_mcp-shared.js`.
 
 ### 3.2 Event subscriptions replace polling
 - [ ] Emit events from SwolTracker tools: `workout.completed`, `workout.missed`, `max.updated`, `program.saved`, `milestone.hit`, `week.rolled_over`. **Effort: M**
@@ -333,3 +333,4 @@ This is the order of pickup when someone sits down to work:
 - 2026-04-19: **Task 0.5 complete** — per-category + per-tool MCP rate limits added to `api/mcp.js`. Syntax checked. Live verification pending.
 - 2026-04-19: **Task 0.1 complete** — security review done. Grade D, 4 critical + 6 high findings. New Phase 0 tasks 0.7–0.12 created. Pivoting off 0.6 (audit log) to fix the criticals first.
 - 2026-04-19: **Task 0.6 complete** — `tool_call_audit` table + RLS + `get_my_tool_call_audit` RPC live via migration 028. `api/mcp.js` writes one audit row per `tools/call` (args hashed). Settings → Agent Activity renders last 50 calls. Build clean.
+- 2026-04-19: **Task 3.1 complete** — First-class ContextBundle endpoint shipped. New `/api/mcp/context` HTTP route returns a SDK-composed bundle with 7 priority-ordered modules (current_program P10 → upcoming_deload P4) under a 2000-token budget. `get_context_bundle` MCP tool rewritten to share the same module factory, replacing ~100 lines of ad-hoc summary code. Shared MCP auth/rate-limit/audit helpers extracted to `api/_mcp-shared.js`. 9 new tests (58 total, all green).

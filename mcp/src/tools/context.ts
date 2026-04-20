@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError } from "@bot-native/sdk";
-import { buildContextBundle } from "../bot-native-shim.js";
-import type { ToolResult, CurrentMax } from "../types.js";
-import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import { AppError, buildContextBundleFromModules } from "@bot-native/sdk";
+import type { ToolResult } from "../types.js";
+import { getCurrentWeek } from "../week-calc.js";
+import { createContextModules } from "../context-modules.js";
 import type { createQueryTools } from "./queries.js";
+
+const CONTEXT_MAX_TOKENS = 2000;
 
 export function createContextTools(
   supabase: SupabaseClient,
@@ -95,118 +97,12 @@ export function createContextTools(
   }
 
   async function get_context_bundle(): Promise<ToolResult> {
-    // Gather all data in parallel
-    const [profileResult, maxesResult, statsResult, recentResult, todayResult] =
-      await Promise.all([
-        queries.get_profile(),
-        queries.get_maxes(),
-        queries.get_stats(),
-        queries.get_recent_sessions(1),
-        queries.get_todays_workout(),
-      ]);
-
-    const profile = profileResult.data as Record<string, unknown>;
-    const maxes = (maxesResult.data as any)?.maxes ?? {};
-    const stats = statsResult.data as Record<string, unknown>;
-    const sessions = (recentResult.data as any)?.sessions ?? [];
-    const todayData = todayResult.data as Record<string, unknown>;
-
-    // Current week + day
-    const currentWeek = getCurrentWeek(
-      (profile.program_start_date as string) ?? null
-    );
-    const todayName = getTodayName();
-
-    // Today's workout details (now includes logged status from 2C)
-    const todayFocus = (todayData.focus as string) ?? "Rest day";
-    const todayExercises = (todayData.exercises as any[]) ?? [];
-    const todayExerciseCount = todayExercises.length;
-    const todayLoggedSets = (todayData.total_logged_sets as number) ?? 0;
-    const todayPrescribedSets = (todayData.total_prescribed_sets as number) ?? 0;
-    const todayCompleted = (todayData.day_completed as boolean) ?? false;
-    const todayCompletedExercises = (todayData.completed_exercises as number) ?? 0;
-    const gymId = (todayData.gym_id as string) ?? await queries.resolveGymId();
-
-    // This week's completions
-    let completionsThisWeek = 0;
-    let totalDaysWithWorkout = 0;
-    let streak = { currentStreakWeeks: 0, longestStreakWeeks: 0, completedWeeks: [] as number[] };
-
-    if (gymId) {
-      const [completionRes, programRes, streakRes] = await Promise.all([
-        supabase
-          .from("workout_completions")
-          .select("id, day_name")
-          .eq("user_id", userId)
-          .eq("gym_id", gymId)
-          .eq("week_number", currentWeek),
-        supabase
-          .from("workout_programs")
-          .select("program_data")
-          .eq("gym_id", gymId)
-          .eq("week_number", currentWeek)
-          .single(),
-        calculateStreak(gymId),
-      ]);
-
-      completionsThisWeek = completionRes.data?.length ?? 0;
-      streak = streakRes;
-
-      if (programRes.data?.program_data) {
-        totalDaysWithWorkout = Object.values(programRes.data.program_data).filter(
-          (day: any) => day?.exercises?.length > 0
-        ).length;
-      }
-    }
-
-    // Top 3 maxes
-    const maxEntries = Object.entries(maxes as Record<string, number>)
-      .sort(([, a], [, b]) => (b as number) - (a as number))
-      .slice(0, 3);
-    const topMaxes = Object.fromEntries(maxEntries);
-
-    // Last workout
-    const lastSession = sessions[0];
-    const lastWorkout = lastSession
-      ? `${lastSession.day_name} — ${lastSession.exercises.length} exercises`
-      : "None yet";
-
-    const userName = (profile.name as string) ?? "User";
-    const workoutDays = (profile.workout_days as string[]) ?? [];
-    const totalSets = (stats.totalSets as number) ?? 0;
-    const weeksActive = (stats.weeksActive as number) ?? 0;
-
-    // Build summary string
-    const todayStatus = todayCompleted
-      ? `Today (${todayName}) is complete ✓ — ${todayLoggedSets}/${todayPrescribedSets} sets done.`
-      : todayLoggedSets > 0
-        ? `Today (${todayName}) is in progress — ${todayLoggedSets}/${todayPrescribedSets} sets done (${todayCompletedExercises}/${todayExerciseCount} exercises complete).`
-        : todayFocus === "Rest day"
-          ? `Today (${todayName}) is a rest day.`
-          : `Today (${todayName}) — ${todayFocus}, ${todayExerciseCount} exercises — not started yet.`;
-
-    const streakStr = streak.currentStreakWeeks > 0
-      ? `🔥 ${streak.currentStreakWeeks}-week streak.`
-      : "No active streak.";
-
-    const summary = `${userName} is on Week ${currentWeek}. ${todayStatus} Completed ${completionsThisWeek}/${totalDaysWithWorkout || workoutDays.length} workouts this week. ${streakStr} ${totalSets} total sets across ${weeksActive} active weeks. Last workout: ${lastWorkout}.`;
-
-    const bundle = buildContextBundle("swoltracker", userId, summary, {
-      current_week: currentWeek,
-      today_name: todayName,
-      today_focus: todayFocus,
-      today_exercise_count: todayExerciseCount,
-      today_logged_sets: todayLoggedSets,
-      today_prescribed_sets: todayPrescribedSets,
-      today_completed: todayCompleted,
-      today_completed_exercises: todayCompletedExercises,
-      workouts_this_week: `${completionsThisWeek}/${totalDaysWithWorkout || workoutDays.length}`,
-      current_streak_weeks: streak.currentStreakWeeks,
-      longest_streak_weeks: streak.longestStreakWeeks,
-      total_sets: totalSets,
-      weeks_active: weeksActive,
-      top_maxes: topMaxes,
-      last_workout: lastWorkout,
+    const bundle = await buildContextBundleFromModules({
+      appName: "swoltracker",
+      userId,
+      modules: createContextModules(),
+      deps: { supabase, userId },
+      maxTokens: CONTEXT_MAX_TOKENS,
     });
 
     return {
