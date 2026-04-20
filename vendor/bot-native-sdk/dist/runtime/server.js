@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isAppError } from "./errors.js";
 function createRequestContext(identity, transport) {
     return {
         identity,
@@ -13,11 +14,52 @@ function createRequestContext(identity, transport) {
 function toMcpResponse(text) {
     return { content: [{ type: "text", text }] };
 }
+/** Convert any thrown value into a canonical failing AppToolResult. */
+export function toolResultFromThrown(error) {
+    if (isAppError(error)) {
+        return { ok: false, message: error.message, error: error.toToolError() };
+    }
+    const message = error instanceof Error ? error.message : "Unknown tool error";
+    const envelope = { code: "internal", message, retryable: true };
+    return { ok: false, message, error: envelope };
+}
+/** Ensure every ok: false result carries a structured error envelope. */
+export function ensureErrorEnvelope(result) {
+    if (result.ok || result.error)
+        return result;
+    return {
+        ...result,
+        error: { code: "internal", message: result.message, retryable: true },
+    };
+}
+/**
+ * Serialize a tool result into the single text payload the MCP text-only
+ * renderer can transmit. Successful results pass their `message` through
+ * unchanged; failures get JSON-encoded so agents can parse `error.code`.
+ */
+export function serializeResult(result) {
+    if (result.ok)
+        return result.message;
+    const payload = {
+        ok: false,
+        message: result.message,
+        error: result.error,
+    };
+    if (result.data !== undefined)
+        payload.data = result.data;
+    return JSON.stringify(payload);
+}
 function registerTool(server, app, tool, requestContextFactory) {
     server.tool(tool.name, tool.description, tool.schema, async (params) => {
         const request = await requestContextFactory();
-        const result = await tool.execute(params, { request, app });
-        return toMcpResponse(result.message);
+        let result;
+        try {
+            result = ensureErrorEnvelope(await tool.execute(params, { request, app }));
+        }
+        catch (error) {
+            result = toolResultFromThrown(error);
+        }
+        return toMcpResponse(serializeResult(result));
     });
 }
 function createMcpServer(app, requestContextFactory) {

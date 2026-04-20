@@ -1,6 +1,6 @@
 {
   "name": "@bot-native/sdk",
-  "version": "0.1.0-vendored",
+  "version": "0.1.0-vendored-c78dc01",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

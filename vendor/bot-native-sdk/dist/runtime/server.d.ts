@@ -1,7 +1,7 @@
 import { type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { AppIdentity } from "../contracts/types.js";
+import type { AppIdentity, AppToolResult } from "../contracts/types.js";
 import type { BotNativeApp } from "./tool.js";
 export interface StdioServerOptions {
     /** Fixed identity for local development. */
@@ -15,6 +15,16 @@ export interface HttpServerOptions {
     /** Host to bind to. Defaults to "127.0.0.1". */
     host?: string;
 }
+/** Convert any thrown value into a canonical failing AppToolResult. */
+export declare function toolResultFromThrown(error: unknown): AppToolResult;
+/** Ensure every ok: false result carries a structured error envelope. */
+export declare function ensureErrorEnvelope(result: AppToolResult): AppToolResult;
+/**
+ * Serialize a tool result into the single text payload the MCP text-only
+ * renderer can transmit. Successful results pass their `message` through
+ * unchanged; failures get JSON-encoded so agents can parse `error.code`.
+ */
+export declare function serializeResult(result: AppToolResult): string;
 /**
  * Start an MCP server over stdio for local development.
  * Identity is resolved once at startup via `devIdentity`, `resolveDevIdentity`,

@@ -5,5 +5,6 @@ export { buildContextBundleFromModules } from "./context/module.js";
 export { buildContextBundle } from "./context/bundle.js";
 export { createBotNativeApp, withAuth } from "./runtime/app.js";
 export { createStdioServer, createHttpHandler, createHttpServer, handleToolError, } from "./runtime/server.js";
+export { AppError, isAppError } from "./runtime/errors.js";
 export { defineTool, } from "./runtime/tool.js";
 //# sourceMappingURL=index.js.map

@@ -60,6 +60,28 @@ export interface ContextBundle {
     /** Structured key-value data the agent can reference. */
     data: Record<string, unknown>;
 }
+/**
+ * Canonical error codes for tool failures. Agents branch on these instead of
+ * parsing human-readable messages.
+ *
+ * - `not_found` — a referenced resource doesn't exist.
+ * - `forbidden` — caller lacks permission for the requested resource or action.
+ * - `rate_limited` — caller has exceeded a quota; retryable after a cooldown.
+ * - `invalid_args` — parameters failed validation or semantic checks.
+ * - `conflict` — the operation conflicts with existing state (e.g. already applied).
+ * - `internal` — unexpected server-side failure. Usually retryable.
+ */
+export type AppToolErrorCode = "not_found" | "forbidden" | "rate_limited" | "invalid_args" | "conflict" | "internal";
+/** Structured error payload attached to failing tool results. */
+export interface AppToolError {
+    code: AppToolErrorCode;
+    /** Human-readable message (same or more specific than result.message). */
+    message: string;
+    /** Whether the agent can retry the same call and reasonably expect a different outcome. */
+    retryable: boolean;
+    /** Optional structured details for agents that want to reason about specifics. */
+    details?: Record<string, unknown>;
+}
 /** Canonical result envelope returned by all MCP tools. */
 export interface AppToolResult {
     ok: boolean;
@@ -68,6 +90,8 @@ export interface AppToolResult {
     data?: Record<string, unknown>;
     /** When true, the agent should re-fetch the context bundle before the next reasoning step. */
     contextInvalidated?: boolean;
+    /** Structured error payload. Present iff `ok` is false. */
+    error?: AppToolError;
 }
 /** Resolved identity for the current request. */
 export interface AppIdentity {
