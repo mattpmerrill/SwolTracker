@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AppError } from "@bot-native/sdk";
 import { buildContextBundle } from "../bot-native-shim.js";
 import type { ToolResult, CurrentMax } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
@@ -69,7 +70,7 @@ export function createContextTools(
   async function get_streak(): Promise<ToolResult> {
     const gymId = await queries.resolveGymId();
     if (!gymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const { currentStreakWeeks, longestStreakWeeks, completedWeeks } =

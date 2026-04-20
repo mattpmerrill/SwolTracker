@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isAppError } from '@bot-native/sdk';
 import { inferLegacyErrorCode, legacyErrorEnvelope, buildApp } from '../sdk-adapter.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
 
@@ -50,21 +51,22 @@ describe('legacyErrorEnvelope', () => {
 });
 
 describe('buildApp end-to-end envelope shape', () => {
-  it('get_profile with missing profile returns {ok: false, error: not_found}', async () => {
+  it('get_profile with missing profile throws AppError.notFound (envelope produced by SDK registerTool)', async () => {
     const sb = createMcpMockSupabase();
     const app = buildApp(sb as any);
     const tool = app.tools.find((t) => t.name === 'get_profile')!;
-    const result = await tool.execute(
-      {},
-      {
-        request: { identity: { userId: 'u1' }, requestId: 'r1', transport: 'http' },
-        app,
-      }
-    );
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe('not_found');
-    expect(result.error?.retryable).toBe(false);
-    expect(result.error?.message).toBe('Profile not found.');
+    await expect(
+      tool.execute(
+        {},
+        {
+          request: { identity: { userId: 'u1' }, requestId: 'r1', transport: 'http' },
+          app,
+        }
+      )
+    ).rejects.toSatisfy((e: unknown) => {
+      if (!isAppError(e)) return false;
+      return e.code === 'not_found' && e.message === 'Profile not found.' && e.retryable === false;
+    });
   });
 
   it('successful query tools do not attach an error field', async () => {

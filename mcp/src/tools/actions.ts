@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AppError } from "@bot-native/sdk";
 import type { EventEmitter } from "../bot-native-shim.js";
 import type { ToolResult, WeekProgram } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
@@ -77,7 +78,7 @@ export function createActionTools(
     );
 
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const entry: WorkoutLogEntry = {
@@ -163,7 +164,7 @@ export function createActionTools(
   ): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const canonical = normalizeExerciseName(exerciseName);
@@ -219,7 +220,7 @@ export function createActionTools(
   ): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const canonical = normalizeExerciseName(exerciseName);
@@ -277,7 +278,7 @@ export function createActionTools(
   ): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const { data, error } = await supabase
@@ -418,7 +419,7 @@ export function createActionTools(
   ): Promise<ToolResult> {
     const resolvedGymId = await queries.resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const { data, error } = await supabase
@@ -503,7 +504,7 @@ export function createActionTools(
   async function generate_weekly_summary(weekNumber?: number, gymId?: string): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, getTodayName());
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const { gymId: resolvedGymId, weekNumber: week } = slot;
@@ -622,7 +623,7 @@ export function createActionTools(
   async function check_workout_reminder(thresholdHour: number = 16, gymId?: string): Promise<ToolResult> {
     const resolvedGymId = await queries.resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const todayName = getTodayName();
@@ -749,7 +750,7 @@ export function createActionTools(
   ): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName ?? getTodayName());
     if (!slot) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     // Verify it's actually a workout day (not a rest day)
@@ -817,7 +818,7 @@ export function createActionTools(
   async function get_missed_days(weekNumber?: number, gymId?: string): Promise<ToolResult> {
     const resolvedGymId = await queries.resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     let query = supabase

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AppError } from "@bot-native/sdk";
 import { normalizeExerciseName } from "../exercise-normalizer.js";
 import type {
   Profile,
@@ -98,7 +99,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       .single();
 
     if (!data) {
-      return { success: false, message: "Profile not found.", data: {} };
+      throw AppError.notFound("Profile not found.");
     }
 
     const profile = data as Profile;
@@ -622,7 +623,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   async function get_training_history_summary(gymId?: string, lookbackWeeks: number = 4): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const currentWeek = await resolveCurrentWeek();
@@ -836,7 +837,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   async function get_overload_recommendations(gymId?: string, lookbackWeeks: number = 4): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found.", data: {} };
+      throw AppError.notFound("No gym found.");
     }
 
     const currentWeek = await resolveCurrentWeek();
@@ -1018,7 +1019,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   async function compare_weeks(week1?: number, week2?: number, gymId?: string): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
-      return { success: false, message: "No gym found for user.", data: {} };
+      throw AppError.notFound("No gym found for user.");
     }
 
     const currentWeek = await resolveCurrentWeek();
@@ -1026,7 +1027,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const w2 = week2 ?? Math.max(1, currentWeek - 1);
 
     if (w1 === w2) {
-      return { success: false, message: "week1 and week2 must be different.", data: {} };
+      throw AppError.invalidArgs("week1 and week2 must be different.");
     }
 
     // Fetch logs for both weeks in parallel
