@@ -10,6 +10,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@bot-native/sdk": "file:../vendor/bot-native-sdk",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@supabase/supabase-js": "^2.49.4",
     "dotenv": "^16.4.7",

@@ -4,6 +4,10 @@ dist
 .vercel
 .env*.local
 
+# Vendored SDK — dist is the shipped artifact, must be committed
+!vendor/**/dist
+!vendor/**/dist/**
+
 # Mobile (Expo)
 mobile/.expo/
 mobile/dist/
