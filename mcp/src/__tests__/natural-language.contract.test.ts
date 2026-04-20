@@ -57,7 +57,7 @@ describe('MCP natural-language contract', () => {
     });
     expect(result.success).toBe(true);
     expect(logMany).toHaveBeenCalledOnce();
-    const entries = logMany.mock.calls[0][0] as any[];
+    const entries = (logMany.mock.calls[0] as unknown as any[])[0] as any[];
     expect(entries).toHaveLength(3);
     expect(entries[0].exercise_name).toBe('Bench Press');
     expect(entries[0].actual_weight).toBe(185);
