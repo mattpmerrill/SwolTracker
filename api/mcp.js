@@ -1,52 +1,29 @@
-// Vercel serverless MCP endpoint
-// Authenticates via API key (swol_...), resolves user_id, handles MCP requests
+// Vercel serverless MCP endpoint.
+// Auth + rate limits + audit stay here; tool wiring is delegated to @bot-native/sdk
+// via the adapter in mcp/dist/sdk-adapter.js.
 
 import { createClient } from '@supabase/supabase-js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createEventEmitter } from '../mcp/dist/bot-native-shim.js';
-import { createQueryTools } from '../mcp/dist/tools/queries.js';
-import { createActionTools } from '../mcp/dist/tools/actions.js';
-import { createContextTools } from '../mcp/dist/tools/context.js';
-import { createNaturalLanguageTools } from '../mcp/dist/tools/natural-language.js';
-import { createGenerationTools } from '../mcp/dist/tools/generation.js';
-import { createCoachingTools } from '../mcp/dist/tools/coaching.js';
-import { registerTools } from '../mcp/dist/register-tools.js';
+import { randomUUID } from 'node:crypto';
+import { buildApp } from '../mcp/dist/sdk-adapter.js';
 
-const MCP_RATE_LIMIT = 500;       // overall requests per hour
+const MCP_RATE_LIMIT = 500;
 const MCP_RATE_WINDOW_MINUTES = 60;
 
-// Per-category budgets for `tools/call` (AGENT-NATIVE-PLAN.md 0.5)
+// SDK category → (max, window) budgets for tools/call.
 const CATEGORY_LIMITS = {
-  read:  { max: 500, window: 60 },
-  write: { max: 100, window: 60 },
+  query: { max: 500, window: 60 },
+  meta:  { max: 500, window: 60 },
+  action:{ max: 100, window: 60 },
+  edit:  { max: 100, window: 60 },
 };
 
-// Per-tool budgets for high-cost writes — stricter than their category
+// Per-tool ceilings for high-cost writes, stricter than their category.
 const TOOL_LIMITS = {
-  save_workout_program: { max: 20, window: 60 },
+  save_workout_program:     { max: 20, window: 60 },
   generate_workout_program: { max: 20, window: 60 },
-  send_coach_message:   { max: 50, window: 60 },
-};
-
-// Tool → category map. Anything unlisted falls through with only the overall
-// and per-tool (if any) limits applied. Matches register-tools.ts as of 2026-04-19.
-const TOOL_CATEGORY = {
-  // reads
-  get_profile: 'read', get_maxes: 'read', get_max_history: 'read', list_gyms: 'read',
-  get_todays_workout: 'read', get_weekly_workout: 'read', get_program_overview: 'read',
-  get_program_progression: 'read', get_workout_logs: 'read', get_recent_sessions: 'read',
-  get_stats: 'read', get_streak: 'read', get_context_bundle: 'read',
-  get_pending_events: 'read', get_prompt_template: 'read', get_missed_days: 'read',
-  check_workout_reminder: 'read', generate_weekly_summary: 'read',
-  get_training_history_summary: 'read', get_overload_recommendations: 'read',
-  compare_weeks: 'read', normalize_exercise_name: 'read', list_canonical_exercises: 'read',
-  get_user_messages: 'read', get_conversation_history: 'read',
-  // writes
-  log_set: 'write', mark_workout_complete: 'write', log_workout_summary: 'write',
-  update_max: 'write', delete_max: 'write', save_workout_program: 'write',
-  log_exercise: 'write', generate_workout_program: 'write', delete_set: 'write',
-  correct_set: 'write', log_missed_day: 'write', send_coach_message: 'write',
+  send_coach_message:       { max: 50, window: 60 },
 };
 
 async function enforceLimit(supabase, userId, operation, max, window, res) {
@@ -57,19 +34,14 @@ async function enforceLimit(supabase, userId, operation, max, window, res) {
     p_window_minutes: window,
   });
   if (allowed === false) {
-    res.status(429).json({
-      error: `Rate limit exceeded for ${operation} (${max} per ${window}min). Try again later.`,
-    });
+    res.status(429).json({ error: `Rate limit exceeded for ${operation} (${max} per ${window}min). Try again later.` });
     return false;
   }
   return true;
 }
 
 function extractToolName(body) {
-  // Single JSON-RPC request: { method: 'tools/call', params: { name, arguments } }
-  if (body && !Array.isArray(body) && body.method === 'tools/call') {
-    return body.params?.name || null;
-  }
+  if (body && !Array.isArray(body) && body.method === 'tools/call') return body.params?.name || null;
   return null;
 }
 
@@ -81,16 +53,22 @@ function getSupabase() {
 }
 
 async function hashKey(raw) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(raw);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const data = new TextEncoder().encode(raw);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function attachSdkTools(server, app, identity) {
+  for (const tool of app.tools) {
+    server.tool(tool.name, tool.description, tool.schema, async (params) => {
+      const ctx = { request: { identity, requestId: randomUUID(), transport: 'http' }, app };
+      const result = await tool.execute(params, ctx);
+      return { content: [{ type: 'text', text: result.message }] };
+    });
+  }
 }
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -98,20 +76,17 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Audit context — populated once we know the caller. Written in finally.
   let auditCtx = null;
   let auditOk = null;
   let auditError = null;
 
   try {
-    // 1. Extract API key
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer swol_')) {
       return res.status(401).json({ error: 'Missing or invalid API key. Expected: Bearer swol_...' });
     }
-    const apiKey = authHeader.slice(7); // strip "Bearer "
+    const apiKey = authHeader.slice(7);
 
-    // 2. Hash and lookup
     const supabase = getSupabase();
     const keyHash = await hashKey(apiKey);
 
@@ -121,69 +96,35 @@ export default async function handler(req, res) {
       .eq('key_hash', keyHash)
       .single();
 
-    if (keyError || !keyRow) {
-      return res.status(401).json({ error: 'Invalid API key.' });
-    }
-
-    if (keyRow.revoked_at) {
-      return res.status(401).json({ error: 'API key has been revoked.' });
-    }
+    if (keyError || !keyRow) return res.status(401).json({ error: 'Invalid API key.' });
+    if (keyRow.revoked_at) return res.status(401).json({ error: 'API key has been revoked.' });
 
     const userId = keyRow.user_id;
 
-    // 3. Update last_used_at (fire-and-forget)
-    supabase
-      .from('api_keys')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('id', keyRow.id)
-      .then(() => {});
+    supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRow.id).then(() => {});
 
-    // 4. Rate limits — overall, then per-tool (tightest) and per-category
     if (!(await enforceLimit(supabase, userId, 'mcp_request', MCP_RATE_LIMIT, MCP_RATE_WINDOW_MINUTES, res))) return;
 
+    const app = buildApp(supabase);
     const toolName = extractToolName(req.body);
+
     if (toolName) {
       const toolLimit = TOOL_LIMITS[toolName];
-      if (toolLimit) {
-        const op = `mcp_tool_${toolName}`;
-        if (!(await enforceLimit(supabase, userId, op, toolLimit.max, toolLimit.window, res))) return;
-      }
-      const category = TOOL_CATEGORY[toolName];
-      if (category) {
-        const catLimit = CATEGORY_LIMITS[category];
-        const op = `mcp_tools_${category}`;
-        if (!(await enforceLimit(supabase, userId, op, catLimit.max, catLimit.window, res))) return;
-      }
+      if (toolLimit && !(await enforceLimit(supabase, userId, `mcp_tool_${toolName}`, toolLimit.max, toolLimit.window, res))) return;
+      const category = app.tools.find(t => t.name === toolName)?.category;
+      const catLimit = category && CATEGORY_LIMITS[category];
+      if (catLimit && !(await enforceLimit(supabase, userId, `mcp_tools_${category}`, catLimit.max, catLimit.window, res))) return;
 
-      // Prepare audit row — args are hashed, not stored, so payloads never persist.
       const argsJson = JSON.stringify(req.body?.params?.arguments ?? {});
-      auditCtx = {
-        supabase,
-        userId,
-        apiKeyId: keyRow.id,
-        toolName,
-        argsHash: await hashKey(argsJson),
-      };
+      auditCtx = { supabase, userId, apiKeyId: keyRow.id, toolName, argsHash: await hashKey(argsJson) };
     }
 
-    // 5. Build MCP server with this user's context
-    const events = createEventEmitter(supabase, 'swoltracker');
-    const queries = createQueryTools(supabase, userId);
-    const actions = createActionTools(supabase, userId, events, queries);
-    const context = createContextTools(supabase, userId, queries);
-    const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions);
-    const generation = createGenerationTools(supabase, userId, queries, actions);
-    const coaching = createCoachingTools(supabase, userId);
+    const server = new McpServer({ name: app.manifest.name, version: app.manifest.version });
+    attachSdkTools(server, app, { userId });
 
-    const server = new McpServer({ name: 'swoltracker', version: '0.1.0' });
-    registerTools(server, queries, actions, context, nlTools, generation, coaching);
-
-    // 6. Handle via stateless StreamableHTTP transport
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
-
-    // Cleanup
     await transport.close();
     await server.close();
 
@@ -192,11 +133,8 @@ export default async function handler(req, res) {
     console.error('MCP endpoint error:', error);
     auditOk = false;
     auditError = error?.message ?? String(error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' });
-    }
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   } finally {
-    // Fire-and-forget audit write. Only for tools/call — not list/initialize.
     if (auditCtx && auditOk !== null) {
       auditCtx.supabase
         .from('tool_call_audit')
@@ -208,9 +146,7 @@ export default async function handler(req, res) {
           ok: auditOk,
           error_message: auditError,
         })
-        .then(({ error }) => {
-          if (error) console.error('tool_call_audit insert failed:', error.message);
-        });
+        .then(({ error }) => { if (error) console.error('tool_call_audit insert failed:', error.message); });
     }
   }
 }
