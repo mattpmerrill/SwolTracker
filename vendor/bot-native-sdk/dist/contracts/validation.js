@@ -64,4 +64,3 @@ export function validate(schema, data) {
         error: result.error.errors.map((e) => e.message).join(", "),
     };
 }
-//# sourceMappingURL=validation.js.map

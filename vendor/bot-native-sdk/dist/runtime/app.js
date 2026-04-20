@@ -20,4 +20,3 @@ export function withAuth(app, resolver) {
         authResolver: resolver,
     };
 }
-//# sourceMappingURL=app.js.map

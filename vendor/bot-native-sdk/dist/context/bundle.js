@@ -11,4 +11,3 @@ export function buildContextBundle(appName, userId, summary, data) {
         data,
     };
 }
-//# sourceMappingURL=bundle.js.map

@@ -151,4 +151,3 @@ export function handleToolError(error) {
         return new Error(error.message);
     return new Error("Unknown tool error");
 }
-//# sourceMappingURL=server.js.map

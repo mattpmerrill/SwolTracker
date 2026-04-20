@@ -18,4 +18,3 @@ export function defineTool({ name, description, category = "query", schema, exec
         },
     };
 }
-//# sourceMappingURL=tool.js.map

@@ -57,4 +57,3 @@ export class AppError extends Error {
 export function isAppError(value) {
     return value instanceof AppError;
 }
-//# sourceMappingURL=errors.js.map

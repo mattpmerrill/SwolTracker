@@ -30,4 +30,3 @@ export function createSnappyClawJwtResolver(jwtSecret) {
         };
     };
 }
-//# sourceMappingURL=auth.js.map

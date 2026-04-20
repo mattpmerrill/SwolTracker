@@ -82,4 +82,3 @@ export function createEventEmitter(eventStore, appName) {
         },
     };
 }
-//# sourceMappingURL=store.js.map
