@@ -234,72 +234,6 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
     return data
   }
 
-  // Chat
-  const getGroupMessages = async (userId, limit = 50, beforeId = null) => {
-    if (!supabase) return []
-    const { data, error } = await supabase
-      .rpc('get_group_messages', {
-        p_user_id: userId,
-        p_limit: limit,
-        p_before_id: beforeId
-      })
-
-    if (error) {
-      console.error('Error getting group messages:', error)
-      return []
-    }
-    return data || []
-  }
-
-  const sendGroupMessage = async (userId, content) => {
-    if (!supabase) return { success: false, error: 'Not configured' }
-    const { data, error } = await supabase
-      .rpc('send_group_message', {
-        p_user_id: userId,
-        p_content: content
-      })
-
-    if (error) {
-      console.error('Error sending group message:', error)
-      return { success: false, error: error.message }
-    }
-    return data
-  }
-
-  const getGroupLeaderId = async (userId) => {
-    if (!supabase) return null
-    const { data, error } = await supabase
-      .rpc('get_user_group_leader_id', { p_user_id: userId })
-
-    if (error) {
-      console.error('Error getting group leader id:', error)
-      return null
-    }
-    return data
-  }
-
-  const hasUnreadMessages = async (userId) => {
-    if (!supabase) return false
-    const { data, error } = await supabase
-      .rpc('has_unread_messages', { p_user_id: userId })
-
-    if (error) {
-      console.error('Error checking unread messages:', error)
-      return false
-    }
-    return data
-  }
-
-  const markMessagesRead = async (userId) => {
-    if (!supabase) return
-    const { error } = await supabase
-      .rpc('mark_messages_read', { p_user_id: userId })
-
-    if (error) {
-      console.error('Error marking messages read:', error)
-    }
-  }
-
   return {
     // Buddies
     getBuddies, getReceivedRequests, getSentRequests,
@@ -309,8 +243,5 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
     getGroupRole, getGroupMembers, getLeaderGymId,
     acceptGroupInvite, leaveWorkoutGroup, removeGroupMember,
     canSendInvite, canAcceptInvite,
-    // Chat
-    getGroupMessages, sendGroupMessage, getGroupLeaderId,
-    hasUnreadMessages, markMessagesRead,
   }
 }

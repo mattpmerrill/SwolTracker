@@ -221,45 +221,53 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: `API key not configured for ${provider}. Set ${envKey} in Vercel env vars.` });
     }
 
-    // Authenticate the user and check rate limits via Supabase
+    // Authenticate the user and check rate limits via Supabase.
+    // Fail closed: auth is mandatory, no anonymous path.
+    // (SECURITY-REVIEW-2026-04 F-007.)
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const authHeader = req.headers.authorization;
 
-    if (supabaseUrl && supabaseServiceKey && authHeader) {
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-      // Verify the user's JWT
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-      if (!authError && user) {
-        // Check rate limit: AI_DAILY_LIMIT generations per day (1440 minutes)
-        const { data: allowed } = await supabase.rpc('check_rate_limit', {
-          p_user_id: user.id,
-          p_operation: 'ai_generation',
-          p_max_requests: AI_DAILY_LIMIT,
-          p_window_minutes: 1440,
-        });
-
-        if (allowed === false) {
-          return res.status(429).json({ error: `Daily AI generation limit reached (${AI_DAILY_LIMIT}/day). Try again tomorrow.` });
-        }
-
-        // Check for per-provider model override in app_settings
-        const modelOverrideKey = `llm_model_${provider}`;
-        const { data: modelOverride } = await supabase
-          .rpc('get_app_setting', { p_key: modelOverrideKey });
-
-        if (modelOverride && typeof modelOverride === 'string' && modelOverride.trim() !== '') {
-          // Override the default model for this provider
-          config.models[requestType] = modelOverride.trim();
-          config.defaultModel = modelOverride.trim();
-        }
-      }
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ error: 'Server misconfigured: missing Supabase credentials.' });
     }
 
-    const model = config.models[requestType] || config.defaultModel;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing Authorization header.' });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const token = authHeader.slice(7);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token.' });
+    }
+
+    // Daily AI generation rate limit
+    const { data: allowed } = await supabase.rpc('check_rate_limit', {
+      p_user_id: user.id,
+      p_operation: 'ai_generation',
+      p_max_requests: AI_DAILY_LIMIT,
+      p_window_minutes: 1440,
+    });
+
+    if (allowed === false) {
+      return res.status(429).json({ error: `Daily AI generation limit reached (${AI_DAILY_LIMIT}/day). Try again tomorrow.` });
+    }
+
+    // Per-provider model override from app_settings (request-scoped — never mutate
+    // PROVIDER_CONFIGS, which is module-level shared state. F-013.)
+    let effectiveModel = config.models[requestType] || config.defaultModel;
+    const modelOverrideKey = `llm_model_${provider}`;
+    const { data: modelOverride } = await supabase
+      .rpc('get_app_setting', { p_key: modelOverrideKey });
+
+    if (modelOverride && typeof modelOverride === 'string' && modelOverride.trim() !== '') {
+      effectiveModel = modelOverride.trim();
+    }
+
+    const model = effectiveModel;
 
     const result = await withRetry(async () => {
       switch (provider) {

@@ -33,7 +33,7 @@ SwolTracker/
 │   │   └── repositories/        # Domain-specific database repositories
 │   │       ├── profiles.js     # User profile operations
 │   │       ├── workouts.js      # Workout programs, maxes, logs (largest repo)
-│   │       ├── social.js       # Buddies, groups, group chat
+│   │       ├── social.js       # Buddies, groups
 │   │       ├── admin.js        # Admin checks, app settings, prompts, errors
 │   │       └── agent-chat.js   # Agent messaging, coach notes, read status
 │   ├── components/
@@ -116,7 +116,7 @@ await db.getLlmProvider();         // returns: 'openai' | 'claude' | 'gemini' | 
 Domain repositories (`src/lib/repositories/`):
 - `profiles.js` — profile CRUD, onboarding
 - `workouts.js` — maxes, programs, workout logs, overload recommendations
-- `social.js` — buddies, gym groups, group chat
+- `social.js` — buddies, gym groups
 - `admin.js` — admin RPC, app settings, prompt templates, error logging
 - `agent-chat.js` — agent messages, coach notes, read status, API key detection
 
@@ -192,7 +192,6 @@ Key tables (see `swoltracker-schema.sql` for full schema):
 - `workout_logs` - Individual set logs
 - `workout_completions` - Whole workout marked complete
 - `buddy_requests` - Buddy/group relationships
-- `group_messages` - Group chat messages (migrations/013)
 - `error_logs` - Application error tracking (migrations/009)
 - `app_settings` - Key-value store for LLM provider config and API keys
 - `api_usage_logs` - Token usage tracking

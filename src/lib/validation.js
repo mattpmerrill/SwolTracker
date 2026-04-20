@@ -17,8 +17,6 @@ export const maxWeightSchema = z.object({
 
 export const equipmentNameSchema = z.string().min(1).max(100).trim()
 
-export const chatMessageSchema = z.string().min(1).max(500).trim()
-
 export const searchQuerySchema = z.string().min(1).max(100).trim()
 
 // Onboarding schema

@@ -97,6 +97,18 @@ export function createAgentChatRepo(supabase) {
     return true
   }
 
+  const getMyToolCallAudit = async (limit = 50) => {
+    if (!supabase) return []
+    const { data, error } = await supabase
+      .rpc('get_my_tool_call_audit', { p_limit: limit })
+
+    if (error) {
+      console.error('Error fetching tool call audit:', error)
+      return []
+    }
+    return data || []
+  }
+
   return {
     getAgentMessages,
     sendUserMessage,
@@ -105,5 +117,6 @@ export function createAgentChatRepo(supabase) {
     markAgentMessagesRead,
     getLatestCoachNote,
     hasAgentKey,
+    getMyToolCallAudit,
   }
 }

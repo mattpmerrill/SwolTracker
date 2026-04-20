@@ -4,7 +4,6 @@ import {
   GroupMembersList,
   GroupInvites,
   BuddySearch,
-  GroupChat,
   BuddiesList,
 } from '../components/Group';
 
@@ -23,11 +22,6 @@ export default function BuddiesScreen({
   buddiesSearch,
   searchResults,
   searchLoading,
-  chatMessages,
-  chatInput,
-  showChat,
-  chatLoading,
-  chatEndRef,
   onLeaveGroup,
   onRemoveMember,
   onStartEditGroupName,
@@ -39,9 +33,6 @@ export default function BuddiesScreen({
   onSearchChange,
   onSendInvite,
   onRemoveBuddy,
-  onToggleChat,
-  onChatInputChange,
-  onSendMessage,
 }) {
   return (
     <>
@@ -76,21 +67,6 @@ export default function BuddiesScreen({
         <GroupMembersList
           members={groupMembers}
           onRemove={onRemoveMember}
-        />
-      )}
-
-      {/* Group Chat (for leaders and members) */}
-      {groupRole !== 'independent' && (
-        <GroupChat
-          isOpen={showChat}
-          messages={chatMessages}
-          loading={chatLoading}
-          input={chatInput}
-          currentUser={currentUser}
-          chatEndRef={chatEndRef}
-          onToggle={onToggleChat}
-          onInputChange={onChatInputChange}
-          onSend={onSendMessage}
         />
       )}
 

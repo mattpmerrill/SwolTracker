@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd mcp && npm install && npm run build && cd .. && npm run build",
+  "buildCommand": "cd mcp && npm install && npm run build && cd .. && npm test && npm run build",
   "outputDirectory": "dist",
   "functions": {
     "api/llm.js": {

@@ -14,21 +14,16 @@ export default function BottomNav({
   activeTab,
   onTabChange,
   user,
-  hasUnreadMessages,
 }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/50 px-6 py-3">
       <div className="flex justify-around max-w-lg mx-auto">
         {TABS.map(tab => {
-          // Check for notifications
           let notificationCount = 0;
-          let showUnreadDot = false;
           if (tab.id === 'buddies' && user) {
             const pendingRequests = user.receivedRequests?.length || 0;
             const acceptedNotifs = user.acceptedNotifications?.length || 0;
             notificationCount = pendingRequests + acceptedNotifs;
-            // Show unread dot for chat messages (separate from count)
-            showUnreadDot = hasUnreadMessages;
           }
 
           return (
@@ -43,12 +38,10 @@ export default function BottomNav({
             >
               <div className="relative">
                 <tab.icon className="w-6 h-6" />
-                {notificationCount > 0 ? (
+                {notificationCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-zinc-900">
                     {notificationCount}
                   </span>
-                ) : showUnreadDot && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-zinc-900" />
                 )}
               </div>
               <span className="text-xs font-medium">{tab.label}</span>

@@ -1,8 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 import { createProfilesRepo } from './repositories/profiles'
-import { createWorkoutsRepo } from './repositories/workouts'
+import { createGymsRepo } from './repositories/gyms'
+import { createMaxesRepo } from './repositories/maxes'
+import { createProgramsRepo } from './repositories/programs'
+import { createLogsRepo } from './repositories/logs'
+import { createInsightsRepo } from './repositories/insights'
 import { createSocialRepo } from './repositories/social'
-import { createAdminRepo } from './repositories/admin'
+import { createAdminAuthRepo } from './repositories/adminAuth'
+import { createAppSettingsRepo } from './repositories/appSettings'
+import { createPromptsRepo } from './repositories/prompts'
+import { createErrorsRepo } from './repositories/errors'
+import { createOnboardingRepo } from './repositories/onboarding'
 import { createAgentChatRepo } from './repositories/agent-chat'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -41,20 +49,38 @@ export const getCurrentUser = async () => {
 
 // Compose domain repositories into unified db object
 const profilesRepo = createProfilesRepo(supabase)
-const workoutsRepo = createWorkoutsRepo(supabase)
+const gymsRepo = createGymsRepo(supabase)
+const maxesRepo = createMaxesRepo(supabase, {
+  getGymMembers: gymsRepo.getGymMembers,
+})
+const programsRepo = createProgramsRepo(supabase)
+const logsRepo = createLogsRepo(supabase)
+const insightsRepo = createInsightsRepo(supabase)
 const socialRepo = createSocialRepo(supabase, {
   getProfile: profilesRepo.getProfile,
-  getUserMaxes: workoutsRepo.getUserMaxes,
+  getUserMaxes: maxesRepo.getUserMaxes,
 })
-const adminRepo = createAdminRepo(supabase, {
+const adminAuthRepo = createAdminAuthRepo(supabase)
+const appSettingsRepo = createAppSettingsRepo(supabase)
+const promptsRepo = createPromptsRepo(supabase)
+const errorsRepo = createErrorsRepo(supabase)
+const onboardingRepo = createOnboardingRepo(supabase, {
   getProfile: profilesRepo.getProfile,
 })
 const agentChatRepo = createAgentChatRepo(supabase)
 
 export const db = {
   ...profilesRepo,
-  ...workoutsRepo,
+  ...gymsRepo,
+  ...maxesRepo,
+  ...programsRepo,
+  ...logsRepo,
+  ...insightsRepo,
   ...socialRepo,
-  ...adminRepo,
+  ...adminAuthRepo,
+  ...appSettingsRepo,
+  ...promptsRepo,
+  ...errorsRepo,
+  ...onboardingRepo,
   ...agentChatRepo,
 }

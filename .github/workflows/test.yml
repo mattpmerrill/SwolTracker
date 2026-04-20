@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install web deps
+        run: npm ci
+      - name: Install mcp deps
+        working-directory: mcp
+        run: npm ci
+      - name: Build mcp
+        working-directory: mcp
+        run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Build web
+        run: npm run build

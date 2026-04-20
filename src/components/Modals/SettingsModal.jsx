@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2 } from 'lucide-react';
+import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle } from 'lucide-react';
+import { db } from '../../lib/supabase';
 
 /**
  * Main settings modal
@@ -113,6 +114,9 @@ export default function SettingsModal({
 
         {/* Agent Weekly Review Setup */}
         {supabase && <AgentCronPromptSection supabase={supabase} />}
+
+        {/* Agent Activity — audit log of recent MCP tool calls */}
+        {supabase && <AgentActivitySection supabase={supabase} />}
 
         {/* Admin Section - Only visible to admins */}
         {isAdmin && (
@@ -440,6 +444,101 @@ function AgentCronPromptSection({ supabase }) {
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Agent Activity Section ─────────────────────────────────
+
+function auditTimeAgo(date) {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function AgentActivitySection({ supabase }) {
+  const [rows, setRows] = useState([]);
+  const [hasKeys, setHasKeys] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data: keyCheck } = await supabase
+        .from('api_keys')
+        .select('id')
+        .is('revoked_at', null)
+        .limit(1);
+      if (!keyCheck || keyCheck.length === 0) {
+        setHasKeys(false);
+        setLoading(false);
+        return;
+      }
+      setHasKeys(true);
+      const data = await db.getMyToolCallAudit(50);
+      setRows(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (!hasKeys && !loading) return null;
+
+  const visible = expanded ? rows : rows.slice(0, 10);
+
+  return (
+    <div className="mb-6 bg-zinc-800/40 rounded-2xl border border-zinc-700/50 p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-xl bg-zinc-700/60 flex items-center justify-center">
+          <Activity className="w-5 h-5 text-zinc-300" />
+        </div>
+        <div>
+          <h3 className="font-bold text-sm">Agent Activity</h3>
+          <p className="text-xs text-zinc-400">Recent MCP tool calls from your agents</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-3">
+          <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-zinc-500 text-center py-2">No tool calls yet.</p>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            {visible.map(row => (
+              <div
+                key={row.id}
+                className="flex items-center gap-2 bg-zinc-900/60 rounded-lg px-3 py-2 text-xs"
+              >
+                {row.ok ? (
+                  <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                )}
+                <code className="font-mono text-zinc-300 truncate flex-1">{row.tool_name}</code>
+                {!row.ok && row.error_message && (
+                  <span className="text-red-400 truncate max-w-[40%]" title={row.error_message}>
+                    {row.error_message}
+                  </span>
+                )}
+                <span className="text-zinc-500 shrink-0">{auditTimeAgo(row.created_at)}</span>
+              </div>
+            ))}
+          </div>
+          {rows.length > 10 && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="w-full mt-2 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              {expanded ? 'Show less' : `Show all ${rows.length}`}
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }

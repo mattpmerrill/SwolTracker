@@ -32,9 +32,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   }
 
   async function resolveGymId(gymId?: string): Promise<string | null> {
-    if (gymId) return gymId;
+    // Membership check: when the caller supplies a gym_id, confirm the
+    // authenticated user is in that gym before returning it. Without this,
+    // the service-role Supabase client in api/mcp.js would bypass RLS and
+    // write to a stranger's gym. (SECURITY-REVIEW-2026-04 F-001.)
     const gyms = await getMyGyms();
-    return gyms[0]?.id ?? null;
+    if (!gymId) return gyms[0]?.id ?? null;
+    return gyms.find((g) => g.id === gymId)?.id ?? null;
   }
 
   async function resolveCurrentWeek(): Promise<number> {
