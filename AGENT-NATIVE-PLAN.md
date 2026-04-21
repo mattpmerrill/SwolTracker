@@ -215,7 +215,8 @@ Goal: the things that make the agent a driver, not just an assistant.
   - **Done when:** Agent-connected user completes onboarding in <3 minutes end-to-end.
 
 ### Phase 3 retro
-*(fill in when phase completes)*
+
+Phase 3 moved quickly because most of the infrastructure predated it — five of six target events already emitted from `actions.ts`, the `app_events` realtime publication was live from migration 029, and Phase 1's repository splits meant the context-module work was additive rather than a refactor. The highest-leverage pattern to keep is **pure-logic extraction under hook tests**: every hook that needed coverage (`AgentOnboarding/status.js`, `SimpleOnboarding/validation.js`, `OnboardingRouter.flag.js`) moved its decisions into a no-React-imports module so Vitest could test the logic without pulling in happy-dom. Test count grew 38 → 134 over the phase with no DOM renderer added. The biggest avoided-churn call was deferring `claimPending` long-poll to Phase 2.4 where the SDK event-store adapter lives; `get_pending_events` already covered agents' immediate polling need, and duplicating the abstraction would have meant rewriting it once the SDK version landed. The one unfinished item with no fallback is `week.rolled_over`, blocked on cron infrastructure the app doesn't have. Two debts carry forward: the old `Onboarding/` tree (1221 lines) lives on as the feature-flag rollback path and needs a cleanup pass once the new flow proves out, and `VITE_NEW_ONBOARDING_FLOW=true` is now live in production with no completion-rate threshold defined — removing the legacy path should gate on an actual metric (plan target: 95% completion), which means wiring a funnel event before the flag can flip default-on everywhere.
 
 ---
 
