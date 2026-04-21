@@ -313,7 +313,7 @@ export function createActionTools(
         .eq("day_name", slot.dayName)
         .eq("completed", true);
 
-      await events.emit("swoltracker.workout_completed", userId, {
+      await events.emit("workout.completed", userId, {
         day_name: slot.dayName,
         week_number: slot.weekNumber,
         total_sets: logs?.length ?? 0,
@@ -363,9 +363,20 @@ export function createActionTools(
     }
 
     const isPR = weightLbs > oldMax && oldMax > 0;
+    try {
+      await events.emit("max.updated", userId, {
+        exercise: exerciseName,
+        old_max: oldMax,
+        new_max: weightLbs,
+        is_pr: isPR,
+      });
+    } catch {
+      // best-effort
+    }
     if (isPR) {
       try {
-        await events.emit("swoltracker.pr_detected", userId, {
+        await events.emit("milestone.hit", userId, {
+          kind: "pr",
           exercise: exerciseName,
           old_pr: oldMax,
           new_pr: weightLbs,
@@ -443,6 +454,16 @@ export function createActionTools(
         message: `Failed to save program: ${error.message}`,
         data: {},
       };
+    }
+
+    try {
+      await events.emit("program.saved", userId, {
+        week_number: weekNumber,
+        gym_id: resolvedGymId,
+        ai_generated: aiGenerated ?? false,
+      });
+    } catch {
+      // best-effort
     }
 
     return {
@@ -675,7 +696,7 @@ export function createActionTools(
       .from("app_events")
       .select("id")
       .eq("app_name", "swoltracker")
-      .eq("event_name", "swoltracker.workout_reminder")
+      .eq("event_name", "workout.reminder")
       .eq("user_id", userId)
       .is("processed_at", null);
 
@@ -699,7 +720,7 @@ export function createActionTools(
     const exerciseCount = (todayData.total_exercises as number) ?? (todayData.exercises as unknown[]).length;
 
     try {
-      await events.emit("swoltracker.workout_reminder", userId, {
+      await events.emit("workout.reminder", userId, {
         day_name: todayName,
         week_number: weekNumber,
         focus,
@@ -800,6 +821,16 @@ export function createActionTools(
 
     if (error) {
       return { success: false, message: `Failed to log missed day: ${error.message}`, data: {} };
+    }
+
+    try {
+      await events.emit("workout.missed", userId, {
+        day_name: slot.dayName,
+        week_number: slot.weekNumber,
+        reason: reason ?? null,
+      });
+    } catch {
+      // best-effort
     }
 
     const reasonStr = reason ? ` Reason: ${reason}.` : "";

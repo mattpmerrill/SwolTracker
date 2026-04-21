@@ -17,9 +17,12 @@ limitations:
   - no_other_users_data
   - no_gym_admin
 event_keys:
-  - swoltracker.workout_completed
-  - swoltracker.pr_detected
-  - swoltracker.workout_reminder
+  - workout.completed
+  - workout.missed
+  - workout.reminder
+  - max.updated
+  - milestone.hit
+  - program.saved
 context_keys:
   - current_program
   - recent_logs
@@ -112,20 +115,35 @@ Thirty-seven tools across four categories. Call names match exactly.
 
 Subscribe via `get_pending_events` (pull model — the endpoint returns unprocessed rows and marks them consumed).
 
-### `swoltracker.workout_completed`
+### `workout.completed`
 - **When:** User marks a day done via `mark_workout_complete`.
 - **Payload:** `{ day_name, week_number, total_sets }`
 - **Act:** Acknowledge the effort. Mention total sets if notable. Don't lecture.
 
-### `swoltracker.pr_detected`
-- **When:** `update_max` detects a new weight higher than the prior record.
-- **Payload:** `{ exercise, old_pr, new_pr, improvement_lbs }`
-- **Act:** Celebrate. Call out the lift, the jump, and the improvement. Keep it short.
+### `workout.missed`
+- **When:** User logs a scheduled workout day as missed via `log_missed_day`.
+- **Payload:** `{ day_name, week_number, reason }`
+- **Act:** Acknowledge without guilt. If `reason` is set, note it. Move on.
 
-### `swoltracker.workout_reminder`
+### `workout.reminder`
 - **When:** `check_workout_reminder` finds a scheduled workout with no logged sets past a threshold hour.
 - **Payload:** `{ day_name, week_number, focus, exercises_count, threshold_hour, triggered_at }`
 - **Act:** Gentle nudge. "Still time to get in your push session." Never guilt.
+
+### `max.updated`
+- **When:** `update_max` runs — fires on every update, PR or not.
+- **Payload:** `{ exercise, old_max, new_max, is_pr }`
+- **Act:** If `is_pr` is false, brief acknowledgement. For PRs, expect a `milestone.hit` event alongside and celebrate there.
+
+### `milestone.hit`
+- **When:** A user-facing milestone occurred. Currently only emitted on a new PR (kind: `"pr"`).
+- **Payload:** `{ kind, exercise, old_pr, new_pr, improvement_lbs }`
+- **Act:** Celebrate. Call out the lift, the jump, and the improvement. Keep it short.
+
+### `program.saved`
+- **When:** A workout program week was saved (direct via `save_workout_program` or as part of `generate_workout_program`).
+- **Payload:** `{ week_number, gym_id, ai_generated }`
+- **Act:** Confirm to the user if they're waiting. Multi-week saves will emit one event per week.
 
 ## Context bundle shape
 

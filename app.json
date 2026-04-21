@@ -9,20 +9,28 @@
   "entrypoint": "mcp/dist/server.js",
   "events": [
     {
-      "name": "swoltracker.pr_detected",
-      "description": "Emitted when a user sets a new personal record on any exercise"
+      "name": "workout.completed",
+      "description": "A user marked a workout day complete. Payload: { day_name, week_number, total_sets }."
     },
     {
-      "name": "swoltracker.workout_completed",
-      "description": "Emitted when a user marks a workout day as complete"
+      "name": "workout.missed",
+      "description": "A user logged a scheduled workout day as missed. Payload: { day_name, week_number, reason }."
     },
     {
-      "name": "swoltracker.streak_at_risk",
-      "description": "Emitted when a user's workout streak is at risk of breaking (future)"
+      "name": "workout.reminder",
+      "description": "A scheduled workout has no logged sets past the threshold hour. Payload: { day_name, week_number, focus, exercises_count, threshold_hour, triggered_at }."
     },
     {
-      "name": "swoltracker.weekly_summary_ready",
-      "description": "Emitted at end of week with compiled stats (future)"
+      "name": "max.updated",
+      "description": "A user updated a 1RM record (PR or not). Payload: { exercise, old_max, new_max, is_pr }."
+    },
+    {
+      "name": "milestone.hit",
+      "description": "A user achieved a milestone (currently: new PR). Payload: { kind, exercise, old_pr, new_pr, improvement_lbs }."
+    },
+    {
+      "name": "program.saved",
+      "description": "A workout program week was saved. Payload: { week_number, gym_id, ai_generated }."
     }
   ],
   "contextBundle": {

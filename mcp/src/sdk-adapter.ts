@@ -448,7 +448,7 @@ export function buildApp(supabase: SupabaseClient): BotNativeApp {
     }),
     defineTool({
       name: "check_workout_reminder",
-      description: "Check if a workout reminder should fire for today. If the user has a scheduled workout, hasn't logged any sets, and the current time is past the threshold hour (default 4 PM MT), emits a swoltracker.workout_reminder event that get_pending_events will surface. Safe to call repeatedly — deduplicates reminders. Use on heartbeat to proactively nudge the user.",
+      description: "Check if a workout reminder should fire for today. If the user has a scheduled workout, hasn't logged any sets, and the current time is past the threshold hour (default 4 PM MT), emits a workout.reminder event that get_pending_events will surface. Safe to call repeatedly — deduplicates reminders. Use on heartbeat to proactively nudge the user.",
       category: "query",
       schema: {
         threshold_hour: z.number().int().min(0).max(23).optional().describe("Hour of day (MT, 24h) after which a reminder fires if no sets logged. Default: 16 (4 PM)"),
@@ -581,7 +581,32 @@ export function buildApp(supabase: SupabaseClient): BotNativeApp {
       author: "SwolTracker",
       skillFile: "SKILL.md",
       entrypoint: "dist/server.js",
-      events: [],
+      events: [
+        {
+          name: "workout.completed",
+          description: "A user marked a workout day complete. Payload: { day_name, week_number, total_sets }.",
+        },
+        {
+          name: "workout.missed",
+          description: "A user logged a scheduled workout day as missed. Payload: { day_name, week_number, reason }.",
+        },
+        {
+          name: "workout.reminder",
+          description: "A scheduled workout has no logged sets past the threshold hour. Payload: { day_name, week_number, focus, exercises_count, threshold_hour, triggered_at }.",
+        },
+        {
+          name: "max.updated",
+          description: "A user updated a 1RM record (PR or not). Payload: { exercise, old_max, new_max, is_pr }.",
+        },
+        {
+          name: "milestone.hit",
+          description: "A user achieved a milestone (currently: new PR). Payload: { kind, exercise, old_pr, new_pr, improvement_lbs }.",
+        },
+        {
+          name: "program.saved",
+          description: "A workout program week was saved. Payload: { week_number, gym_id, ai_generated }.",
+        },
+      ],
     },
     tools,
   });

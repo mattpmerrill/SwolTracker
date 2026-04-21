@@ -50,22 +50,17 @@ export function useOnboarding({ user, onComplete, onGenerateWorkout, onPrepareFo
   }, [isGenerating]);
 
   useEffect(() => {
-    if (!hasAgent || !agentGymId || agentWeeksReceived >= 4) return;
-    const startTime = Date.now();
+    if (!hasAgent || !agentGymId || !user?.id || agentWeeksReceived >= 4) return;
     const TIMEOUT_MS = 5 * 60 * 1000;
+    let cancelled = false;
 
-    const interval = setInterval(async () => {
-      if (Date.now() - startTime > TIMEOUT_MS) {
-        setAgentPollingTimeout(true);
-        clearInterval(interval);
-        return;
-      }
+    const refreshWeekCount = async () => {
       try {
         const programs = await db.getAllWorkoutPrograms(agentGymId);
         const weekCount = Object.keys(programs).length;
-        if (weekCount > agentWeeksReceived) setAgentWeeksReceived(weekCount);
+        if (cancelled) return;
+        setAgentWeeksReceived((prev) => (weekCount > prev ? weekCount : prev));
         if (weekCount >= 4) {
-          clearInterval(interval);
           confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
           setTimeout(() => {
             confetti({ particleCount: 100, angle: 60, spread: 55, origin: { x: 0 } });
@@ -73,12 +68,37 @@ export function useOnboarding({ user, onComplete, onGenerateWorkout, onPrepareFo
           }, 250);
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error('Week count refresh error:', err);
       }
-    }, 4000);
+    };
 
-    return () => clearInterval(interval);
-  }, [hasAgent, agentGymId, agentWeeksReceived, pollingGeneration]);
+    // Seed: catch weeks saved before the subscription is established.
+    refreshWeekCount();
+
+    const channel = supabase
+      .channel(`onboarding-program-saved-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_events', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const ev = payload.new;
+          if (ev?.event_name !== 'program.saved') return;
+          if (ev.payload?.gym_id && ev.payload.gym_id !== agentGymId) return;
+          refreshWeekCount();
+        },
+      )
+      .subscribe();
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) setAgentPollingTimeout(true);
+    }, TIMEOUT_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      supabase.removeChannel(channel);
+    };
+  }, [hasAgent, agentGymId, agentWeeksReceived, pollingGeneration, user?.id, supabase]);
 
   const canProceed = () => {
     switch (currentStep) {

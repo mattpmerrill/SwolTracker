@@ -63,13 +63,22 @@ describe('SKILL.md', () => {
   it('event_keys match events actually emitted in code (not aspirational)', () => {
     const { frontmatter } = parseFrontmatter(readSkill());
     const events = (frontmatter as any).event_keys as string[];
-    // Emitted by mcp/src/tools/actions.ts
-    expect(events).toContain('swoltracker.workout_completed');
-    expect(events).toContain('swoltracker.pr_detected');
-    expect(events).toContain('swoltracker.workout_reminder');
+    // Emitted by mcp/src/tools/actions.ts — unprefixed canonical names (Phase 3.2).
+    expect(events).toContain('workout.completed');
+    expect(events).toContain('workout.missed');
+    expect(events).toContain('workout.reminder');
+    expect(events).toContain('max.updated');
+    expect(events).toContain('milestone.hit');
+    expect(events).toContain('program.saved');
+    // Old prefixed names must be gone.
+    expect(events).not.toContain('swoltracker.workout_completed');
+    expect(events).not.toContain('swoltracker.pr_detected');
+    expect(events).not.toContain('swoltracker.workout_reminder');
     // Previously documented but never emitted — must NOT be here until implemented.
     expect(events).not.toContain('swoltracker.streak_at_risk');
     expect(events).not.toContain('swoltracker.weekly_summary_ready');
+    // week.rolled_over deferred (needs cron) — must NOT be here yet.
+    expect(events).not.toContain('week.rolled_over');
   });
 
   it('context_keys match the 7 modules in createContextModules', () => {
