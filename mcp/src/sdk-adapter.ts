@@ -27,8 +27,13 @@ import { createQueryTools } from "./tools/queries.js";
 import { createActionTools } from "./tools/actions.js";
 import { createContextTools } from "./tools/context.js";
 import { createNaturalLanguageTools } from "./tools/natural-language.js";
-import { createGenerationTools } from "./tools/generation.js";
+import { createGenerationTools, type LlmCaller } from "./tools/generation.js";
 import { createCoachingTools } from "./tools/coaching.js";
+
+export interface BuildAppDeps {
+  /** Optional server-side LLM caller. Enables tools like `rebuild_week_for_constraints`. */
+  callLlm?: LlmCaller;
+}
 import { normalizeExerciseName, getAllCanonicalNames } from "./exercise-normalizer.js";
 
 const repsSchema = z.union([z.number().int().min(0), z.string()]);
@@ -51,13 +56,17 @@ type ToolKit = {
   coaching: ReturnType<typeof createCoachingTools>;
 };
 
-function buildToolKit(supabase: SupabaseClient, userId: string): ToolKit {
+function buildToolKit(
+  supabase: SupabaseClient,
+  userId: string,
+  deps?: BuildAppDeps
+): ToolKit {
   const events = createEventEmitter(supabase, "swoltracker");
   const queries = createQueryTools(supabase, userId);
   const actions = createActionTools(supabase, userId, events, queries);
   const context = createContextTools(supabase, userId, queries);
-  const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions);
-  const generation = createGenerationTools(supabase, userId, queries, actions);
+  const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions, deps?.callLlm);
+  const generation = createGenerationTools(supabase, userId, queries, actions, deps?.callLlm);
   const coaching = createCoachingTools(supabase, userId);
   return { queries, actions, context, nlTools, generation, coaching };
 }
@@ -114,13 +123,13 @@ function toAppResultAsJson(r: LegacyResult): AppToolResult {
   return r.success ? base : { ...base, error: legacyErrorEnvelope(r.message) };
 }
 
-export function buildApp(supabase: SupabaseClient): BotNativeApp {
+export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNativeApp {
   const withKit = <P>(
     fn: (kit: ToolKit, params: P) => Promise<LegacyResult>,
     wrap: (r: LegacyResult) => AppToolResult = toAppResult
   ) => {
     return async (params: P, ctx: { request: { identity: { userId: string } } }) => {
-      const kit = buildToolKit(supabase, ctx.request.identity.userId);
+      const kit = buildToolKit(supabase, ctx.request.identity.userId, deps);
       return wrap(await fn(kit, params));
     };
   };
@@ -388,6 +397,20 @@ export function buildApp(supabase: SupabaseClient): BotNativeApp {
       },
       execute: withKit(async (kit, p: any) => kit.nlTools.log_exercise(p)),
     }),
+    defineTool({
+      name: "bulk_log_workout",
+      description: "Log a whole workout from a single free-text description (e.g., 'benched 185x5, 185x5, 175x6; squat 3x5 @ 225'). Uses the server-side LLM to parse the description into structured exercises, then logs them via log_workout_summary. Preferred when the user pastes or speaks an entire workout; prefer `log_exercise` for a single clean entry the agent already parsed.",
+      category: "action",
+      schema: {
+        description: z.string().min(1).max(2000).describe("Free-text workout description to parse"),
+        gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+        week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+        day_name: z.string().optional().describe("Day name (defaults to today)"),
+        mark_complete: z.boolean().optional().describe("Also mark the workout complete after logging all sets"),
+      },
+      execute: withKit(async (kit, p: { description: string; gym_id?: string; week_number?: number; day_name?: string; mark_complete?: boolean }) =>
+        kit.nlTools.bulk_log_workout(p)),
+    }),
 
     // ── AI generation ────────────────────────────────────────
     defineTool({
@@ -413,6 +436,18 @@ export function buildApp(supabase: SupabaseClient): BotNativeApp {
       },
       execute: withKit(async (kit, p: any) =>
         kit.generation.generate_workout_program(p.start_week, p.week_count, p.program, p.ai_notes, p.gym_id)),
+    }),
+    defineTool({
+      name: "rebuild_week_for_constraints",
+      description: "Rebuild a single workout week in place to satisfy new constraints (e.g., 'no barbell — traveling', 'back tweaked, skip deadlifts', 'only 30 min per session'). Loads the week, sends it plus the constraints string to the server-side LLM, parses the response, and saves the rebuilt week. Use this when the user hits a one-off constraint for a specific week rather than a global equipment change (for that, use `substitute_equipment_globally`).",
+      category: "action",
+      schema: {
+        week: z.number().int().min(1).describe("Week number to rebuild"),
+        constraints: z.string().min(1).max(1000).describe("Free-text description of the constraints to satisfy (e.g., 'no barbell access', 'sore left shoulder', '30 min sessions only')"),
+        gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      },
+      execute: withKit(async (kit, p: { week: number; constraints: string; gym_id?: string }) =>
+        kit.generation.rebuild_week_for_constraints(p.week, p.constraints, p.gym_id)),
     }),
     defineTool({
       name: "delete_set",

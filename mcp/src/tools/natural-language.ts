@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AppError } from "@bot-native/sdk";
 import type { ToolResult, ProgramExercise } from "../types.js";
 import { getTodayName } from "../week-calc.js";
 import type { createQueryTools } from "./queries.js";
 import type { createActionTools } from "./actions.js";
+import type { LlmCaller } from "./generation.js";
 
 type WeightInput = number | "prescribed";
 
@@ -39,11 +41,20 @@ interface ResolvedProgramExercise extends Omit<ProgramExercise, "percentages"> {
   percentages?: number[] | null;
 }
 
+function stripJsonFences(text: string): string {
+  let s = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) s = s.slice(first, last + 1);
+  return s;
+}
+
 export function createNaturalLanguageTools(
   supabase: SupabaseClient,
   userId: string,
   queries: ReturnType<typeof createQueryTools>,
-  actions: ReturnType<typeof createActionTools>
+  actions: ReturnType<typeof createActionTools>,
+  callLlm?: LlmCaller
 ) {
   function fuzzyMatch(input: string, exercises: Array<{ name: string }>): number {
     const normalized = input.toLowerCase().trim();
@@ -403,5 +414,115 @@ export function createNaturalLanguageTools(
     };
   }
 
-  return { log_exercise, log_workout_summary };
+  async function bulk_log_workout(params: {
+    description: string;
+    gym_id?: string;
+    week_number?: number;
+    day_name?: string;
+    mark_complete?: boolean;
+  }): Promise<ToolResult> {
+    const { description, gym_id, week_number, day_name, mark_complete } = params;
+
+    if (typeof description !== "string" || description.trim().length === 0) {
+      throw AppError.invalidArgs("description must be a non-empty string.");
+    }
+    if (description.length > 2000) {
+      throw AppError.invalidArgs("description must be 2000 characters or fewer.");
+    }
+    if (!callLlm) {
+      throw AppError.invalidArgs(
+        "bulk_log_workout is not available: server LLM caller not configured."
+      );
+    }
+
+    const systemPrompt = [
+      "You are a strict JSON extractor. The user will describe one or more sets of weightlifting exercises in natural language.",
+      "Return ONLY a JSON object with this exact shape:",
+      '{ "exercises": [ { "exercise_name": "...", "sets": <number>, "reps": <number|string>, "weight_lbs": <number|undefined>, "notes": <string|undefined> } ] }',
+      "",
+      "Rules:",
+      "- Each distinct (exercise, weight, reps) combination is its own array entry. If the user gives three sets of bench at three different weights (e.g., '185x5, 185x5, 175x6'), produce three entries, each with sets=1.",
+      "- If the same weight and reps are repeated (e.g., 'bench 3x5 at 185'), produce ONE entry with sets=3.",
+      "- 'reps' may be a number or a string like 'AMRAP', '8-10', or '30 sec'. Prefer a number when the user gave one.",
+      "- Omit 'weight_lbs' only when the user clearly did not mention a weight (e.g., bodyweight exercises).",
+      "- Use canonical exercise names when possible (e.g., 'Barbell Bench Press', 'Back Squat', 'Deadlift').",
+      "- Do NOT include 'sets' entries that are zero or negative. Do NOT fabricate weights the user did not mention.",
+      "- Return JSON only — no markdown fences, no commentary.",
+    ].join("\n");
+
+    const userPrompt = `Workout description to parse:\n\n${description.trim()}`;
+
+    const llmResult = await callLlm({ systemPrompt, userPrompt, requestType: "onboarding" });
+
+    const cleaned = stripJsonFences(llmResult.content || "");
+    if (!cleaned) {
+      throw AppError.invalidArgs("LLM returned an empty response.");
+    }
+
+    let parsed: { exercises?: unknown };
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      throw AppError.invalidArgs(
+        `LLM response was not valid JSON: ${(e as Error).message}`
+      );
+    }
+
+    if (!parsed || !Array.isArray(parsed.exercises) || parsed.exercises.length === 0) {
+      throw AppError.invalidArgs("LLM response did not contain a non-empty exercises array.");
+    }
+
+    const exercises = parsed.exercises.map((raw, i) => {
+      if (!raw || typeof raw !== "object") {
+        throw AppError.invalidArgs(`Exercise #${i + 1} is not an object.`);
+      }
+      const r = raw as Record<string, unknown>;
+      const exerciseName = typeof r.exercise_name === "string" ? r.exercise_name.trim() : "";
+      if (!exerciseName) throw AppError.invalidArgs(`Exercise #${i + 1} missing exercise_name.`);
+      const sets = typeof r.sets === "number" ? r.sets : 1;
+      if (!Number.isInteger(sets) || sets < 1) {
+        throw AppError.invalidArgs(`Exercise #${i + 1} has invalid sets: ${sets}.`);
+      }
+      if (r.reps === undefined || r.reps === null) {
+        throw AppError.invalidArgs(`Exercise #${i + 1} missing reps.`);
+      }
+      const reps = typeof r.reps === "number" || typeof r.reps === "string" ? r.reps : String(r.reps);
+
+      const entry: {
+        exercise_name: string;
+        sets: number;
+        reps: number | string;
+        weight_lbs?: number;
+        notes?: string;
+      } = { exercise_name: exerciseName, sets, reps };
+      if (typeof r.weight_lbs === "number" && r.weight_lbs >= 0) entry.weight_lbs = r.weight_lbs;
+      if (typeof r.notes === "string" && r.notes.trim()) entry.notes = r.notes.trim();
+      return entry;
+    });
+
+    const summaryResult = await log_workout_summary({
+      gym_id,
+      week_number,
+      day_name,
+      exercises,
+      mark_complete,
+    });
+
+    if (!summaryResult.success) {
+      return summaryResult;
+    }
+
+    return {
+      success: true,
+      message: summaryResult.message,
+      data: {
+        ...(summaryResult.data as Record<string, unknown>),
+        parsed_from_description: description.trim(),
+        model: llmResult.model,
+        usage: llmResult.usage,
+      },
+    };
+  }
+
+  return { log_exercise, log_workout_summary, bulk_log_workout };
 }

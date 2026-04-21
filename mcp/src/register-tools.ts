@@ -349,6 +349,28 @@ export function registerTools(
     }
   );
 
+  server.tool(
+    "bulk_log_workout",
+    "Log a whole workout from a single free-text description (e.g., 'benched 185x5, 185x5, 175x6; squat 3x5 @ 225'). Uses the server-side LLM to parse the description into structured exercises, then logs them via log_workout_summary. Preferred when the user pastes or speaks an entire workout; prefer `log_exercise` for a single clean entry the agent already parsed.",
+    {
+      description: z.string().min(1).max(2000).describe("Free-text workout description to parse"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
+      day_name: z.string().optional().describe("Day name (defaults to today)"),
+      mark_complete: z.boolean().optional().describe("Also mark the workout complete after logging all sets"),
+    },
+    async ({ description, gym_id, week_number, day_name, mark_complete }) => {
+      const result = await nlTools.bulk_log_workout({
+        description,
+        gym_id,
+        week_number,
+        day_name,
+        mark_complete,
+      });
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
   // ── AI generation ────────────────────────────────────────
 
   server.tool(
@@ -385,6 +407,20 @@ export function registerTools(
         ai_notes,
         gym_id
       );
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "rebuild_week_for_constraints",
+    "Rebuild a single workout week in place to satisfy new constraints (e.g., 'no barbell — traveling', 'back tweaked, skip deadlifts', 'only 30 min per session'). Loads the week, sends it plus the constraints string to the server-side LLM, parses the response, and saves the rebuilt week. Use this when the user hits a one-off constraint for a specific week rather than a global equipment change (for that, use `substitute_equipment_globally`).",
+    {
+      week: z.number().int().min(1).describe("Week number to rebuild"),
+      constraints: z.string().min(1).max(1000).describe("Free-text description of the constraints to satisfy (e.g., 'no barbell access', 'sore left shoulder', '30 min sessions only')"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ week, constraints, gym_id }) => {
+      const result = await generation.rebuild_week_for_constraints(week, constraints, gym_id);
       return { content: [{ type: "text", text: result.message }] };
     }
   );

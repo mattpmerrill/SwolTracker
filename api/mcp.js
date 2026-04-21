@@ -6,6 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
 import { buildApp } from '../mcp/dist/sdk-adapter.js';
+import { callLlmInternal } from './_llm-core.js';
 import {
   CATEGORY_LIMITS,
   TOOL_LIMITS,
@@ -46,7 +47,9 @@ export default async function handler(req, res) {
     if (!auth) return;
     const { supabase, userId, apiKeyId } = auth;
 
-    const app = buildApp(supabase);
+    const callLlm = ({ systemPrompt, userPrompt, requestType }) =>
+      callLlmInternal(supabase, { systemPrompt, userPrompt, requestType });
+    const app = buildApp(supabase, { callLlm });
     const toolName = extractToolName(req.body);
 
     if (toolName) {

@@ -94,6 +94,7 @@ Thirty-seven tools across four categories. Call names match exactly.
 | `log_set` | Log one set (low-level) | `exercise_index`, `set_index`, `exercise_name`, `actual_weight`, `actual_reps` |
 | `log_exercise` | Log from natural language (fuzzy match + set expansion) | `exercise_name`, `sets`, `reps` |
 | `log_workout_summary` | Log a whole workout in one call | `exercises[]` |
+| `bulk_log_workout` | Parse a free-text workout description via the server LLM and log every set | `description` |
 | `mark_workout_complete` | Finish today's workout; emits `workout_completed` | — |
 | `update_max` | Set new 1RM; emits `pr_detected` on improvement | `exercise_name`, `weight_lbs` |
 | `delete_max` | Remove a lift's 1RM records | `exercise_name` |
@@ -102,6 +103,7 @@ Thirty-seven tools across four categories. Call names match exactly.
 | `log_missed_day` | Mark a day as intentionally missed | — |
 | `save_workout_program` | Save a single week's program | `week_number`, `program_data` |
 | `generate_workout_program` | Save a multi-week program | `start_week`, `week_count`, `program` |
+| `rebuild_week_for_constraints` | Rebuild one week in place via the server-side LLM to satisfy new constraints | `week`, `constraints` |
 | `shift_program` | Postpone or advance the program start date by N weeks | `weeks_forward` |
 | `substitute_equipment_globally` | Swap an exercise for an alternate across every week | `from_exercise`, `to_exercise` |
 | `send_coach_message` | Post to the Coach Board | `content` |
@@ -194,7 +196,12 @@ The same bundle ships as the `data` field of the `get_context_bundle` MCP tool �
 Call `get_todays_workout`. The response's `message` is human-readable; `data.exercises` is structured.
 
 ### "Log my workout" (natural language)
-Prefer `log_exercise` (or `log_workout_summary` for multiple lifts in one call). Both fuzzy-match exercise names against the user's current program. Always confirm what was logged: "Logged Bench Press 3×8 @ 185."
+You have three options in increasing order of responsibility:
+1. **`log_exercise`** — when you've already extracted a single `{exercise_name, sets, reps, weight}` from the user's message.
+2. **`log_workout_summary`** — when you've structured multiple exercises into an `exercises[]` array yourself.
+3. **`bulk_log_workout(description)`** — when the user pastes or speaks a whole workout as one string ("benched 185x5, 185x5, 175x6; squat 3x5 @ 225"). The server-side LLM parses it; you don't have to.
+
+All three fuzzy-match exercise names against the user's current program. Always confirm what was logged: "Logged Bench Press 3×8 @ 185."
 
 ### "What are my maxes?"
 Call `get_maxes`. For history, `get_max_history` with one lift.
@@ -209,6 +216,9 @@ You are the generator. Do **not** call another LLM.
 3. Draft the program in conversation.
 4. User confirms.
 5. `generate_workout_program(start_week, week_count, program)` to save.
+
+### Rebuilding one week for a constraint
+When the user hits a one-off constraint for a specific week ("traveling next week, no barbell", "back tweaked, skip deadlifts"), call `rebuild_week_for_constraints(week, constraints)`. The server-side LLM rewrites just that week in place and saves it — you don't need to draft or parse anything. For permanent equipment swaps that apply to every week, use `substitute_equipment_globally` instead.
 
 ### Async coaching
 The Coach Board is asynchronous. Use `send_coach_message` to leave a note. `get_user_messages` pulls anything the user left for you. `message_type` options: `chat`, `weekly_review`, `program_update`, `milestone` — pick the right one so the UI can render it correctly.

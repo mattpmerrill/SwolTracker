@@ -15,9 +15,11 @@ export const CATEGORY_LIMITS = {
 };
 
 export const TOOL_LIMITS = {
-  save_workout_program:     { max: 20, window: 60 },
-  generate_workout_program: { max: 20, window: 60 },
-  send_coach_message:       { max: 50, window: 60 },
+  save_workout_program:          { max: 20, window: 60 },
+  generate_workout_program:      { max: 20, window: 60 },
+  rebuild_week_for_constraints:  { max: 10, window: 60 },
+  bulk_log_workout:              { max: 30, window: 60 },
+  send_coach_message:            { max: 50, window: 60 },
 };
 
 export function getSupabase() {
