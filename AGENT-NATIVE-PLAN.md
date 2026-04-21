@@ -202,8 +202,9 @@ Goal: the things that make the agent a driver, not just an assistant.
 - [x] Agent drives the interview via chat; writes profile fields via the new MCP tools. Shell polls `get_onboarding_status` for live updates. **Effort: M**
   - **Result:** New `src/components/AgentOnboarding/` component set — `index.jsx` container + 3 screens (`WelcomeScreen`, `ConnectScreen`, `ConfirmScreen`). Pure-logic helpers extracted to `status.js` (REQUIRED_FIELDS, computeMissingFields, canComplete, isOnboardingDone) so the shell and the MCP `get_onboarding_status` tool stay in sync. New hook `useAgentOnboarding.js` owns the state machine: creates a gym + API key on connect, polls `db.getProfile` + `db.getGymEquipment` every 2.5s on the confirm screen, celebrates with confetti when `onboarding_completed` flips, times out after 10 min. Not yet wired into `swoltracker.jsx` — feature-flag integration is 3.5.4. 5 new status-helper tests (113 total, all green). Build clean.
 
-#### 3.5.3 — Simplified no-agent fallback
-- [ ] Collapse the 11 form steps to 4 grouped screens: basics (name/gender/age/weight), training (goals/days/duration), equipment (location/gear), dates. **Effort: M**
+#### 3.5.3 — Simplified no-agent fallback — ✅ DONE
+- [x] Collapse the 11 form steps to 4 grouped screens: basics (name/gender/age/weight), training (goals/days/duration), equipment (location/gear), dates. **Effort: M**
+  - **Result:** New `src/components/SimpleOnboarding/` component set — `index.jsx` container + 4 grouped form screens + a generating screen that reuses the existing LOADING_PHRASES. Pure-logic helpers in `validation.js` (canProceed, compileData, SCREEN_ORDER) keep the hook and tests aligned. New hook `useSimpleOnboarding.js` owns field state and per-screen navigation; delegates validation to the pure module. 10 new validation tests cover every screen's accept/reject cases plus compileData's field renaming. Not yet wired in — 3.5.4 will route users here based on the welcome-screen branch choice. 123/123 tests green, build clean.
 
 #### 3.5.4 — Feature-flag rollout
 - [ ] Wrap new flow behind env-var flag so old 13-step path is reachable for rollback. **Effort: S**
