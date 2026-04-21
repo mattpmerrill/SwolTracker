@@ -70,7 +70,7 @@ function buildToolKit(
   const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions, deps?.callLlm);
   const generation = createGenerationTools(supabase, userId, queries, actions, deps?.callLlm);
   const coaching = createCoachingTools(supabase, userId);
-  const onboarding = createOnboardingTools(supabase, userId);
+  const onboarding = createOnboardingTools(supabase, userId, events);
   return { queries, actions, context, nlTools, generation, coaching, onboarding };
 }
 

@@ -218,5 +218,50 @@ describe('MCP onboarding contract', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('permission denied');
     });
+
+    it('emits onboarding.completed event when provided and RPC succeeds', async () => {
+      const sb = createMcpMockSupabase();
+      sb.respond('profiles.single', { data: fullProfile, error: null });
+      sb.respond('gym_equipment.list', { data: [{ name: 'Barbell' }, { name: 'Bench' }], error: null });
+      sb.respond('rpc.complete_onboarding', { data: true, error: null });
+
+      const emissions: Array<{ name: string; userId: string; payload: unknown }> = [];
+      const events = {
+        async emit(name: string, userId: string, payload: Record<string, unknown>) {
+          emissions.push({ name, userId, payload });
+        },
+      };
+
+      const tools = createOnboardingTools(sb, 'u1', events);
+      await tools.complete_onboarding({});
+
+      expect(emissions).toHaveLength(1);
+      expect(emissions[0].name).toBe('onboarding.completed');
+      expect(emissions[0].userId).toBe('u1');
+      expect(emissions[0].payload).toEqual({
+        display_name: 'Matt',
+        equipment_count: 2,
+      });
+    });
+
+    it('does not emit onboarding.completed when RPC fails', async () => {
+      const sb = createMcpMockSupabase();
+      sb.respond('profiles.single', { data: fullProfile, error: null });
+      sb.respond('gym_equipment.list', { data: [{ name: 'Barbell' }], error: null });
+      sb.respond('rpc.complete_onboarding', { data: null, error: { message: 'boom' } });
+
+      const emissions: Array<unknown> = [];
+      const events = {
+        async emit(name: string) {
+          emissions.push(name);
+        },
+      };
+
+      const tools = createOnboardingTools(sb, 'u1', events);
+      const result = await tools.complete_onboarding({});
+
+      expect(result.success).toBe(false);
+      expect(emissions).toHaveLength(0);
+    });
   });
 });

@@ -24,6 +24,7 @@ event_keys:
   - max.updated
   - milestone.hit
   - program.saved
+  - onboarding.completed
 context_keys:
   - current_program
   - recent_logs

@@ -3,13 +3,12 @@ import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
 import { computeMissingFields, isOnboardingDone } from '../components/AgentOnboarding/status';
 
-const POLL_INTERVAL_MS = 2500;
-const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+const WATCH_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
- * Agent-driven onboarding: owns the 3-screen state machine and the polling
- * loop that watches the profile row + gym equipment for writes made by the
- * user's connected agent via the MCP tools.
+ * Agent-driven onboarding: owns the 3-screen state machine and subscribes to
+ * Supabase realtime events on `app_events` so UI updates fire the instant the
+ * user's connected agent writes via MCP tools (program.saved, onboarding.completed, etc).
  */
 export function useAgentOnboarding({ user, onComplete, supabase }) {
   const [screen, setScreen] = useState('welcome');
@@ -68,7 +67,7 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
     if (screen !== 'confirm' || !user?.id) return undefined;
     let cancelled = false;
 
-    const tick = async () => {
+    const refetch = async () => {
       try {
         const [nextProfile, nextEquipment] = await Promise.all([
           db.getProfile(user.id),
@@ -88,22 +87,38 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
           }, 250);
         }
       } catch (err) {
-        console.error('Agent onboarding poll failed:', err);
+        console.error('Agent onboarding refetch failed:', err);
       }
     };
 
-    tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    refetch();
+
+    const channel = supabase
+      .channel(`agent-onboarding:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'app_events',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          if (!cancelled) refetch();
+        }
+      )
+      .subscribe();
+
     const timeout = setTimeout(() => {
       if (!cancelled) setPollTimeout(true);
-    }, POLL_TIMEOUT_MS);
+    }, WATCH_TIMEOUT_MS);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      supabase.removeChannel(channel);
       clearTimeout(timeout);
     };
-  }, [screen, user?.id, gymId]);
+  }, [screen, user?.id, gymId, supabase]);
 
   const copyToClipboard = (text, setter) => {
     navigator.clipboard.writeText(text);

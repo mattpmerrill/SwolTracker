@@ -70,6 +70,7 @@ describe('SKILL.md', () => {
     expect(events).toContain('max.updated');
     expect(events).toContain('milestone.hit');
     expect(events).toContain('program.saved');
+    expect(events).toContain('onboarding.completed');
     // Old prefixed names must be gone.
     expect(events).not.toContain('swoltracker.workout_completed');
     expect(events).not.toContain('swoltracker.pr_detected');

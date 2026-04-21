@@ -172,9 +172,12 @@ Goal: the things that make the agent a driver, not just an assistant.
   - **Result:** Both the `/api/mcp/context` HTTP endpoint and the `get_context_bundle` MCP tool share a single source of truth — `createContextModules()` in `mcp/src/context-modules.ts`. Tests cover per-module happy-path + priority trimming when budget is exceeded. Shared MCP auth/rate-limit/audit helpers extracted to `api/_mcp-shared.js`.
 
 ### 3.2 Event subscriptions replace polling
-- [ ] Emit events from SwolTracker tools: `workout.completed`, `workout.missed`, `max.updated`, `program.saved`, `milestone.hit`, `week.rolled_over`. **Effort: M**
-- [ ] Expose subscription via SDK's event store (agents long-poll `claimPending`). **Effort: S**
-- [ ] Kill the onboarding polling loop in `Onboarding.jsx` — replace with an event subscription. **Effort: M**
+- [x] Emit events from SwolTracker tools: `workout.completed`, `workout.missed`, `max.updated`, `program.saved`, `milestone.hit`. **Effort: M**
+  - **Result:** Five of the six target events already land in `app_events` from `mcp/src/tools/actions.ts` (`workout.completed` :316, `max.updated` :367, `milestone.hit` :378, `program.saved` :460 & :552, `workout.missed` :990). New in this phase: `onboarding.completed` emission from `complete_onboarding` (`mcp/src/tools/onboarding.ts`) so the onboarding UI gets a direct signal when the agent closes out the flow. `week.rolled_over` remains deferred — it needs a cron trigger that doesn't exist yet, and the skill-endpoint contract test explicitly excludes it. SKILL.md event_keys updated to include `onboarding.completed`.
+- [ ] Expose subscription via SDK's event store (agents long-poll `claimPending`). **Effort: S** *(Deferred to Phase 2.4)*
+  - **Note:** `get_pending_events` at `actions.ts:639` already lets agents pull unprocessed events and atomically mark them processed (the claim pattern, without lease semantics). True HTTP long-poll and lease-based claim will land with Phase 2.4's Supabase event-store adapter in the SDK — that's the right home for the abstraction, and doing it twice (here + there) would be churn.
+- [x] Kill the onboarding polling loop — replace with an event subscription. **Effort: M**
+  - **Result:** `src/hooks/useAgentOnboarding.js` now subscribes to Supabase realtime on `app_events` filtered by `user_id` (migration 029 already published the table). Any INSERT triggers a refetch of profile + gym equipment, so UI state reflects agent writes the moment they land instead of up to 2.5s later. Initial fetch on screen-entry catches any events that fired before subscribe. 10-min timeout kept as fallback. 2 new contract tests verify `onboarding.completed` emits on success and does not emit on RPC failure. 134/134 tests green, build clean.
   - **Done when:** Agent gets push-style notifications for the six events; onboarding live-dots driven by events not polling.
 
 ### 3.3 SKILL.md for SwolTracker — ✅ DONE

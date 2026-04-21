@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@bot-native/sdk";
 import type { ToolResult } from "../types.js";
+import type { EventEmitter } from "../bot-native-shim.js";
 
 export interface UpdateProfileParams {
   display_name?: string;
@@ -61,7 +62,11 @@ function validatePartial(p: UpdateProfileParams) {
   }
 }
 
-export function createOnboardingTools(supabase: SupabaseClient, userId: string) {
+export function createOnboardingTools(
+  supabase: SupabaseClient,
+  userId: string,
+  events?: EventEmitter
+) {
   async function get_onboarding_status(): Promise<ToolResult> {
     const { data: profile, error } = await supabase
       .from("profiles")
@@ -226,6 +231,13 @@ export function createOnboardingTools(supabase: SupabaseClient, userId: string) 
 
     if (rpcError) {
       return { success: false, message: `Failed to complete onboarding: ${rpcError.message}`, data: {} };
+    }
+
+    if (events) {
+      await events.emit("onboarding.completed", userId, {
+        display_name: merged.display_name,
+        equipment_count: equipment.length,
+      });
     }
 
     return {
