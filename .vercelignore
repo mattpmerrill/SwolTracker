@@ -5,4 +5,5 @@ mobile
 .env
 .env*.local
 *.md
+!SKILL.md
 files
