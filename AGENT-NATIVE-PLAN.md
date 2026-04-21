@@ -197,9 +197,10 @@ Goal: the things that make the agent a driver, not just an assistant.
 - [x] `get_onboarding_status()` — helper query so the agent can decide whether to start an interview on connect. Returns `{onboarding_completed, profile, equipment, missing_fields, ready_to_complete}`. **Effort: S**
   - **Result:** New `mcp/src/tools/onboarding.ts` module. 16 contract tests cover validation, partial merging, equipment handling, RPC error propagation. Per-tool rate limits added (`complete_onboarding`: 5/hr, `update_profile`: 60/hr). SKILL.md updated with new tools, `drive_onboarding` capability, and a "Driving onboarding" pattern section that tells agents to batch questions.
 
-#### 3.5.2 — Agent-driven onboarding shell (3 screens)
-- [ ] Collapse 13-step wizard to 3 screens: welcome → agent connection → confirm. **Effort: M**
-- [ ] Agent drives the interview via chat; writes profile fields via the new MCP tools. Shell polls `get_onboarding_status` for live updates. **Effort: M**
+#### 3.5.2 — Agent-driven onboarding shell (3 screens) — ✅ DONE
+- [x] Collapse 13-step wizard to 3 screens: welcome → agent connection → confirm. **Effort: M**
+- [x] Agent drives the interview via chat; writes profile fields via the new MCP tools. Shell polls `get_onboarding_status` for live updates. **Effort: M**
+  - **Result:** New `src/components/AgentOnboarding/` component set — `index.jsx` container + 3 screens (`WelcomeScreen`, `ConnectScreen`, `ConfirmScreen`). Pure-logic helpers extracted to `status.js` (REQUIRED_FIELDS, computeMissingFields, canComplete, isOnboardingDone) so the shell and the MCP `get_onboarding_status` tool stay in sync. New hook `useAgentOnboarding.js` owns the state machine: creates a gym + API key on connect, polls `db.getProfile` + `db.getGymEquipment` every 2.5s on the confirm screen, celebrates with confetti when `onboarding_completed` flips, times out after 10 min. Not yet wired into `swoltracker.jsx` — feature-flag integration is 3.5.4. 5 new status-helper tests (113 total, all green). Build clean.
 
 #### 3.5.3 — Simplified no-agent fallback
 - [ ] Collapse the 11 form steps to 4 grouped screens: basics (name/gender/age/weight), training (goals/days/duration), equipment (location/gear), dates. **Effort: M**
