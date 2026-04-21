@@ -182,17 +182,30 @@ Goal: the things that make the agent a driver, not just an assistant.
 - [x] Serve it from `/api/mcp/skill` so agents can fetch at connect time. **Effort: S**
   - **Result:** Rewritten `SKILL.md` with YAML frontmatter (name, version, tone, capabilities, limitations, event_keys, context_keys) aligning with the Phase 4.2 schema target. Tool catalog grounded in the actual 37 tools registered in `sdk-adapter.ts`, grouped by category (query / action / meta). Events list reflects only the three actually emitted today (`workout_completed`, `pr_detected`, `workout_reminder`) — the two aspirational entries (`streak_at_risk`, `weekly_summary_ready`) were removed until cron work lands. Context bundle section mirrors the 7 modules from 3.1. New `/api/mcp/skill` endpoint serves either `text/markdown` or `application/json` (with parsed frontmatter) based on Accept header; publicly cacheable for 5min. Frontmatter + content invariants covered by a new test file.
 
-### 3.4 Agent-initiated multi-step write tools
-- [ ] `shift_program(weeks_forward: number)` — shifts program start date, handles week rollover. **Effort: S**
-- [ ] `substitute_equipment_globally(from: string, to: string, reason?: string)` — swaps across all weeks. **Effort: M**
-- [ ] `rebuild_week_for_constraints(week: number, constraints: {...})` — LLM call server-side, saves the result. **Effort: M**
-- [ ] `bulk_log_workout(description: string)` — natural-language bulk entry (expands existing `log_exercise`). **Effort: M**
-  - **Done when:** Each tool has a contract test; each is documented in SKILL.md.
+### 3.4 Agent-initiated multi-step write tools — ✅ DONE
+- [x] `shift_program(weeks_forward: number)` — shifts program start date, handles week rollover. **Effort: S**
+- [x] `substitute_equipment_globally(from: string, to: string, reason?: string)` — swaps across all weeks. **Effort: M**
+- [x] `rebuild_week_for_constraints(week: number, constraints: string, gym_id?)` — server-side LLM call via injected `callLlm`, parses JSON response, saves via `save_workout_program`. Extracted `api/_llm-core.js` so the dispatch layer is shared with `api/llm.js`. **Effort: M**
+- [x] `bulk_log_workout(description: string, ...)` — natural-language bulk entry; server-side LLM parses free-text into structured exercises, then delegates to `log_workout_summary`. **Effort: M**
+  - **Result:** All four tools ship with contract tests (mocking the injected `LlmCaller` where applicable) and SKILL.md entries. Per-tool rate limits added in `api/_mcp-shared.js` (`rebuild_week_for_constraints`: 10/hr, `bulk_log_workout`: 30/hr).
 
 ### 3.5 Replace onboarding wizard with agent-driven flow
-- [ ] Collapse 13-step wizard to 3 screens: account → agent connection → confirm. **Effort: L**
-- [ ] Agent drives the interview via chat; writes profile fields via existing MCP tools. **Effort: L**
-- [ ] Fallback (no agent): a 4-step manual wizard for users without an agent. **Effort: M**
+
+#### 3.5.1 — MCP onboarding write tools — ✅ DONE
+- [x] `update_profile({display_name?, gender?, age?, weight_lbs?, fitness_goals?, workout_days?, workout_duration?, workout_location?, program_start_date?})` — partial profile writes; validates ranges + formats. **Effort: S**
+- [x] `complete_onboarding({...fields, equipment?})` — merges with existing profile, validates all required fields present, writes gym_equipment, flips `onboarding_completed`. **Effort: S**
+- [x] `get_onboarding_status()` — helper query so the agent can decide whether to start an interview on connect. Returns `{onboarding_completed, profile, equipment, missing_fields, ready_to_complete}`. **Effort: S**
+  - **Result:** New `mcp/src/tools/onboarding.ts` module. 16 contract tests cover validation, partial merging, equipment handling, RPC error propagation. Per-tool rate limits added (`complete_onboarding`: 5/hr, `update_profile`: 60/hr). SKILL.md updated with new tools, `drive_onboarding` capability, and a "Driving onboarding" pattern section that tells agents to batch questions.
+
+#### 3.5.2 — Agent-driven onboarding shell (3 screens)
+- [ ] Collapse 13-step wizard to 3 screens: welcome → agent connection → confirm. **Effort: M**
+- [ ] Agent drives the interview via chat; writes profile fields via the new MCP tools. Shell polls `get_onboarding_status` for live updates. **Effort: M**
+
+#### 3.5.3 — Simplified no-agent fallback
+- [ ] Collapse the 11 form steps to 4 grouped screens: basics (name/gender/age/weight), training (goals/days/duration), equipment (location/gear), dates. **Effort: M**
+
+#### 3.5.4 — Feature-flag rollout
+- [ ] Wrap new flow behind env-var flag so old 13-step path is reachable for rollback. **Effort: S**
   - **Done when:** Agent-connected user completes onboarding in <3 minutes end-to-end.
 
 ### Phase 3 retro

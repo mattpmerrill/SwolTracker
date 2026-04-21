@@ -29,6 +29,7 @@ import { createContextTools } from "./tools/context.js";
 import { createNaturalLanguageTools } from "./tools/natural-language.js";
 import { createGenerationTools, type LlmCaller } from "./tools/generation.js";
 import { createCoachingTools } from "./tools/coaching.js";
+import { createOnboardingTools } from "./tools/onboarding.js";
 
 export interface BuildAppDeps {
   /** Optional server-side LLM caller. Enables tools like `rebuild_week_for_constraints`. */
@@ -54,6 +55,7 @@ type ToolKit = {
   nlTools: ReturnType<typeof createNaturalLanguageTools>;
   generation: ReturnType<typeof createGenerationTools>;
   coaching: ReturnType<typeof createCoachingTools>;
+  onboarding: ReturnType<typeof createOnboardingTools>;
 };
 
 function buildToolKit(
@@ -68,7 +70,8 @@ function buildToolKit(
   const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions, deps?.callLlm);
   const generation = createGenerationTools(supabase, userId, queries, actions, deps?.callLlm);
   const coaching = createCoachingTools(supabase, userId);
-  return { queries, actions, context, nlTools, generation, coaching };
+  const onboarding = createOnboardingTools(supabase, userId);
+  return { queries, actions, context, nlTools, generation, coaching, onboarding };
 }
 
 type LegacyResult = { success: boolean; message: string; data?: unknown };
@@ -626,6 +629,50 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
         limit: z.number().int().min(1).max(100).default(50).optional().describe("Max messages to return (default 50)"),
       },
       execute: withKit(async (kit, p: { limit?: number }) => kit.coaching.get_conversation_history(p.limit)),
+    }),
+
+    // ── Onboarding (agent drives the interview) ─────────────
+    defineTool({
+      name: "get_onboarding_status",
+      description: "Check whether the user has completed onboarding and which required profile fields are still missing. Use this at agent connect time to decide whether to start an onboarding interview or jump straight to training. Returns { onboarding_completed, profile, equipment, missing_fields, ready_to_complete }.",
+      category: "query",
+      schema: {},
+      execute: withKit(async (kit) => kit.onboarding.get_onboarding_status()),
+    }),
+    defineTool({
+      name: "update_profile",
+      description: "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses, or later to update preferences. All fields optional; provide whatever the user just told you. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
+      category: "action",
+      schema: {
+        display_name: z.string().min(1).max(100).optional().describe("User's preferred display name"),
+        gender: z.string().min(1).max(50).optional().describe("Gender identifier (e.g. 'male', 'female', 'non-binary')"),
+        age: z.number().int().min(1).max(120).optional().describe("Age in years"),
+        weight_lbs: z.number().min(1).max(1000).optional().describe("Current bodyweight in pounds"),
+        fitness_goals: z.array(z.string()).min(1).optional().describe("Goal tags (e.g. ['strength', 'fat_burn'])"),
+        workout_days: z.array(z.string()).min(1).optional().describe("Day names the user wants to train (e.g. ['Monday','Wednesday','Friday'])"),
+        workout_duration: z.string().min(1).optional().describe("Preferred session length (e.g. '45 min', '1 hour')"),
+        workout_location: z.string().min(1).optional().describe("Primary location (e.g. 'home', 'gym', 'outdoor')"),
+        program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Program start date in YYYY-MM-DD"),
+      },
+      execute: withKit(async (kit, p: any) => kit.onboarding.update_profile(p)),
+    }),
+    defineTool({
+      name: "complete_onboarding",
+      description: "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment to the user's gym, and flips onboarding_completed to true. Throws invalid_args if any required field is still missing. Pass `equipment` on the final call if you haven't populated gym_equipment another way.",
+      category: "action",
+      schema: {
+        display_name: z.string().min(1).max(100).optional(),
+        gender: z.string().min(1).max(50).optional(),
+        age: z.number().int().min(1).max(120).optional(),
+        weight_lbs: z.number().min(1).max(1000).optional(),
+        fitness_goals: z.array(z.string()).min(1).optional(),
+        workout_days: z.array(z.string()).min(1).optional(),
+        workout_duration: z.string().min(1).optional(),
+        workout_location: z.string().min(1).optional(),
+        program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        equipment: z.array(z.string()).min(1).optional().describe("Equipment available at the user's gym (written to gym_equipment). If omitted, uses whatever is already configured; throws if nothing is configured."),
+      },
+      execute: withKit(async (kit, p: any) => kit.onboarding.complete_onboarding(p)),
     }),
   ];
 

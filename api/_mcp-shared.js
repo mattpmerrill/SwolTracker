@@ -20,6 +20,8 @@ export const TOOL_LIMITS = {
   rebuild_week_for_constraints:  { max: 10, window: 60 },
   bulk_log_workout:              { max: 30, window: 60 },
   send_coach_message:            { max: 50, window: 60 },
+  complete_onboarding:           { max: 5,  window: 60 },
+  update_profile:                { max: 60, window: 60 },
 };
 
 export function getSupabase() {

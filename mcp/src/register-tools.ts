@@ -7,6 +7,7 @@ import type { createContextTools } from "./tools/context.js";
 import type { createNaturalLanguageTools } from "./tools/natural-language.js";
 import type { createGenerationTools } from "./tools/generation.js";
 import type { createCoachingTools } from "./tools/coaching.js";
+import type { createOnboardingTools } from "./tools/onboarding.js";
 
 const repsSchema = z.union([z.number().int().min(0), z.string()]);
 const weightSchema = z.union([z.number().min(0), z.literal("prescribed")]);
@@ -26,7 +27,8 @@ export function registerTools(
   context: ReturnType<typeof createContextTools>,
   nlTools: ReturnType<typeof createNaturalLanguageTools>,
   generation: ReturnType<typeof createGenerationTools>,
-  coaching: ReturnType<typeof createCoachingTools>
+  coaching: ReturnType<typeof createCoachingTools>,
+  onboarding: ReturnType<typeof createOnboardingTools>
 ) {
   // ── Read-only query tools ────────────────────────────────
 
@@ -625,6 +627,58 @@ export function registerTools(
     },
     async ({ limit }) => {
       const result = await coaching.get_conversation_history(limit);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  // ── Onboarding (agent drives the interview) ─────────────
+  server.tool(
+    "get_onboarding_status",
+    "Check whether the user has completed onboarding and which required profile fields are still missing. Use at agent connect time to decide whether to start an onboarding interview.",
+    {},
+    async () => {
+      const result = await onboarding.get_onboarding_status();
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "update_profile",
+    "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
+    {
+      display_name: z.string().min(1).max(100).optional(),
+      gender: z.string().min(1).max(50).optional(),
+      age: z.number().int().min(1).max(120).optional(),
+      weight_lbs: z.number().min(1).max(1000).optional(),
+      fitness_goals: z.array(z.string()).min(1).optional(),
+      workout_days: z.array(z.string()).min(1).optional(),
+      workout_duration: z.string().min(1).optional(),
+      workout_location: z.string().min(1).optional(),
+      program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    },
+    async (params) => {
+      const result = await onboarding.update_profile(params);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "complete_onboarding",
+    "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment, and flips onboarding_completed. Throws invalid_args if any required field is still missing.",
+    {
+      display_name: z.string().min(1).max(100).optional(),
+      gender: z.string().min(1).max(50).optional(),
+      age: z.number().int().min(1).max(120).optional(),
+      weight_lbs: z.number().min(1).max(1000).optional(),
+      fitness_goals: z.array(z.string()).min(1).optional(),
+      workout_days: z.array(z.string()).min(1).optional(),
+      workout_duration: z.string().min(1).optional(),
+      workout_location: z.string().min(1).optional(),
+      program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      equipment: z.array(z.string()).min(1).optional(),
+    },
+    async (params) => {
+      const result = await onboarding.complete_onboarding(params);
       return { content: [{ type: "text", text: result.message }] };
     }
   );

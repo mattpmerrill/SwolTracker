@@ -9,6 +9,7 @@ import { createContextTools } from "./tools/context.js";
 import { createNaturalLanguageTools } from "./tools/natural-language.js";
 import { createGenerationTools } from "./tools/generation.js";
 import { createCoachingTools } from "./tools/coaching.js";
+import { createOnboardingTools } from "./tools/onboarding.js";
 import { registerTools } from "./register-tools.js";
 
 const supabase = getSupabase();
@@ -23,13 +24,14 @@ const context = createContextTools(supabase, userId, queries);
 const nlTools = createNaturalLanguageTools(supabase, userId, queries, actions);
 const generation = createGenerationTools(supabase, userId, queries, actions);
 const coaching = createCoachingTools(supabase, userId);
+const onboarding = createOnboardingTools(supabase, userId);
 
 const server = new McpServer({
   name: "swoltracker",
   version: "0.1.0",
 });
 
-registerTools(server, queries, actions, context, nlTools, generation, coaching);
+registerTools(server, queries, actions, context, nlTools, generation, coaching, onboarding);
 
 // ── Start ────────────────────────────────────────────────
 

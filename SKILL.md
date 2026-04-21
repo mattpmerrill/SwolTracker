@@ -10,6 +10,7 @@ capabilities:
   - generate_program
   - celebrate_prs
   - async_coaching
+  - drive_onboarding
 limitations:
   - no_wearables_integration
   - no_nutrition_tracking
@@ -46,6 +47,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 - Generate and save multi-week workout programs
 - Mark workout days complete
 - Run async coaching conversations via the Coach Board
+- Drive onboarding: interview the user and write profile fields as they answer
 
 ## Limitations
 
@@ -58,7 +60,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 
 ## Tools
 
-Thirty-seven tools across four categories. Call names match exactly.
+Forty tools across four categories. Call names match exactly.
 
 ### Query (read-only state)
 
@@ -86,6 +88,7 @@ Thirty-seven tools across four categories. Call names match exactly.
 | `get_prompt_template` | Fetch a named prompt template | — |
 | `get_user_messages` | Unread messages the user left for the agent | — |
 | `get_conversation_history` | Full Coach Board conversation | — |
+| `get_onboarding_status` | Whether onboarding is done + which profile fields are missing | — |
 
 ### Action (writes)
 
@@ -106,6 +109,8 @@ Thirty-seven tools across four categories. Call names match exactly.
 | `rebuild_week_for_constraints` | Rebuild one week in place via the server-side LLM to satisfy new constraints | `week`, `constraints` |
 | `shift_program` | Postpone or advance the program start date by N weeks | `weeks_forward` |
 | `substitute_equipment_globally` | Swap an exercise for an alternate across every week | `from_exercise`, `to_exercise` |
+| `update_profile` | Write any subset of profile fields (partial update) | — (any of the profile fields) |
+| `complete_onboarding` | Finalize onboarding: merges any passed fields, writes equipment, flips completed flag | — (any missing fields must be provided) |
 | `send_coach_message` | Post to the Coach Board | `content` |
 
 ### Meta
@@ -219,6 +224,15 @@ You are the generator. Do **not** call another LLM.
 
 ### Rebuilding one week for a constraint
 When the user hits a one-off constraint for a specific week ("traveling next week, no barbell", "back tweaked, skip deadlifts"), call `rebuild_week_for_constraints(week, constraints)`. The server-side LLM rewrites just that week in place and saves it — you don't need to draft or parse anything. For permanent equipment swaps that apply to every week, use `substitute_equipment_globally` instead.
+
+### Driving onboarding
+The agent can run the full onboarding interview:
+1. `get_onboarding_status` — on connect, to decide whether to start an interview. Returns `missing_fields` and `ready_to_complete`.
+2. Interview the user conversationally. As each answer comes in, call `update_profile({field: value})` — fields are: `display_name`, `gender`, `age`, `weight_lbs`, `fitness_goals[]`, `workout_days[]`, `workout_duration`, `workout_location`, `program_start_date` (YYYY-MM-DD).
+3. When all required fields are set, call `complete_onboarding({equipment: [...]})`. Equipment must be passed if the gym has none yet. This flips the `onboarding_completed` flag and writes gym equipment.
+4. Optionally follow with `generate_workout_program` to save the first weeks of training.
+
+Keep the interview short — don't ask one field per message. Batch naturally ("What's your name, age, and bodyweight?") and call `update_profile` with multiple fields at once.
 
 ### Async coaching
 The Coach Board is asynchronous. Use `send_coach_message` to leave a note. `get_user_messages` pulls anything the user left for you. `message_type` options: `chat`, `weekly_review`, `program_update`, `milestone` — pick the right one so the UI can render it correctly.
