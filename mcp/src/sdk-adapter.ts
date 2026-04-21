@@ -323,6 +323,28 @@ export function buildApp(supabase: SupabaseClient): BotNativeApp {
       execute: withKit(async (kit, p: any) =>
         kit.actions.save_workout_program(p.gym_id, p.week_number, p.program_data, p.ai_generated, p.ai_notes)),
     }),
+    defineTool({
+      name: "substitute_equipment_globally",
+      description: "Swap one exercise for another across every week of the user's program. Preserves sets, reps, and percentages. Use when the user loses access to equipment (e.g., 'no barbell this month → dumbbell variants') or wants a global substitution. Fuzzy-matches both exercise names via the canonical normalizer.",
+      category: "action",
+      schema: {
+        from_exercise: z.string().describe("The exercise to replace (e.g., 'Barbell Bench Press' or 'bench')"),
+        to_exercise: z.string().describe("The exercise to substitute in (e.g., 'Dumbbell Bench Press')"),
+        reason: z.string().max(280).optional().describe("Optional note recorded in ai_notes on each updated week"),
+        gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+      },
+      execute: withKit(async (kit, p: { from_exercise: string; to_exercise: string; reason?: string; gym_id?: string }) =>
+        kit.actions.substitute_equipment_globally(p.from_exercise, p.to_exercise, p.reason, p.gym_id)),
+    }),
+    defineTool({
+      name: "shift_program",
+      description: "Shift the program start date by N weeks. Positive weeks_forward postpones (today ends up on an earlier week number); negative weeks_forward advances (today ends up on a later week number). Use when the user skipped a week due to illness/travel, or wants to redo the current block.",
+      category: "action",
+      schema: {
+        weeks_forward: z.number().int().min(-52).max(52).describe("Weeks to shift the start date. Positive = postpone, negative = advance. Bounded to ±52."),
+      },
+      execute: withKit(async (kit, p: { weeks_forward: number }) => kit.actions.shift_program(p.weeks_forward)),
+    }),
 
     // ── Context bundle ───────────────────────────────────────
     defineTool({

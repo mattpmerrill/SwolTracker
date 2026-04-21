@@ -473,6 +473,169 @@ export function createActionTools(
     };
   }
 
+  async function substitute_equipment_globally(
+    fromExercise: string,
+    toExercise: string,
+    reason?: string,
+    gymId?: string
+  ): Promise<ToolResult> {
+    const from = normalizeExerciseName(fromExercise);
+    const to = normalizeExerciseName(toExercise);
+    if (from === to) {
+      throw AppError.invalidArgs(
+        `from and to resolve to the same canonical exercise (${from}). Nothing to substitute.`
+      );
+    }
+
+    const resolvedGymId = await queries.resolveGymId(gymId);
+    if (!resolvedGymId) {
+      throw AppError.notFound("No gym found.");
+    }
+
+    const { data: rows, error: readErr } = await supabase
+      .from("workout_programs")
+      .select("id, week_number, program_data")
+      .eq("gym_id", resolvedGymId);
+
+    if (readErr) {
+      return { success: false, message: `Failed to read programs: ${readErr.message}`, data: {} };
+    }
+
+    const programs = (rows ?? []) as Array<{
+      id: string;
+      week_number: number;
+      program_data: WeekProgram;
+    }>;
+
+    const affectedWeeks: number[] = [];
+    let exercisesChanged = 0;
+
+    for (const row of programs) {
+      let rowChanged = false;
+      const nextProgram: WeekProgram = {};
+      for (const [day, dayProgram] of Object.entries(row.program_data ?? {})) {
+        const exercises = Array.isArray(dayProgram?.exercises) ? dayProgram.exercises : [];
+        const nextExercises = exercises.map((ex) => {
+          if (normalizeExerciseName(ex.name) === from) {
+            rowChanged = true;
+            exercisesChanged += 1;
+            return { ...ex, name: to };
+          }
+          return ex;
+        });
+        nextProgram[day] = { ...dayProgram, exercises: nextExercises };
+      }
+
+      if (!rowChanged) continue;
+
+      const { error: updateErr } = await supabase
+        .from("workout_programs")
+        .update({
+          program_data: nextProgram,
+          ai_notes: reason
+            ? `Substituted ${from} → ${to}: ${reason}`
+            : `Substituted ${from} → ${to}`,
+        })
+        .eq("id", row.id);
+
+      if (updateErr) {
+        return {
+          success: false,
+          message: `Failed to update week ${row.week_number}: ${updateErr.message}`,
+          data: { weeks_updated: affectedWeeks, exercises_changed: exercisesChanged },
+        };
+      }
+
+      affectedWeeks.push(row.week_number);
+
+      try {
+        await events.emit("program.saved", userId, {
+          week_number: row.week_number,
+          gym_id: resolvedGymId,
+          ai_generated: false,
+        });
+      } catch {
+        // best-effort
+      }
+    }
+
+    if (exercisesChanged === 0) {
+      return {
+        success: true,
+        message: `No occurrences of ${from} found in any program. Nothing changed.`,
+        data: { from, to, weeks_updated: [], exercises_changed: 0 },
+      };
+    }
+
+    return {
+      success: true,
+      message: `Substituted ${from} → ${to} in ${exercisesChanged} spot${exercisesChanged === 1 ? "" : "s"} across ${affectedWeeks.length} week${affectedWeeks.length === 1 ? "" : "s"}.`,
+      data: {
+        from,
+        to,
+        reason: reason ?? null,
+        weeks_updated: affectedWeeks.sort((a, b) => a - b),
+        exercises_changed: exercisesChanged,
+      },
+    };
+  }
+
+  async function shift_program(weeksForward: number): Promise<ToolResult> {
+    if (!Number.isInteger(weeksForward)) {
+      throw AppError.invalidArgs("weeks_forward must be an integer.");
+    }
+    if (weeksForward === 0) {
+      return {
+        success: true,
+        message: "No shift applied (weeks_forward = 0).",
+        data: { weeks_forward: 0 },
+      };
+    }
+    if (weeksForward < -52 || weeksForward > 52) {
+      throw AppError.invalidArgs("weeks_forward must be between -52 and 52.");
+    }
+
+    const { data: profile, error: readErr } = await supabase
+      .from("profiles")
+      .select("program_start_date")
+      .eq("id", userId)
+      .single();
+
+    if (readErr) {
+      return { success: false, message: `Failed to read profile: ${readErr.message}`, data: {} };
+    }
+
+    const anchor = profile?.program_start_date
+      ? new Date(profile.program_start_date + "T00:00:00.000Z")
+      : new Date();
+    const shifted = new Date(anchor.getTime() + weeksForward * 7 * 24 * 60 * 60 * 1000);
+    const newDate = shifted.toISOString().slice(0, 10);
+
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ program_start_date: newDate })
+      .eq("id", userId);
+
+    if (updateErr) {
+      return { success: false, message: `Failed to shift program: ${updateErr.message}`, data: {} };
+    }
+
+    const nextCurrentWeek = getCurrentWeek(newDate);
+    const direction = weeksForward > 0 ? "forward" : "back";
+    const magnitude = Math.abs(weeksForward);
+
+    return {
+      success: true,
+      message: `Program shifted ${direction} ${magnitude} week${magnitude === 1 ? "" : "s"}. New start date: ${newDate}. Today is now Week ${nextCurrentWeek}.`,
+      data: {
+        weeks_forward: weeksForward,
+        previous_start_date: profile?.program_start_date ?? null,
+        new_start_date: newDate,
+        current_week: nextCurrentWeek,
+      },
+    };
+  }
+
   async function get_pending_events(limit: number = 10): Promise<ToolResult> {
     const { data, error } = await supabase
       .from("app_events")
@@ -900,6 +1063,8 @@ export function createActionTools(
     update_max,
     delete_max,
     save_workout_program,
+    shift_program,
+    substitute_equipment_globally,
     get_pending_events,
     generate_weekly_summary,
     check_workout_reminder,

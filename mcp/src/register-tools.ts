@@ -262,6 +262,38 @@ export function registerTools(
     }
   );
 
+  server.tool(
+    "substitute_equipment_globally",
+    "Swap one exercise for another across every week of the user's program. Preserves sets, reps, and percentages. Use when the user loses access to equipment (e.g., 'no barbell this month → dumbbell variants') or wants a global substitution. Fuzzy-matches both exercise names via the canonical normalizer.",
+    {
+      from_exercise: z.string().describe("The exercise to replace (e.g., 'Barbell Bench Press' or 'bench')"),
+      to_exercise: z.string().describe("The exercise to substitute in (e.g., 'Dumbbell Bench Press')"),
+      reason: z.string().max(280).optional().describe("Optional note recorded in ai_notes on each updated week"),
+      gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
+    },
+    async ({ from_exercise, to_exercise, reason, gym_id }) => {
+      const result = await actions.substitute_equipment_globally(
+        from_exercise,
+        to_exercise,
+        reason,
+        gym_id
+      );
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
+  server.tool(
+    "shift_program",
+    "Shift the program start date by N weeks. Positive weeks_forward postpones (today ends up on an earlier week number); negative weeks_forward advances (today ends up on a later week number). Use when the user skipped a week due to illness/travel, or wants to redo the current block.",
+    {
+      weeks_forward: z.number().int().min(-52).max(52).describe("Weeks to shift the start date. Positive = postpone, negative = advance. Bounded to ±52."),
+    },
+    async ({ weeks_forward }) => {
+      const result = await actions.shift_program(weeks_forward);
+      return { content: [{ type: "text", text: result.message }] };
+    }
+  );
+
   // ── Context bundle ───────────────────────────────────────
 
   server.tool(

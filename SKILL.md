@@ -102,6 +102,8 @@ Thirty-seven tools across four categories. Call names match exactly.
 | `log_missed_day` | Mark a day as intentionally missed | — |
 | `save_workout_program` | Save a single week's program | `week_number`, `program_data` |
 | `generate_workout_program` | Save a multi-week program | `start_week`, `week_count`, `program` |
+| `shift_program` | Postpone or advance the program start date by N weeks | `weeks_forward` |
+| `substitute_equipment_globally` | Swap an exercise for an alternate across every week | `from_exercise`, `to_exercise` |
 | `send_coach_message` | Post to the Coach Board | `content` |
 
 ### Meta
