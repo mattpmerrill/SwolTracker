@@ -17,7 +17,7 @@ import { useProfileActions } from './hooks/useProfileActions';
 import { validate, equipmentNameSchema } from './lib/validation';
 
 import LoginPage from './components/LoginPage';
-import Onboarding from './components/Onboarding';
+import OnboardingRouter from './components/OnboardingRouter';
 import { Header, BottomNav } from './components/Layout';
 import AgentChatFAB from './components/AgentChat/AgentChatFAB';
 import ScreenRouter from './components/ScreenRouter';
@@ -161,7 +161,7 @@ export default function SwolTracker() {
 
   if (showOnboarding) {
     return (
-      <Onboarding
+      <OnboardingRouter
         user={onboardingData}
         onComplete={handleOnboardingComplete}
         onGenerateWorkout={handleGenerateOnboardingWorkout}

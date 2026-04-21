@@ -206,8 +206,9 @@ Goal: the things that make the agent a driver, not just an assistant.
 - [x] Collapse the 11 form steps to 4 grouped screens: basics (name/gender/age/weight), training (goals/days/duration), equipment (location/gear), dates. **Effort: M**
   - **Result:** New `src/components/SimpleOnboarding/` component set — `index.jsx` container + 4 grouped form screens + a generating screen that reuses the existing LOADING_PHRASES. Pure-logic helpers in `validation.js` (canProceed, compileData, SCREEN_ORDER) keep the hook and tests aligned. New hook `useSimpleOnboarding.js` owns field state and per-screen navigation; delegates validation to the pure module. 10 new validation tests cover every screen's accept/reject cases plus compileData's field renaming. Not yet wired in — 3.5.4 will route users here based on the welcome-screen branch choice. 123/123 tests green, build clean.
 
-#### 3.5.4 — Feature-flag rollout
-- [ ] Wrap new flow behind env-var flag so old 13-step path is reachable for rollback. **Effort: S**
+#### 3.5.4 — Feature-flag rollout — ✅ DONE
+- [x] Wrap new flow behind env-var flag so old 13-step path is reachable for rollback. **Effort: S**
+  - **Result:** New `src/components/OnboardingRouter.jsx` replaces the direct `<Onboarding>` render in `swoltracker.jsx`. Reads `VITE_NEW_ONBOARDING_FLOW` via the pure `OnboardingRouter.flag.js` helper (accepts `true` / `"true"` / `"1"`, defaults false). When off, the legacy 13-step wizard is the only path — zero-risk rollback. When on, users start at `AgentOnboarding`'s welcome screen; clicking "No agent? Set up manually" flips router state to render `SimpleOnboarding` instead. All existing onboarding callbacks (`handleOnboardingComplete`, `handleGenerateOnboardingWorkout`, `handlePrepareForAgent`) pass through unchanged. 9 new flag tests cover truthy/falsy variants plus null-env tolerance. 132/132 tests green, build clean.
   - **Done when:** Agent-connected user completes onboarding in <3 minutes end-to-end.
 
 ### Phase 3 retro
