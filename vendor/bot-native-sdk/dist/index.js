@@ -1,5 +1,6 @@
 export { eventDeclarationSchema, appManifestSchema, appEventSchema, contextBundleSchema, validate, } from "./contracts/validation.js";
 export { skillSchema, validateSkill, parseFrontmatter, SkillValidationError, } from "./contracts/skill.js";
+export { buildOpenApiDocument, } from "./contracts/openapi.js";
 export { createAuthVerifier, createSnappyClawJwtResolver, } from "./runtime/auth.js";
 export { createInMemoryEventStore, createEventEmitter } from "./events/store.js";
 export { buildContextBundleFromModules } from "./context/module.js";

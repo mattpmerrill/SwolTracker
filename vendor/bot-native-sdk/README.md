@@ -1,9 +1,10 @@
 # @bot-native/sdk (vendored)
 
 This is a vendored build of `@bot-native/sdk` from
-`github.com/get-latest/bot-native-sdk`, pinned to commit `bdfa845`
-(Phase 4.3 capability/scope model: `DefinedTool.scopes` +
-`executeToolWithGuards` + `skillSchema.scopes`).
+`github.com/get-latest/bot-native-sdk`, pinned to commit `1de4759`
+(Phase 4.4 OpenAPI export: `buildOpenApiDocument()` +
+`zod-to-json-schema` inlining + per-tool scopes on `security[]`
+and `x-required-scopes`).
 
 **Source of truth:** `~/Work/bot-native-sdk/packages/sdk`
 

@@ -1,6 +1,7 @@
 export type { AppTransport, EventDeclaration, AppManifest, AppEvent, ContextBundle, AppToolResult, AppToolError, AppToolErrorCode, AppIdentity, AuthResolver, AppEventRecord, EventStore, ContextModule, AuthPayload, } from "./contracts/types.js";
 export { eventDeclarationSchema, appManifestSchema, appEventSchema, contextBundleSchema, validate, } from "./contracts/validation.js";
 export { skillSchema, validateSkill, parseFrontmatter, SkillValidationError, type Skill, } from "./contracts/skill.js";
+export { buildOpenApiDocument, type OpenApiDocument, type BuildOpenApiOptions, } from "./contracts/openapi.js";
 export { createAuthVerifier, createSnappyClawJwtResolver, type AuthVerifier, } from "./runtime/auth.js";
 export { createInMemoryEventStore, createEventEmitter } from "./events/store.js";
 export { buildContextBundleFromModules } from "./context/module.js";
