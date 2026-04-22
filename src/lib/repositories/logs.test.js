@@ -32,4 +32,25 @@ describe('logsRepo', () => {
     expect(log?.id).toBe('l1');
     expect(log?.actual_weight).toBe(185);
   });
+
+  it('logSet persists actual_weight distinct from prescribed_weight when user scales down', async () => {
+    const sb = createMockSupabase();
+    sb.respond('workout_logs', 'single', {
+      data: { id: 'l2', actual_weight: 170, prescribed_weight: 185, actual_reps: 5 },
+      error: null,
+    });
+    const repo = createLogsRepo(sb);
+    await repo.logSet('u1', 'g1', 1, 'Monday', 0, 0, 'Bench', {
+      prescribedWeight: 185,
+      prescribedReps: 5,
+      actualWeight: 170,
+      actualReps: 5,
+    });
+    const upsertCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'upsert');
+    const payload = upsertCall?.[2]?.[0];
+    expect(payload.prescribed_weight).toBe(185);
+    expect(payload.actual_weight).toBe(170);
+    expect(payload.prescribed_reps).toBe(5);
+    expect(payload.actual_reps).toBe(5);
+  });
 });

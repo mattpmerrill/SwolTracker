@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
 import RestTimer from './RestTimer';
 import { calculateWeight, findMaxKey } from '../../utils/workout';
+import { applyWeightCascade } from '../../utils/weightOverrides';
 
 /**
  * Exercise card with name, muscle groups, and sets
@@ -28,6 +29,16 @@ export default function ExerciseCard({
   // Rest timer state
   const [restTimer, setRestTimer] = useState(null); // { setIndex }
 
+  // Per-exercise, per-set weight overrides. Keyed by set index; value is the
+  // user's actual lift weight (when they scaled the prescribed number).
+  const [weightOverrides, setWeightOverrides] = useState({});
+
+  // ExerciseCard is keyed by position, not name — on a swap the component
+  // re-renders with a new exercise. Clear stale overrides in that case.
+  useEffect(() => {
+    setWeightOverrides({});
+  }, [exercise.name]);
+
   // Recommended rest based on reps (heavy = longer rest)
   function getRestSeconds(reps) {
     const r = parseInt(reps, 10);
@@ -45,6 +56,18 @@ export default function ExerciseCard({
       setRestTimer({ setIndex: setIdx });
     }
   }
+
+  const handleWeightChange = useCallback((setIdx, newWeight) => {
+    setWeightOverrides((prev) =>
+      applyWeightCascade(
+        prev,
+        setIdx,
+        newWeight,
+        (i) => isSetLogged(exerciseIndex, i),
+        exercise.sets,
+      ),
+    );
+  }, [exerciseIndex, exercise.sets, isSetLogged]);
 
   // Count how many sets are logged for this exercise
   const loggedCount = Array.from({ length: exercise.sets }).filter((_, si) =>
@@ -168,12 +191,14 @@ export default function ExerciseCard({
         <div className="space-y-2">
           {Array.from({ length: exercise.sets }).map((_, setIdx) => {
             const percentage = exercise.percentages?.[setIdx];
-            const weight = percentage
+            const prescribedWeight = percentage
               ? calculateWeight(percentage, userMaxes || {}, exercise.name)
               : (() => {
                   const key = findMaxKey(exercise.name, userMaxes || {});
                   return key ? (userMaxes[key] ?? null) : (userMaxes?.[exercise.name] ?? null);
                 })();
+            const override = weightOverrides[setIdx] ?? null;
+            const actualWeight = override ?? prescribedWeight;
             const logged = isSetLogged(exerciseIndex, setIdx);
 
             return (
@@ -181,13 +206,21 @@ export default function ExerciseCard({
                 key={setIdx}
                 setIndex={setIdx}
                 percentage={percentage}
-                weight={weight}
+                prescribedWeight={prescribedWeight}
+                weightOverride={override}
                 reps={exercise.reps}
                 isLogged={logged}
                 isWorkoutComplete={isWorkoutComplete}
                 exerciseName={exercise.name}
-                onLogSet={() => handleLogSet(setIdx, { weight, reps: exercise.reps })}
+                onLogSet={() => handleLogSet(setIdx, {
+                  exerciseName: exercise.name,
+                  actualWeight,
+                  prescribedWeight,
+                  actualReps: exercise.reps,
+                  prescribedReps: exercise.reps,
+                })}
                 onAddMax={() => onAddMax(exercise.name)}
+                onWeightChange={(newWeight) => handleWeightChange(setIdx, newWeight)}
               />
             );
           })}

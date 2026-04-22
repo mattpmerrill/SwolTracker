@@ -12,9 +12,26 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
   const logSet = useCallback(async (exerciseIndex, setIndex, data) => {
     const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
     const wasCompleted = exerciseLog[key]?.completed || false;
-    setExerciseLog(prev => ({ ...prev, [key]: { ...data, completed: !wasCompleted } }));
+    const actualWeight = data.actualWeight ?? data.prescribedWeight ?? data.weight ?? null;
+    const prescribedWeight = data.prescribedWeight ?? data.weight ?? null;
+    const actualReps = data.actualReps ?? data.reps ?? null;
+    const prescribedReps = data.prescribedReps ?? data.reps ?? null;
+    const completed = !wasCompleted;
+    setExerciseLog(prev => ({
+      ...prev,
+      [key]: { actualWeight, prescribedWeight, actualReps, prescribedReps, completed },
+    }));
     if (gymId) {
-      await db.logSet(currentUser, gymId, currentWeek, currentDay, exerciseIndex, setIndex, data.exerciseName || `Exercise ${exerciseIndex + 1}`, { ...data, completed: !wasCompleted });
+      await db.logSet(
+        currentUser,
+        gymId,
+        currentWeek,
+        currentDay,
+        exerciseIndex,
+        setIndex,
+        data.exerciseName || `Exercise ${exerciseIndex + 1}`,
+        { actualWeight, prescribedWeight, actualReps, prescribedReps, completed },
+      );
     }
   }, [currentUser, gymId, currentWeek, currentDay, exerciseLog]);
 
