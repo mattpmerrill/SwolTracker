@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isAppError } from "./errors.js";
+import { AppError, isAppError } from "./errors.js";
 function createRequestContext(identity, transport) {
     return {
         identity,
@@ -49,16 +49,39 @@ export function serializeResult(result) {
         payload.data = result.data;
     return JSON.stringify(payload);
 }
+/**
+ * Return the subset of `tool.scopes` that `identity` does not hold.
+ * Empty array means the identity covers all required scopes.
+ * An undefined `identity.scopes` is treated as "no scopes granted" — fail closed.
+ */
+export function missingScopes(tool, identity) {
+    const required = tool.scopes ?? [];
+    if (required.length === 0)
+        return [];
+    const granted = new Set(identity.scopes ?? []);
+    return required.filter((s) => !granted.has(s));
+}
+/**
+ * Execute a tool with the standard request guards (scope enforcement) and error
+ * envelope normalization. Returns a canonical `AppToolResult` for any outcome.
+ * Exposed so both the registered MCP path and tests can exercise the same flow.
+ */
+export async function executeToolWithGuards(tool, params, context) {
+    const missing = missingScopes(tool, context.request.identity);
+    if (missing.length > 0) {
+        return toolResultFromThrown(AppError.forbidden(`Missing required scope${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`, { details: { tool: tool.name, required: tool.scopes, missing } }));
+    }
+    try {
+        return ensureErrorEnvelope(await tool.execute(params, context));
+    }
+    catch (error) {
+        return toolResultFromThrown(error);
+    }
+}
 function registerTool(server, app, tool, requestContextFactory) {
     server.tool(tool.name, tool.description, tool.schema, async (params) => {
         const request = await requestContextFactory();
-        let result;
-        try {
-            result = ensureErrorEnvelope(await tool.execute(params, { request, app }));
-        }
-        catch (error) {
-            result = toolResultFromThrown(error);
-        }
+        const result = await executeToolWithGuards(tool, params, { request, app });
         return toMcpResponse(serializeResult(result));
     });
 }

@@ -1,9 +1,9 @@
 # @bot-native/sdk (vendored)
 
 This is a vendored build of `@bot-native/sdk` from
-`github.com/get-latest/bot-native-sdk`, pinned to commit `c78dc01`
-(Phase 2.2 structured error envelopes: `AppError` throwable + typed
-`AppToolError` envelope).
+`github.com/get-latest/bot-native-sdk`, pinned to commit `bdfa845`
+(Phase 4.3 capability/scope model: `DefinedTool.scopes` +
+`executeToolWithGuards` + `skillSchema.scopes`).
 
 **Source of truth:** `~/Work/bot-native-sdk/packages/sdk`
 

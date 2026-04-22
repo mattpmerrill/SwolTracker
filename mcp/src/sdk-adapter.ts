@@ -143,6 +143,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_profile",
       description: "Get the user's profile including goals, schedule, and equipment",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.queries.get_profile()),
     }),
@@ -150,6 +151,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_maxes",
       description: "Get all current 1RM (one-rep max) records",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.queries.get_maxes()),
     }),
@@ -157,6 +159,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_max_history",
       description: "Get weight progression history for a specific lift",
       category: "query",
+      scopes: ["read"],
       schema: {
         exercise_name: z.string().describe('Exercise name (e.g. "Bench Press", "Back Squat")'),
       },
@@ -166,6 +169,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "list_gyms",
       description: "List all gyms the user belongs to — returns gym IDs, names, and roles",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => {
         const gyms = await kit.queries.list_gyms!();
@@ -177,6 +181,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_todays_workout",
       description: "Get prescribed exercises with resolved weights for any week+day. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise. Defaults to current week + today.",
       category: "query",
+      scopes: ["read"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         day_name: z.string().optional().describe('Day name (e.g. "Monday"). Defaults to today.'),
@@ -192,6 +197,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_weekly_workout",
       description: "Get all 7 days for a week with resolved weights. Returns each day's focus, exercises (with exercise_index, weight_lbs), and total volume.",
       category: "query",
+      scopes: ["read"],
       schema: {
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current week)"),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -206,6 +212,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_program_overview",
       description: "High-level view of the full program — total weeks, each week's daily focus/theme, volume per week, and which week is current. Like a table of contents for the training plan.",
       category: "query",
+      scopes: ["read"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       },
@@ -218,6 +225,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_program_progression",
       description: "Show how a specific lift progresses across all weeks — percentages, resolved weights, sets/reps per week. Use to preview upcoming intensity or compare training phases.",
       category: "query",
+      scopes: ["read"],
       schema: {
         exercise_name: z.string().describe('Exercise name (e.g. "Bench Press")'),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -232,6 +240,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_workout_logs",
       description: "Get completed sets for a given week and optional day",
       category: "query",
+      scopes: ["read"],
       schema: {
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current week)"),
         day_name: z.string().optional().describe('Day name (e.g. "Monday")'),
@@ -244,6 +253,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_recent_sessions",
       description: "Get the last N workout sessions grouped by day",
       category: "query",
+      scopes: ["read"],
       schema: {
         limit: z.number().int().min(1).max(20).optional().describe("Number of sessions (default 4)"),
       },
@@ -253,6 +263,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_stats",
       description: "Get total sets completed and weeks active",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.queries.get_stats()),
     }),
@@ -262,6 +273,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "log_set",
       description: "Log a single set completion for a specific exercise",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
@@ -280,6 +292,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "mark_workout_complete",
       description: "Mark an entire workout day as done",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
@@ -292,6 +305,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "log_workout_summary",
       description: "Log an entire workout in one call. Supports prescribed weights, optional week/day auto-resolution, and optional workout completion.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
@@ -305,6 +319,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "update_max",
       description: "Set a new 1RM record for an exercise",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         exercise_name: z.string().describe("Exercise name"),
         weight_lbs: z.number().int().min(0).max(9999).describe("New 1RM weight in lbs"),
@@ -316,6 +331,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "delete_max",
       description: "Remove all 1RM records for an exercise",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         exercise_name: z.string().describe("Exercise name to delete records for"),
       },
@@ -325,6 +341,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "save_workout_program",
       description: "Save a weekly workout program (structured JSON with 7 days)",
       category: "action",
+      scopes: ["write:program"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).describe("Week number to save"),
@@ -339,6 +356,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "substitute_equipment_globally",
       description: "Swap one exercise for another across every week of the user's program. Preserves sets, reps, and percentages. Use when the user loses access to equipment (e.g., 'no barbell this month → dumbbell variants') or wants a global substitution. Fuzzy-matches both exercise names via the canonical normalizer.",
       category: "action",
+      scopes: ["write:program"],
       schema: {
         from_exercise: z.string().describe("The exercise to replace (e.g., 'Barbell Bench Press' or 'bench')"),
         to_exercise: z.string().describe("The exercise to substitute in (e.g., 'Dumbbell Bench Press')"),
@@ -352,6 +370,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "shift_program",
       description: "Shift the program start date by N weeks. Positive weeks_forward postpones (today ends up on an earlier week number); negative weeks_forward advances (today ends up on a later week number). Use when the user skipped a week due to illness/travel, or wants to redo the current block.",
       category: "action",
+      scopes: ["write:program"],
       schema: {
         weeks_forward: z.number().int().min(-52).max(52).describe("Weeks to shift the start date. Positive = postpone, negative = advance. Bounded to ±52."),
       },
@@ -363,6 +382,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_streak",
       description: "Get the user's current workout streak (consecutive weeks with at least one completed workout), their longest streak, and which weeks they've been active.",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.context.get_streak()),
     }),
@@ -370,6 +390,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_context_bundle",
       description: "Get compressed user state for agent context window (<500 tokens)",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.context.get_context_bundle()),
     }),
@@ -379,6 +400,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_pending_events",
       description: "Get unprocessed events for the user (PRs, completions, etc.)",
       category: "query",
+      scopes: ["read"],
       schema: {
         limit: z.number().int().min(1).max(50).optional().describe("Max events to return (default 10)"),
       },
@@ -390,6 +412,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "log_exercise",
       description: "Log an exercise from structured params (agent extracts from natural language). Handles fuzzy matching and set expansion.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         exercise_name: z.string().describe('Exercise name (e.g. "Bench Press")'),
         sets: z.number().int().min(1).describe("Number of sets"),
@@ -404,6 +427,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "bulk_log_workout",
       description: "Log a whole workout from a single free-text description (e.g., 'benched 185x5, 185x5, 175x6; squat 3x5 @ 225'). Uses the server-side LLM to parse the description into structured exercises, then logs them via log_workout_summary. Preferred when the user pastes or speaks an entire workout; prefer `log_exercise` for a single clean entry the agent already parsed.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         description: z.string().min(1).max(2000).describe("Free-text workout description to parse"),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -420,6 +444,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_prompt_template",
       description: "Fetch the workout generation prompt template from the database",
       category: "query",
+      scopes: ["read"],
       schema: {
         template_name: z.string().optional().describe('Template name (default "multi_week_workout_generator")'),
       },
@@ -430,6 +455,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "generate_workout_program",
       description: "Save a generated workout program (agent provides the structured JSON after generating it in conversation)",
       category: "action",
+      scopes: ["write:program"],
       schema: {
         start_week: z.number().int().min(1).describe("Starting week number"),
         week_count: z.number().int().min(1).max(12).describe("Number of weeks"),
@@ -444,6 +470,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "rebuild_week_for_constraints",
       description: "Rebuild a single workout week in place to satisfy new constraints (e.g., 'no barbell — traveling', 'back tweaked, skip deadlifts', 'only 30 min per session'). Loads the week, sends it plus the constraints string to the server-side LLM, parses the response, and saves the rebuilt week. Use this when the user hits a one-off constraint for a specific week rather than a global equipment change (for that, use `substitute_equipment_globally`).",
       category: "action",
+      scopes: ["write:program"],
       schema: {
         week: z.number().int().min(1).describe("Week number to rebuild"),
         constraints: z.string().min(1).max(1000).describe("Free-text description of the constraints to satisfy (e.g., 'no barbell access', 'sore left shoulder', '30 min sessions only')"),
@@ -456,6 +483,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "delete_set",
       description: "Delete a specific logged set for an exercise. Use when the user wants to undo or remove a set they logged by mistake.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
@@ -470,6 +498,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "correct_set",
       description: "Correct weight or reps on an already-logged set. Use when the user logged the wrong weight or rep count.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
@@ -486,6 +515,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "log_missed_day",
       description: "Log a workout day as intentionally missed/skipped. Differentiates 'not logged yet' from 'intentionally skipped' — adaptive program generation uses this to understand why days were missed. Common reasons: injury, travel, illness, rest, life.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         day_name: z.string().optional().describe("Day name (e.g. 'Monday'). Defaults to today."),
         week_number: z.number().int().min(1).optional().describe("Week number. Defaults to current week."),
@@ -499,6 +529,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_missed_days",
       description: "Get a list of workout days that were logged as intentionally missed. Optionally filter by week. Used by adaptive program generation to understand training history.",
       category: "query",
+      scopes: ["read"],
       schema: {
         week_number: z.number().int().min(1).optional().describe("Filter to a specific week number. Omit for all weeks."),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -510,6 +541,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "check_workout_reminder",
       description: "Check if a workout reminder should fire for today. If the user has a scheduled workout, hasn't logged any sets, and the current time is past the threshold hour (default 4 PM MT), emits a workout.reminder event that get_pending_events will surface. Safe to call repeatedly — deduplicates reminders. Use on heartbeat to proactively nudge the user.",
       category: "query",
+      scopes: ["read"],
       schema: {
         threshold_hour: z.number().int().min(0).max(23).optional().describe("Hour of day (MT, 24h) after which a reminder fires if no sets logged. Default: 16 (4 PM)"),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -521,6 +553,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "generate_weekly_summary",
       description: "Generate an end-of-week recap for a given week. Returns workouts completed vs scheduled, missed days, total sets, total volume (lbs lifted), and any PRs set that week. Defaults to current week.",
       category: "query",
+      scopes: ["read"],
       schema: {
         week_number: z.number().int().min(1).optional().describe("Week number to summarize (defaults to current week)"),
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
@@ -532,6 +565,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_training_history_summary",
       description: "Returns a rich training history summary for the last N weeks — completions, missed days with reasons, exercise performance (sets, avg weight, hit/missed reps), and current 1RMs. Call this BEFORE generating a new program so the AI has full context for adaptive programming. Also includes the recommended next week number.",
       category: "query",
+      scopes: ["read"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         lookback_weeks: z.number().int().min(1).max(12).optional().describe("How many weeks to look back (default 4)"),
@@ -543,6 +577,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_overload_recommendations",
       description: "Analyze recent training history and return progressive overload recommendations. Flags exercises where the user has: (1) hit all prescribed reps for 3+ straight sessions → ready to increase weight, (2) missed prescribed reps for 2+ straight sessions → consider deload, (3) not logged in 2+ weeks → stale. Call this before generating a new program or during weekly check-ins.",
       category: "query",
+      scopes: ["read"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         lookback_weeks: z.number().int().min(1).max(12).optional().describe("How many weeks to look back (default 4)"),
@@ -554,6 +589,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "compare_weeks",
       description: "Compare workout data between two weeks. Shows sets, volume (lbs lifted), and day-by-day breakdown. Defaults to current week vs previous week.",
       category: "query",
+      scopes: ["read"],
       schema: {
         week1: z.number().int().min(1).optional().describe("First week number (defaults to current week)"),
         week2: z.number().int().min(1).optional().describe("Second week number to compare against (defaults to current - 1)"),
@@ -603,6 +639,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "send_coach_message",
       description: "Send a message to the user. Use for weekly reviews, program update notes, milestone celebrations, or general chat responses. The message appears in the user's agent chat panel.",
       category: "action",
+      scopes: ["coach"],
       schema: {
         content: z.string().min(1).max(5000).describe("Message content"),
         message_type: z.enum(["chat", "weekly_review", "program_update", "milestone"]).default("chat").describe("Type of message: chat (default), weekly_review (weekly analysis), program_update (workout changes), milestone (achievement)"),
@@ -616,6 +653,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_user_messages",
       description: "Check for unread messages from the user. Call this periodically or before composing a response to see what the user has said.",
       category: "query",
+      scopes: ["read"],
       schema: {
         limit: z.number().int().min(1).max(50).default(10).optional().describe("Max messages to return (default 10)"),
       },
@@ -625,6 +663,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_conversation_history",
       description: "Get the full conversation history between you and the user. Includes both user messages and your previous responses. Useful for maintaining context across sessions.",
       category: "query",
+      scopes: ["read"],
       schema: {
         limit: z.number().int().min(1).max(100).default(50).optional().describe("Max messages to return (default 50)"),
       },
@@ -636,6 +675,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "get_onboarding_status",
       description: "Check whether the user has completed onboarding and which required profile fields are still missing. Use this at agent connect time to decide whether to start an onboarding interview or jump straight to training. Returns { onboarding_completed, profile, equipment, missing_fields, ready_to_complete }.",
       category: "query",
+      scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => kit.onboarding.get_onboarding_status()),
     }),
@@ -643,6 +683,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "update_profile",
       description: "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses, or later to update preferences. All fields optional; provide whatever the user just told you. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         display_name: z.string().min(1).max(100).optional().describe("User's preferred display name"),
         gender: z.string().min(1).max(50).optional().describe("Gender identifier (e.g. 'male', 'female', 'non-binary')"),
@@ -660,6 +701,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       name: "complete_onboarding",
       description: "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment to the user's gym, and flips onboarding_completed to true. Throws invalid_args if any required field is still missing. Pass `equipment` on the final call if you haven't populated gym_equipment another way.",
       category: "action",
+      scopes: ["write:logs"],
       schema: {
         display_name: z.string().min(1).max(100).optional(),
         gender: z.string().min(1).max(50).optional(),

@@ -2,7 +2,7 @@ import { type IncomingMessage, type Server as HttpServer, type ServerResponse } 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { AppIdentity, AppToolResult } from "../contracts/types.js";
-import type { BotNativeApp } from "./tool.js";
+import type { BotNativeApp, DefinedTool, ToolExecutionContext } from "./tool.js";
 export interface StdioServerOptions {
     /** Fixed identity for local development. */
     devIdentity?: AppIdentity;
@@ -25,6 +25,18 @@ export declare function ensureErrorEnvelope(result: AppToolResult): AppToolResul
  * unchanged; failures get JSON-encoded so agents can parse `error.code`.
  */
 export declare function serializeResult(result: AppToolResult): string;
+/**
+ * Return the subset of `tool.scopes` that `identity` does not hold.
+ * Empty array means the identity covers all required scopes.
+ * An undefined `identity.scopes` is treated as "no scopes granted" — fail closed.
+ */
+export declare function missingScopes(tool: Pick<DefinedTool, "scopes">, identity: Pick<AppIdentity, "scopes">): string[];
+/**
+ * Execute a tool with the standard request guards (scope enforcement) and error
+ * envelope normalization. Returns a canonical `AppToolResult` for any outcome.
+ * Exposed so both the registered MCP path and tests can exercise the same flow.
+ */
+export declare function executeToolWithGuards(tool: DefinedTool, params: unknown, context: ToolExecutionContext): Promise<AppToolResult>;
 /**
  * Start an MCP server over stdio for local development.
  * Identity is resolved once at startup via `devIdentity`, `resolveDevIdentity`,

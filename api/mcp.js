@@ -5,6 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
+import { executeToolWithGuards } from '@bot-native/sdk';
 import { buildApp } from '../mcp/dist/sdk-adapter.js';
 import { callLlmInternal } from './_llm-core.js';
 import {
@@ -26,8 +27,11 @@ function attachSdkTools(server, app, identity) {
   for (const tool of app.tools) {
     server.tool(tool.name, tool.description, tool.schema, async (params) => {
       const ctx = { request: { identity, requestId: randomUUID(), transport: 'http' }, app };
-      const result = await tool.execute(params, ctx);
-      return { content: [{ type: 'text', text: result.message }] };
+      const result = await executeToolWithGuards(tool, params, ctx);
+      const text = result.ok
+        ? result.message
+        : JSON.stringify({ ok: false, message: result.message, error: result.error });
+      return { content: [{ type: 'text', text }] };
     });
   }
 }
@@ -45,7 +49,7 @@ export default async function handler(req, res) {
   try {
     const auth = await authenticateMcpRequest(req, res);
     if (!auth) return;
-    const { supabase, userId, apiKeyId } = auth;
+    const { supabase, userId, apiKeyId, scopes } = auth;
 
     const callLlm = ({ systemPrompt, userPrompt, requestType }) =>
       callLlmInternal(supabase, { systemPrompt, userPrompt, requestType });
@@ -64,7 +68,7 @@ export default async function handler(req, res) {
     }
 
     const server = new McpServer({ name: app.manifest.name, version: app.manifest.version });
-    attachSdkTools(server, app, { userId });
+    attachSdkTools(server, app, { userId, scopes });
 
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);

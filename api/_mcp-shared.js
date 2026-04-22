@@ -67,7 +67,7 @@ export async function authenticateMcpRequest(req, res) {
 
   const { data: keyRow, error: keyError } = await supabase
     .from('api_keys')
-    .select('id, user_id, revoked_at')
+    .select('id, user_id, revoked_at, scopes')
     .eq('key_hash', keyHash)
     .single();
 
@@ -75,12 +75,13 @@ export async function authenticateMcpRequest(req, res) {
   if (keyRow.revoked_at) { res.status(401).json({ error: 'API key has been revoked.' }); return null; }
 
   const userId = keyRow.user_id;
+  const scopes = Array.isArray(keyRow.scopes) ? keyRow.scopes : [];
 
   supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRow.id).then(() => {});
 
   if (!(await enforceLimit(supabase, userId, 'mcp_request', MCP_RATE_LIMIT, MCP_RATE_WINDOW_MINUTES, res))) return null;
 
-  return { supabase, userId, apiKeyId: keyRow.id };
+  return { supabase, userId, apiKeyId: keyRow.id, scopes };
 }
 
 // Writes a tool_call_audit row. Fire-and-forget; never throws into caller.

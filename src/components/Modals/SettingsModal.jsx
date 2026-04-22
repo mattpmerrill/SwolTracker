@@ -206,7 +206,7 @@ function AgentKeysSection({ supabase }) {
   async function loadKeys() {
     const { data } = await supabase
       .from('api_keys')
-      .select('id, key_prefix, name, last_used_at, created_at')
+      .select('id, key_prefix, name, last_used_at, created_at, scopes')
       .is('revoked_at', null)
       .order('created_at', { ascending: false });
     setKeys(data || []);
@@ -217,6 +217,7 @@ function AgentKeysSection({ supabase }) {
     setGenerating(true);
     const { data, error } = await supabase.rpc('create_api_key', {
       p_name: keyName.trim() || 'My Agent',
+      p_scopes: ['read', 'write:logs', 'write:program', 'coach'],
     });
 
     if (error || !data?.success) {
@@ -338,16 +339,30 @@ function AgentKeysSection({ supabase }) {
           {keys.length > 0 && (
             <div className="space-y-2 mb-3">
               {keys.map(k => (
-                <div key={k.id} className="flex items-center gap-3 bg-zinc-800/60 rounded-lg px-3 py-2">
-                  <code className="text-xs text-cyan-400 font-mono">{k.key_prefix}...</code>
-                  <span className="text-xs text-zinc-300 flex-1 truncate">{k.name}</span>
-                  <span className="text-xs text-zinc-500 shrink-0">{timeAgo(k.last_used_at)}</span>
-                  <button
-                    onClick={() => revokeKey(k.id)}
-                    className="p-1 hover:bg-zinc-700 rounded text-zinc-500 hover:text-red-400"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                <div key={k.id} className="bg-zinc-800/60 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-3">
+                    <code className="text-xs text-cyan-400 font-mono">{k.key_prefix}...</code>
+                    <span className="text-xs text-zinc-300 flex-1 truncate">{k.name}</span>
+                    <span className="text-xs text-zinc-500 shrink-0">{timeAgo(k.last_used_at)}</span>
+                    <button
+                      onClick={() => revokeKey(k.id)}
+                      className="p-1 hover:bg-zinc-700 rounded text-zinc-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {Array.isArray(k.scopes) && k.scopes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {k.scopes.map(s => (
+                        <span
+                          key={s}
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

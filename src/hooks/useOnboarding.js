@@ -205,7 +205,10 @@ export function useOnboarding({ user, onComplete, onGenerateWorkout, onPrepareFo
     setAgentChoice('yes');
     setHasAgent(true);
     try {
-      const { data, error } = await supabase.rpc('create_api_key', { p_name: 'Onboarding Agent' });
+      const { data, error } = await supabase.rpc('create_api_key', {
+        p_name: 'Onboarding Agent',
+        p_scopes: ['read', 'write:logs', 'write:program', 'coach'],
+      });
       if (error || !data?.success) {
         console.error('Failed to create API key:', error || data?.error);
         return;

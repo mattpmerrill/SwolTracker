@@ -40,6 +40,7 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
       await ensureGym();
       const { data, error: rpcError } = await supabase.rpc('create_api_key', {
         p_name: 'Onboarding Agent',
+        p_scopes: ['read', 'write:logs', 'write:program', 'coach'],
       });
       if (rpcError || !data?.success) {
         throw new Error(rpcError?.message || data?.error || 'API key creation failed');

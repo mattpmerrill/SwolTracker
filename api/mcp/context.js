@@ -32,7 +32,15 @@ export default async function handler(req, res) {
   try {
     const auth = await authenticateMcpRequest(req, res);
     if (!auth) return;
-    const { supabase, userId, apiKeyId } = auth;
+    const { supabase, userId, apiKeyId, scopes } = auth;
+
+    if (!scopes.includes('read')) {
+      return res.status(403).json({
+        error: 'Missing required scope: read',
+        code: 'forbidden',
+        required: ['read'],
+      });
+    }
 
     // Context fetches count against the query-category budget.
     const queryLimit = CATEGORY_LIMITS.query;
