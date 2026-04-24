@@ -7,12 +7,17 @@
       "maxDuration": 300
     },
     "api/mcp.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "SKILL.md"
     },
     "api/mcp/context.js": {
       "maxDuration": 15
     },
     "api/mcp/skill.js": {
+      "maxDuration": 5,
+      "includeFiles": "SKILL.md"
+    },
+    "api/mcp/openapi.js": {
       "maxDuration": 5,
       "includeFiles": "SKILL.md"
     }
