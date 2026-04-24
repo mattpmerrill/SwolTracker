@@ -239,6 +239,12 @@ SwolTracker is designed to be **AI agent-native** — users can connect their ow
 - **Stateless**: Each request creates an isolated MCP server with user-scoped tools
 - **Service role**: Uses `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS for agent writes)
 - **Build**: `cd mcp && npm run build` compiles TypeScript to `mcp/dist/`
+- **Scopes**: `read`, `write:logs`, `write:program`, `coach`. Tagged per-tool in `mcp/src/sdk-adapter.ts`; enforced by SDK `executeToolWithGuards` against `identity.scopes` from the API key row (migration 030).
+
+### Operational gotchas (MCP / Vercel)
+- **SKILL.md must be bundled into every `/api/mcp*` function.** `buildApp()` calls `loadSkill(resolve(root ?? process.cwd(), skillFile))` at boot, so any function that imports the SDK app factory will HTTP 500 if SKILL.md isn't in the bundle. `vercel.json` must list `"includeFiles": "SKILL.md"` on every affected function (`api/mcp.js`, `api/mcp/openapi.js`, and any future sibling). Symptom of miss: production POSTs return 405 (the function throws during import → Vercel falls back to the method-not-allowed handler). Incident: 2026-04-22 → 2026-04-24, fixed in commit `1d14dde`.
+- **Vercel auto-deploys from `main` via the GitHub integration.** No `vercel deploy` step needed — just push. Project is `swol-tracker` on team `matts-projects-628fad4b`.
+- **`vendor/bot-native-sdk/dist/`** is the runtime SDK Vercel ships. Edits to the source SDK (`/Users/Joi/Work/bot-native-sdk`) must be rebuilt and re-vendored before they take effect in production.
 
 ### MCP Tools (33+ tools across 6 modules)
 
