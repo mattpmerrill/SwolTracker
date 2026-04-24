@@ -59,31 +59,56 @@ export function createNaturalLanguageTools(
   function fuzzyMatch(input: string, exercises: Array<{ name: string }>): number {
     const normalized = input.toLowerCase().trim();
 
-    const exactIdx = exercises.findIndex(
-      (e) => e.name.toLowerCase() === normalized
-    );
-    if (exactIdx >= 0) return exactIdx;
+    const exactMatches: number[] = [];
+    exercises.forEach((e, i) => {
+      if (e.name.toLowerCase() === normalized) exactMatches.push(i);
+    });
+    if (exactMatches.length === 1) return exactMatches[0];
+    if (exactMatches.length > 1) {
+      throw AppError.invalidArgs(
+        `Exercise name "${input}" is ambiguous — matches multiple program exercises exactly: ${exactMatches
+          .map((i) => `"${exercises[i].name}"`)
+          .join(", ")}. Use the exact program exercise name.`
+      );
+    }
 
-    const subIdx = exercises.findIndex(
-      (e) =>
-        e.name.toLowerCase().includes(normalized) ||
-        normalized.includes(e.name.toLowerCase())
-    );
-    if (subIdx >= 0) return subIdx;
+    const subMatches: number[] = [];
+    exercises.forEach((e, i) => {
+      const name = e.name.toLowerCase();
+      if (name.includes(normalized) || normalized.includes(name)) subMatches.push(i);
+    });
+    if (subMatches.length === 1) return subMatches[0];
+    if (subMatches.length > 1) {
+      throw AppError.invalidArgs(
+        `Exercise name "${input}" is ambiguous — substring-matches multiple program exercises: ${subMatches
+          .map((i) => `"${exercises[i].name}"`)
+          .join(", ")}. Use the exact program exercise name.`
+      );
+    }
 
     const inputWords = normalized.split(/\s+/);
-    let bestIdx = -1;
     let bestScore = 0;
+    const bestCandidates: number[] = [];
     exercises.forEach((e, i) => {
       const exWords = e.name.toLowerCase().split(/\s+/);
       const overlap = inputWords.filter((w) => exWords.includes(w)).length;
+      if (overlap === 0) return;
       if (overlap > bestScore) {
         bestScore = overlap;
-        bestIdx = i;
+        bestCandidates.length = 0;
+        bestCandidates.push(i);
+      } else if (overlap === bestScore) {
+        bestCandidates.push(i);
       }
     });
 
-    return bestScore > 0 ? bestIdx : -1;
+    if (bestCandidates.length === 0) return -1;
+    if (bestCandidates.length === 1) return bestCandidates[0];
+    throw AppError.invalidArgs(
+      `Exercise name "${input}" is ambiguous — tied word-overlap match across: ${bestCandidates
+        .map((i) => `"${exercises[i].name}"`)
+        .join(", ")}. Use the exact program exercise name.`
+    );
   }
 
   async function resolveWorkoutContext(
@@ -495,7 +520,19 @@ export function createNaturalLanguageTools(
         weight_lbs?: number;
         notes?: string;
       } = { exercise_name: exerciseName, sets, reps };
-      if (typeof r.weight_lbs === "number" && r.weight_lbs >= 0) entry.weight_lbs = r.weight_lbs;
+      if (r.weight_lbs !== undefined && r.weight_lbs !== null) {
+        if (typeof r.weight_lbs !== "number" || !Number.isFinite(r.weight_lbs)) {
+          throw AppError.invalidArgs(
+            `Exercise #${i + 1} has invalid weight_lbs: ${JSON.stringify(r.weight_lbs)}.`
+          );
+        }
+        if (r.weight_lbs < 0 || r.weight_lbs > 9999) {
+          throw AppError.invalidArgs(
+            `Exercise #${i + 1} has out-of-range weight_lbs: ${r.weight_lbs} (must be 0–9999).`
+          );
+        }
+        entry.weight_lbs = r.weight_lbs;
+      }
       if (typeof r.notes === "string" && r.notes.trim()) entry.notes = r.notes.trim();
       return entry;
     });

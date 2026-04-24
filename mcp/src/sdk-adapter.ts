@@ -37,7 +37,7 @@ export interface BuildAppDeps {
 }
 import { normalizeExerciseName, getAllCanonicalNames } from "./exercise-normalizer.js";
 
-const repsSchema = z.union([z.number().int().min(0), z.string()]);
+const repsSchema = z.union([z.number().int().min(1), z.string()]);
 const weightSchema = z.union([z.number().min(0), z.literal("prescribed")]);
 const workoutSummaryExerciseSchema = z.object({
   exercise_name: z.string().describe("Exercise name"),
