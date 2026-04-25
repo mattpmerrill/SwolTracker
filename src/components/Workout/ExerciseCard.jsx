@@ -4,6 +4,7 @@ import SetRow from './SetRow';
 import RestTimer from './RestTimer';
 import { calculateWeight, findMaxKey } from '../../utils/workout';
 import { applyWeightCascade } from '../../utils/weightOverrides';
+import { getItem, setItem } from '../../utils/storage';
 
 /**
  * Exercise card with name, muscle groups, and sets
@@ -31,13 +32,23 @@ export default function ExerciseCard({
 
   // Per-exercise, per-set weight overrides. Keyed by set index; value is the
   // user's actual lift weight (when they scaled the prescribed number).
-  const [weightOverrides, setWeightOverrides] = useState({});
+  const storageKey = `weightOverrides-${exercise.name}`;
+  const [weightOverrides, setWeightOverrides] = useState(() => {
+    // Load from localStorage on mount
+    return getItem(storageKey) || {};
+  });
+
+  // Persist weight overrides to localStorage whenever they change
+  useEffect(() => {
+    setItem(storageKey, weightOverrides);
+  }, [weightOverrides, storageKey]);
 
   // ExerciseCard is keyed by position, not name — on a swap the component
   // re-renders with a new exercise. Clear stale overrides in that case.
   useEffect(() => {
     setWeightOverrides({});
-  }, [exercise.name]);
+    setItem(storageKey, {});
+  }, [exercise.name, storageKey]);
 
   // Recommended rest based on reps (heavy = longer rest)
   function getRestSeconds(reps) {

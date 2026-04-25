@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   PROGRAM_START_DATE: 'swoltracker-startdate',
   CURRENT_USER: 'swoltracker-currentuser',
   COMPLETED_WORKOUTS: 'swoltracker-completed-workouts',
+  WEIGHT_OVERRIDES: 'swoltracker-weight-overrides',
 };
 
 /**
@@ -125,6 +126,7 @@ export const loadAllData = () => {
     programStartDate: getString(STORAGE_KEYS.PROGRAM_START_DATE),
     currentUser: getString(STORAGE_KEYS.CURRENT_USER),
     completedWorkouts: getItem(STORAGE_KEYS.COMPLETED_WORKOUTS),
+    weightOverrides: getItem(STORAGE_KEYS.WEIGHT_OVERRIDES),
   };
 };
 
@@ -140,6 +142,7 @@ export const saveAllData = (data) => {
   if (data.programStartDate !== undefined) setString(STORAGE_KEYS.PROGRAM_START_DATE, data.programStartDate);
   if (data.currentUser !== undefined) setString(STORAGE_KEYS.CURRENT_USER, data.currentUser);
   if (data.completedWorkouts !== undefined) setItem(STORAGE_KEYS.COMPLETED_WORKOUTS, data.completedWorkouts);
+  if (data.weightOverrides !== undefined) setItem(STORAGE_KEYS.WEIGHT_OVERRIDES, data.weightOverrides);
 };
 
 /**
