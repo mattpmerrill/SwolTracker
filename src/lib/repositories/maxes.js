@@ -32,7 +32,7 @@ export function createMaxesRepo(supabase, deps = {}) {
 
   const updateMax = async (userId, exerciseName, weightLbs) => {
     if (!supabase) return null
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_maxes')
       .insert({
         user_id: userId,
@@ -41,6 +41,10 @@ export function createMaxesRepo(supabase, deps = {}) {
       })
       .select()
       .single()
+    if (error) {
+      console.error('updateMax failed', { userId, exerciseName, weightLbs, error })
+      return { error }
+    }
     return data
   }
 
@@ -62,7 +66,11 @@ export function createMaxesRepo(supabase, deps = {}) {
       .delete()
       .eq('user_id', userId)
       .eq('exercise_name', exerciseName)
-    return !error
+    if (error) {
+      console.error('deleteMax failed', { userId, exerciseName, error })
+      return false
+    }
+    return true
   }
 
   return {

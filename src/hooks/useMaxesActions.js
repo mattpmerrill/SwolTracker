@@ -27,9 +27,19 @@ export function useMaxesActions({
 
   const updateMax = async (lift, value) => {
     const weight = Math.max(0, Math.min(9999, parseInt(value) || 0));
+    const previous = profiles[currentUser]?.maxes?.[lift];
     setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [lift]: weight } } }));
     setEditingMax(null);
-    await db.updateMax(currentUser, lift, weight);
+    const result = await db.updateMax(currentUser, lift, weight);
+    if (result?.error) {
+      toast.error(`Failed to save weight: ${result.error.message || 'unknown error'}`);
+      setProfiles((prev) => {
+        const nextMaxes = { ...prev[currentUser].maxes };
+        if (previous === undefined) delete nextMaxes[lift];
+        else nextMaxes[lift] = previous;
+        return { ...prev, [currentUser]: { ...prev[currentUser], maxes: nextMaxes } };
+      });
+    }
   };
 
   const addNewLift = async (newLiftName, newLiftWeight) => {
@@ -38,9 +48,20 @@ export function useMaxesActions({
       weight: parseInt(newLiftWeight) || 0,
     });
     if (!success) { toast.error(error); return; }
+    const hadPrevious = profiles[currentUser]?.maxes?.[validated.exerciseName] !== undefined;
+    const previous = profiles[currentUser]?.maxes?.[validated.exerciseName];
     setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [validated.exerciseName]: validated.weight } } }));
     setNewLiftName(''); setNewLiftWeight(''); setShowAddLift(false);
-    await db.updateMax(currentUser, validated.exerciseName, validated.weight);
+    const result = await db.updateMax(currentUser, validated.exerciseName, validated.weight);
+    if (result?.error) {
+      toast.error(`Failed to save lift: ${result.error.message || 'unknown error'}`);
+      setProfiles((prev) => {
+        const nextMaxes = { ...prev[currentUser].maxes };
+        if (hadPrevious) nextMaxes[validated.exerciseName] = previous;
+        else delete nextMaxes[validated.exerciseName];
+        return { ...prev, [currentUser]: { ...prev[currentUser], maxes: nextMaxes } };
+      });
+    }
   };
 
   const openQuickAddMax = (exerciseName) => {
@@ -64,10 +85,15 @@ export function useMaxesActions({
   };
 
   const deleteLift = async (lift) => {
+    const previous = profiles[currentUser]?.maxes?.[lift];
     const newMaxes = { ...profiles[currentUser].maxes };
     delete newMaxes[lift];
     setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: newMaxes } }));
-    await db.deleteMax(currentUser, lift);
+    const ok = await db.deleteMax(currentUser, lift);
+    if (!ok) {
+      toast.error('Failed to delete lift');
+      setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [lift]: previous } } }));
+    }
   };
 
   return { updateMax, addNewLift, openQuickAddMax, acceptSwap, deleteLift };
