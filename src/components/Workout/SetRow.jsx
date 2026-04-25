@@ -68,16 +68,25 @@ export default function SetRow({
 
   function cancelEdit(e) {
     e?.stopPropagation();
+    e?.preventDefault(); // prevent blur race on the input
     setEditing(false);
   }
 
   function bump(delta, e) {
     e.stopPropagation();
-    setDraft((d) => Math.max(0, Number(d || 0) + delta));
+    const next = Math.max(0, Number(draft || 0) + delta);
+    setDraft(next);
+    // Commit immediately so every tap persists (no blur race)
+    if (next === prescribedWeight) {
+      onWeightChange?.(null);
+    } else {
+      onWeightChange?.(next);
+    }
   }
 
   function resetToPrescribed(e) {
     e.stopPropagation();
+    e.preventDefault(); // prevent blur race on the input
     onWeightChange?.(null);
     setEditing(false);
   }
