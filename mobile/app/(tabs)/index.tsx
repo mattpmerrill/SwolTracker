@@ -128,8 +128,8 @@ export default function WorkoutScreen() {
       const healthPrefs = loadHealthPrefs();
       if (healthPrefs.syncWorkoutsEnabled) {
         const totalVolume = Object.values(exerciseLog).reduce((sum: number, log: any) => {
-          if (log?.completed && log?.weight) {
-            return sum + log.weight * (log.actual_reps || log.reps || 1);
+          if (log?.completed && log?.actualWeight) {
+            return sum + log.actualWeight * (log.actualReps || log.prescribedReps || 1);
           }
           return sum;
         }, 0);

@@ -138,7 +138,7 @@ export default function ProgressScreen() {
   const totalWorkoutsCompleted = Object.values(completedWorkouts).filter(Boolean).length;
 
   const totalWeightLifted = Object.values(exerciseLog).reduce((sum: number, log: any) => {
-    if (log?.completed && log?.weight) return sum + log.weight * (log.actual_reps || log.reps || 1);
+    if (log?.completed && log?.actualWeight) return sum + log.actualWeight * (log.actualReps || log.prescribedReps || 1);
     return sum;
   }, 0);
 
@@ -150,13 +150,13 @@ export default function ProgressScreen() {
     const byWeek: Record<number, number> = {};
 
     Object.entries(exerciseLog).forEach(([key, log]: [string, any]) => {
-      if (!key.startsWith(prefix) || !log?.completed || !log?.weight) return;
+      if (!key.startsWith(prefix) || !log?.completed || !log?.actualWeight) return;
       const rest = key.slice(prefix.length);
       const hyphen = rest.indexOf('-');
       if (hyphen === -1) return;
       const week = parseInt(rest.slice(0, hyphen), 10);
       if (isNaN(week)) return;
-      const vol = log.weight * (log.actual_reps || log.reps || 1);
+      const vol = log.actualWeight * (log.actualReps || log.prescribedReps || 1);
       byWeek[week] = (byWeek[week] || 0) + vol;
     });
 

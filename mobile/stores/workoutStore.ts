@@ -75,10 +75,27 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     const key = `${userId}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
     const wasCompleted = exerciseLog[key]?.completed || false;
 
+    // Normalize property names to match repository expectations
+    const actualWeight = data.actualWeight ?? data.prescribedWeight ?? data.weight ?? null;
+    const prescribedWeight = data.prescribedWeight ?? data.weight ?? null;
+    const actualReps = data.actualReps ?? data.prescribedReps ?? data.reps ?? null;
+    const prescribedReps = data.prescribedReps ?? data.reps ?? null;
+    const completed = !wasCompleted;
+
+    const normalizedData = {
+      actualWeight,
+      prescribedWeight,
+      actualReps,
+      prescribedReps,
+      completed,
+      percentage: data.percentage,
+      exerciseName: data.exerciseName,
+    };
+
     set((state) => ({
       exerciseLog: {
         ...state.exerciseLog,
-        [key]: { ...data, completed: !wasCompleted },
+        [key]: normalizedData,
       },
     }));
 
@@ -87,7 +104,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         userId, gymId, currentWeek, currentDay,
         exerciseIndex, setIndex,
         data.exerciseName || `Exercise ${exerciseIndex + 1}`,
-        { ...data, completed: !wasCompleted }
+        normalizedData
       );
     }
   },
@@ -146,7 +163,15 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       if (Array.isArray(logs)) {
         logs.forEach((log: any) => {
           const key = `${log.user_id}-${log.week_number}-${log.day_name}-${log.exercise_index}-${log.set_index}`;
-          logMap[key] = { ...log, completed: log.completed };
+          logMap[key] = {
+            completed: log.completed,
+            actualWeight: log.actual_weight,
+            prescribedWeight: log.prescribed_weight,
+            actualReps: log.actual_reps,
+            prescribedReps: log.prescribed_reps,
+            percentage: log.percentage,
+            exerciseName: log.exercise_name,
+          };
         });
       }
 
