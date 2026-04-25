@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
 import RestTimer from './RestTimer';
@@ -44,8 +44,12 @@ export default function ExerciseCard({
   }, [weightOverrides, storageKey]);
 
   // ExerciseCard is keyed by position, not name — on a swap the component
-  // re-renders with a new exercise. Clear stale overrides in that case.
+  // re-renders with a new exercise. Clear stale overrides in that case, but
+  // skip the first mount so we don't wipe the values we just loaded.
+  const prevExerciseName = useRef(exercise.name);
   useEffect(() => {
+    if (prevExerciseName.current === exercise.name) return;
+    prevExerciseName.current = exercise.name;
     setWeightOverrides({});
     setItem(storageKey, {});
   }, [exercise.name, storageKey]);
