@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
+import { getExerciseLogKey } from '../utils/workout';
 
 /**
  * Hook for managing workout set logging and completion tracking
@@ -10,7 +11,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
   const [completedWorkouts, setCompletedWorkouts] = useState({});
 
   const logSet = useCallback(async (exerciseIndex, setIndex, data) => {
-    const key = `${currentUser}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`;
+    const key = getExerciseLogKey(currentUser, currentWeek, currentDay, exerciseIndex, setIndex);
     const wasCompleted = exerciseLog[key]?.completed || false;
     const actualWeight = data.actualWeight ?? data.prescribedWeight ?? data.weight ?? null;
     const prescribedWeight = data.prescribedWeight ?? data.weight ?? null;
@@ -36,7 +37,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
   }, [currentUser, gymId, currentWeek, currentDay, exerciseLog]);
 
   const isSetLogged = useCallback((exerciseIndex, setIndex, targetUserId = currentUser) => {
-    return exerciseLog[`${targetUserId}-${currentWeek}-${currentDay}-${exerciseIndex}-${setIndex}`]?.completed;
+    return exerciseLog[getExerciseLogKey(targetUserId, currentWeek, currentDay, exerciseIndex, setIndex)]?.completed;
   }, [currentWeek, currentDay, exerciseLog, currentUser]);
 
   const getCompletionPercentage = useCallback((week, day, targetUserId = currentUser) => {
@@ -46,7 +47,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     let completed = 0;
     workoutProgram[week][day].exercises.forEach((ex, ei) => {
       for (let si = 0; si < ex.sets; si++) {
-        if (exerciseLog[`${targetUserId}-${week}-${day}-${ei}-${si}`]?.completed) completed++;
+        if (exerciseLog[getExerciseLogKey(targetUserId, week, day, ei, si)]?.completed) completed++;
       }
     });
     return Math.round((completed / totalSets) * 100);

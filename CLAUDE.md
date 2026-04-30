@@ -23,7 +23,7 @@ SwolTracker/
 ├── src/
 │   ├── App.jsx                  # Root component — wraps with ToastProvider
 │   ├── main.jsx                 # React entry point
-│   ├── swoltracker.jsx          # Main app component (~1000 lines) — auth, app state, screen routing, agent chat
+│   ├── swoltracker.jsx          # Main app component (~300 lines) — auth, app state, screen routing, agent chat
 │   ├── index.css                # Tailwind imports + base styles
 │   ├── lib/
 │   │   ├── supabase.js          # Supabase client + composed db object
@@ -32,10 +32,18 @@ SwolTracker/
 │   │   ├── validation.js       # Zod schemas for form + API validation
 │   │   └── repositories/        # Domain-specific database repositories
 │   │       ├── profiles.js     # User profile operations
-│   │       ├── workouts.js      # Workout programs, maxes, logs (largest repo)
+│   │       ├── programs.js     # Workout programs (save/load weekly programs)
+│   │       ├── maxes.js        # 1RM tracking and overload recommendations
+│   │       ├── logs.js         # Workout logging and training history
 │   │       ├── social.js       # Buddies, groups
-│   │       ├── admin.js        # Admin checks, app settings, prompts, errors
-│   │       └── agent-chat.js   # Agent messaging, coach notes, read status
+│   │       ├── gyms.js         # Gym/group membership management
+│   │       ├── agent-chat.js   # Agent messaging, coach notes, read status
+│   │       ├── insights.js     # Progress insights and analytics
+│   │       ├── adminAuth.js    # Admin role checks
+│   │       ├── appSettings.js  # App settings (LLM provider, etc.)
+│   │       ├── prompts.js      # AI prompt template management
+│   │       ├── errors.js       # Error logging to database
+│   │       └── onboarding.js   # Onboarding state persistence
 │   ├── components/
 │   │   ├── Onboarding.jsx       # New user onboarding flow (13 steps, agent-native)
 │   │   ├── Toast.jsx            # Toast notification system (ToastProvider + useToast)
@@ -62,9 +70,19 @@ SwolTracker/
 │   │   └── BuddiesScreen.jsx  # Buddies + groups view
 │   ├── hooks/                   # Custom React hooks
 │   │   ├── useAdmin.js         # Admin state + check
+│   │   ├── useAgentChat.js     # Agent chat panel state and messaging
+│   │   ├── useAgentOnboarding.js # Agent connection during onboarding
 │   │   ├── useAiGenerator.js   # AI workout generation state + logic
-│   │   ├── useWorkoutLogger.js # Set logging logic
-│   │   └── useExerciseSwap.js  # Exercise swap request flow
+│   │   ├── useAppBootstrap.js  # Initial data loading bundle
+│   │   ├── useBuddyActions.js  # Buddy/group request handling
+│   │   ├── useExerciseSwap.js  # Exercise swap request flow
+│   │   ├── useMaxesActions.js  # 1RM add/edit/accept-swap actions
+│   │   ├── useOnboarding.js    # Legacy onboarding flow
+│   │   ├── useOnboardingActions.js # Onboarding workout generation
+│   │   ├── useProfileActions.js # Profile update + avatar upload
+│   │   ├── useSession.js       # Auth session management
+│   │   ├── useSimpleOnboarding.js # Simplified onboarding flow
+│   │   └── useWorkoutLogger.js # Set logging logic
 │   ├── constants/               # App constants (equipment list, etc.)
 │   └── utils/
 │       ├── date.js             # Week/date calculations
@@ -115,16 +133,24 @@ await db.getLlmProvider();         // returns: 'openai' | 'claude' | 'gemini' | 
 
 Domain repositories (`src/lib/repositories/`):
 - `profiles.js` — profile CRUD, onboarding
-- `workouts.js` — maxes, programs, workout logs, overload recommendations
+- `programs.js` — workout programs (save/load weekly programs)
+- `maxes.js` — 1RM tracking, overload recommendations
+- `logs.js` — workout logging, training history
 - `social.js` — buddies, gym groups
-- `admin.js` — admin RPC, app settings, prompt templates, error logging
-- `agent-chat.js` — agent messages, coach notes, read status, API key detection
+- `gyms.js` — gym/group membership management
+- `agent-chat.js` — agent messages, coach notes, read status
+- `insights.js` + `insightsBuilders.js` — progress insights and analytics
+- `adminAuth.js` — admin role checks
+- `appSettings.js` — app settings (LLM provider, etc.)
+- `prompts.js` — AI prompt template management
+- `errors.js` — error logging to database
+- `onboarding.js` — onboarding state persistence
 
 ### State Management
 - React useState hooks (no external state library)
 - Main auth + app state lives in `swoltracker.jsx`
 - Screen-specific state in each screen component
-- Custom hooks for complex state: `useAiGenerator`, `useWorkoutLogger`, `useExerciseSwap`, `useAdmin`
+- Custom hooks for complex state: `useSession`, `useAppBootstrap`, `useAdmin`, `useAiGenerator`, `useWorkoutLogger`, `useExerciseSwap`, `useAgentChat`, `useBuddyActions`, `useMaxesActions`, `useProfileActions`
 
 ### Component Organization
 - Screen-level components in `src/screens/`
