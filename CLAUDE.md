@@ -230,14 +230,16 @@ Key tables (see `swoltracker-schema.sql` for full schema):
 
 The app supports multiple LLM providers via the serverless proxy at `/api/llm` (API keys never leave the server):
 
-| Provider | Onboarding Model | Weekly Program Model |
-|----------|-----------------|---------------------|
-| OpenAI | `gpt-4o-mini` | `gpt-4o` |
-| Claude | `claude-3-haiku-20240307` | `claude-3-5-sonnet-latest` |
-| Gemini | `gemini-1.5-flash` | `gemini-1.5-pro` |
-| OpenRouter | `openrouter/auto` | `openrouter/auto` |
+| Provider | Onboarding Model | Weekly Program Model | Swap Model |
+|----------|-----------------|---------------------|-----------|
+| OpenAI | `gpt-4o-mini` | `gpt-4o` | `gpt-4o-mini` |
+| Claude | `claude-3-haiku-20240307` | `claude-3-5-sonnet-latest` | `claude-3-haiku-20240307` |
+| Gemini | `gemini-1.5-flash` | `gemini-1.5-pro` | `gemini-1.5-flash` |
+| OpenRouter | `openrouter/auto` | `openrouter/auto` | `openrouter/auto` |
 
 The active provider is stored in `app_settings` (key: `llm_provider`) and can be changed in **Admin → API Settings**. API keys for each provider are stored in `app_settings` with keys like `llm_api_key_openai`, `llm_api_key_claude`, etc.
+
+**Provider fallback:** If the selected provider's API key is missing from Vercel env vars, the server automatically falls back to the next available provider (`openai` → `claude` → `gemini` → `openrouter`). The proxy returns `provider: <actual>` in the response so the client knows which model served the request. If *no* providers are configured, the proxy returns a 500 with a clear error listing all required env vars.
 
 Prompt templates are stored in the `prompt_templates` table and are editable via the admin panel (**Admin → Prompt Templates**).
 
