@@ -24,7 +24,18 @@ export function useExerciseSwap({ equipment, currentUser, toast }) {
 
       const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'onboarding', db, currentUser);
 
-      const cleanedResponse = result.content.replace(/```json|```/g, '').trim();
+      // Extract JSON from the response (LLMs often wrap it in friendly text)
+      let cleanedResponse = result.content.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const firstBrace = cleanedResponse.indexOf('{');
+      const lastBrace = cleanedResponse.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanedResponse = cleanedResponse.slice(firstBrace, lastBrace + 1);
+      }
+
+      if (!cleanedResponse) {
+        throw new Error('The AI returned an empty response. Try again.');
+      }
+
       const alternative = JSON.parse(cleanedResponse);
 
       if (!alternative.name || !alternative.muscleGroups || !alternative.sets || !alternative.reps) {
