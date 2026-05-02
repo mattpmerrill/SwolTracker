@@ -10,22 +10,22 @@ const RETRY_DELAY_MS = 1000;
 export const PROVIDER_CONFIGS = {
   openai: {
     endpoint: 'https://api.openai.com/v1/chat/completions',
-    models: { onboarding: 'gpt-4o-mini', weekly: 'gpt-4o' },
+    models: { onboarding: 'gpt-4o-mini', weekly: 'gpt-4o', swap: 'gpt-4o-mini' },
     defaultModel: 'gpt-4o-mini',
   },
   claude: {
     endpoint: 'https://api.anthropic.com/v1/messages',
-    models: { onboarding: 'claude-3-haiku-20240307', weekly: 'claude-3-5-sonnet-latest' },
+    models: { onboarding: 'claude-3-haiku-20240307', weekly: 'claude-3-5-sonnet-latest', swap: 'claude-3-haiku-20240307' },
     defaultModel: 'claude-3-5-sonnet-latest',
   },
   gemini: {
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
-    models: { onboarding: 'gemini-1.5-flash', weekly: 'gemini-1.5-pro' },
+    models: { onboarding: 'gemini-1.5-flash', weekly: 'gemini-1.5-pro', swap: 'gemini-1.5-flash' },
     defaultModel: 'gemini-1.5-flash',
   },
   openrouter: {
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-    models: { onboarding: 'openrouter/auto', weekly: 'openrouter/auto' },
+    models: { onboarding: 'openrouter/auto', weekly: 'openrouter/auto', swap: 'openrouter/auto' },
     defaultModel: 'openrouter/auto',
   },
 };
@@ -36,6 +36,23 @@ export const ENV_KEYS = {
   gemini: 'GEMINI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
 };
+
+/**
+ * Resolve a provider, falling back to the next available one if the preferred
+ * provider's API key is not configured in environment variables.
+ * Returns the first viable provider or `null` if none are configured.
+ */
+export function resolveProviderWithFallback(preferredProvider) {
+  const tryOrder = [preferredProvider, 'openai', 'claude', 'gemini', 'openrouter'];
+  const unique = [...new Set(tryOrder)];
+  for (const p of unique) {
+    const envKey = ENV_KEYS[p];
+    if (envKey && process.env[envKey]) {
+      return p;
+    }
+  }
+  return null;
+}
 
 export async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
@@ -219,14 +236,21 @@ export async function callLlmWithConfig({ provider, apiKey, model, systemPrompt,
  */
 export async function callLlmInternal(supabase, { systemPrompt, userPrompt, requestType = 'weekly' }) {
   const { data: providerSetting } = await supabase.rpc('get_app_setting', { p_key: 'llm_provider' });
-  const provider = (typeof providerSetting === 'string' && providerSetting.trim()) || 'claude';
+  const preferredProvider = (typeof providerSetting === 'string' && providerSetting.trim()) || 'claude';
+
+  const provider = resolveProviderWithFallback(preferredProvider);
+  if (!provider) {
+    throw new Error(`No LLM provider API keys are configured. Please set at least one of: ${Object.values(ENV_KEYS).join(', ')} in Vercel env vars.`);
+  }
+  if (provider !== preferredProvider) {
+    console.warn(`[callLlmInternal] Preferred provider ${preferredProvider} unavailable, using fallback ${provider}`);
+  }
 
   const config = PROVIDER_CONFIGS[provider];
   if (!config) throw new Error(`Unknown provider: ${provider}`);
 
   const envKey = ENV_KEYS[provider];
   const apiKey = process.env[envKey];
-  if (!apiKey) throw new Error(`API key not configured for ${provider}. Set ${envKey} in Vercel env vars.`);
 
   let model = config.models[requestType] || config.defaultModel;
   const { data: modelOverride } = await supabase.rpc('get_app_setting', { p_key: `llm_model_${provider}` });

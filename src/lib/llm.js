@@ -31,7 +31,7 @@ function categorizeLlmError(error) {
  * @param {string} provider - 'openai', 'claude', or 'gemini'
  * @param {string} systemPrompt - The system message
  * @param {string} userPrompt - The user message
- * @param {string} requestType - 'onboarding' or 'weekly' to select appropriate model
+ * @param {string} requestType - 'onboarding', 'weekly', or 'swap' to select appropriate model
  * @param {Object} db - Optional database helper for error logging
  * @param {string} userId - Optional user ID for error context
  * @returns {Promise<{content: string, usage: {prompt_tokens: number, completion_tokens: number}, model: string}>}

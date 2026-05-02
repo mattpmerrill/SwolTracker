@@ -22,7 +22,7 @@ export function useExerciseSwap({ equipment, currentUser, toast }) {
 
       const userPrompt = `Given this exercise: ${exercise.name} targeting ${exercise.muscleGroups} with ${exercise.sets}×${exercise.reps}, suggest ONE alternative exercise that targets the same muscle groups. Available equipment: ${equipment.join(', ')}. Return ONLY valid JSON with this exact schema: { "name": "...", "muscleGroups": "...", "sets": ${exercise.sets}, "reps": "${exercise.reps}", "note": "Alternative for ${exercise.name}" }. Keep the same sets and reps.${exercise.percentages ? ' Include "percentages": [' + exercise.percentages.join(', ') + '] since the original had them.' : ' Do not include percentages.'}`;
 
-      const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'onboarding', db, currentUser);
+      const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'swap', db, currentUser);
 
       // Extract JSON from the response (LLMs often wrap it in friendly text)
       let cleanedResponse = result.content.replace(/```json/gi, '').replace(/```/g, '').trim();

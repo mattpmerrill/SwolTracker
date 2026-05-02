@@ -3,7 +3,7 @@
 // Provider dispatch lives in ./_llm-core.js and is shared with api/mcp.js.
 
 import { createClient } from '@supabase/supabase-js';
-import { PROVIDER_CONFIGS, ENV_KEYS, callLlmWithConfig } from './_llm-core.js';
+import { PROVIDER_CONFIGS, ENV_KEYS, callLlmWithConfig, resolveProviderWithFallback } from './_llm-core.js';
 
 const AI_DAILY_LIMIT = 20; // max AI generations per user per day
 
@@ -27,11 +27,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: `Unknown provider: ${provider}` });
     }
 
-    const envKey = ENV_KEYS[provider];
-    const apiKey = process.env[envKey];
+    let effectiveProvider = provider;
+    let envKey = ENV_KEYS[provider];
+    let apiKey = process.env[envKey];
+
     if (!apiKey) {
-      return res.status(500).json({ error: `API key not configured for ${provider}. Set ${envKey} in Vercel env vars.` });
+      const fallback = resolveProviderWithFallback(provider);
+      if (fallback) {
+        console.warn(`[LLM Proxy] Provider ${provider} key missing, falling back to ${fallback}`);
+        effectiveProvider = fallback;
+        envKey = ENV_KEYS[fallback];
+        apiKey = process.env[envKey];
+      }
     }
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: `No LLM provider API keys are configured. Please set at least one of: ${Object.values(ENV_KEYS).join(', ')} in Vercel env vars.`
+      });
+    }
+
+    const effectiveConfig = PROVIDER_CONFIGS[effectiveProvider];
 
     // Authenticate the user and check rate limits via Supabase.
     // Fail closed: auth is mandatory, no anonymous path.
@@ -70,8 +86,8 @@ export default async function handler(req, res) {
 
     // Per-provider model override from app_settings (request-scoped — never mutate
     // PROVIDER_CONFIGS, which is module-level shared state. F-013.)
-    let effectiveModel = config.models[requestType] || config.defaultModel;
-    const modelOverrideKey = `llm_model_${provider}`;
+    let effectiveModel = effectiveConfig.models[requestType] || effectiveConfig.defaultModel;
+    const modelOverrideKey = `llm_model_${effectiveProvider}`;
     const { data: modelOverride } = await supabase
       .rpc('get_app_setting', { p_key: modelOverrideKey });
 
@@ -80,7 +96,7 @@ export default async function handler(req, res) {
     }
 
     const result = await callLlmWithConfig({
-      provider,
+      provider: effectiveProvider,
       apiKey,
       model: effectiveModel,
       systemPrompt,
@@ -88,7 +104,7 @@ export default async function handler(req, res) {
       requestType,
     });
 
-    return res.status(200).json(result);
+    return res.status(200).json({ ...result, provider: effectiveProvider });
   } catch (error) {
     console.error('LLM proxy error:', error);
     const status = error.message?.includes('401') || error.message?.includes('API key') ? 401
