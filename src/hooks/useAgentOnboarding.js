@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
+import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 import { computeMissingFields, isOnboardingDone } from '../components/AgentOnboarding/status';
 
 const WATCH_TIMEOUT_MS = 10 * 60 * 1000;
@@ -28,7 +29,7 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
   const ensureGym = async () => {
     if (gymId) return gymId;
     const gym = await db.createGym('Personal Gym', user.id);
-    if (!gym?.id) throw new Error('Failed to create gym');
+    if (!gym?.id) throw new Error('Failed to create gym' + (gym?.error?.message ? ': ' + gym.error.message : ''));
     setGymId(gym.id);
     return gym.id;
   };
@@ -49,6 +50,15 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
       setScreen('connect');
     } catch (err) {
       console.error('Agent onboarding connect failed:', err);
+      await logError(db, {
+        category: ErrorCategory.DATABASE,
+        message: 'Agent onboarding connect failed: ' + (err.message || 'unknown error'),
+        severity: ErrorSeverity.CRITICAL,
+        userId: user?.id,
+        component: 'useAgentOnboarding.js',
+        operation: 'handleConnect',
+        originalError: err,
+      });
       setError(err.message || 'Something went wrong setting up your agent.');
     } finally {
       setBusy(false);

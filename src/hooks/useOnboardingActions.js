@@ -10,7 +10,19 @@ export function useOnboardingActions({ authUser, gymId, setGymId }) {
   const ensureOnboardingGym = async () => {
     if (gymId) return gymId;
     const gym = await db.createGym('Personal Gym', authUser.id);
-    if (!gym?.id) return null;
+    if (!gym?.id) {
+      await logError(db, {
+        category: ErrorCategory.DATABASE,
+        message: 'Failed to create gym during onboarding: ' + (gym?.error?.message || 'unknown error'),
+        severity: ErrorSeverity.CRITICAL,
+        userId: authUser?.id,
+        component: 'useOnboardingActions.js',
+        operation: 'ensureOnboardingGym',
+        originalError: gym?.error,
+        context: { gymResult: gym },
+      });
+      return null;
+    }
     setGymId(gym.id);
     return gym.id;
   };
@@ -20,13 +32,34 @@ export function useOnboardingActions({ authUser, gymId, setGymId }) {
 
     try {
       const onboardingGymId = await ensureOnboardingGym();
-      if (!onboardingGymId) { console.error('Failed to create gym during onboarding'); return false; }
+      if (!onboardingGymId) return false; // ensureOnboardingGym already logged the cause
 
       const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
-      if (!profileSaved) { console.error('Failed to save onboarding profile'); return false; }
+      if (!profileSaved) {
+        await logError(db, {
+          category: ErrorCategory.DATABASE,
+          message: 'Failed to save onboarding profile (complete_onboarding RPC returned false)',
+          severity: ErrorSeverity.CRITICAL,
+          userId: authUser?.id,
+          component: 'useOnboardingActions.js',
+          operation: 'handleGenerateOnboardingWorkout.completeOnboarding',
+          context: { onboardingData },
+        });
+        return false;
+      }
 
       const promptTemplate = await db.getPromptTemplate('onboarding_workout_generator');
-      if (!promptTemplate) { console.error('Onboarding prompt template not found'); return false; }
+      if (!promptTemplate) {
+        await logError(db, {
+          category: ErrorCategory.DATABASE,
+          message: 'Onboarding prompt template not found (onboarding_workout_generator)',
+          severity: ErrorSeverity.ERROR,
+          userId: authUser?.id,
+          component: 'useOnboardingActions.js',
+          operation: 'handleGenerateOnboardingWorkout.getPromptTemplate',
+        });
+        return false;
+      }
 
       const provider = await db.getLlmProvider();
 
@@ -66,7 +99,7 @@ export function useOnboardingActions({ authUser, gymId, setGymId }) {
           originalError: parseError,
           context: { responseSnippet: cleanedResponse.substring(0, 500), responseLength: cleanedResponse.length, onboardingData },
         });
-        throw new Error('The AI returned an invalid response. Please try again.');
+        throw new Error('The AI returned an invalid response. Please try again.', { cause: parseError });
       }
 
       for (let week = 1; week <= 4; week++) {
@@ -98,14 +131,35 @@ export function useOnboardingActions({ authUser, gymId, setGymId }) {
 
     try {
       const onboardingGymId = await ensureOnboardingGym();
-      if (!onboardingGymId) return null;
+      if (!onboardingGymId) return null; // ensureOnboardingGym already logged the cause
 
       const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
-      if (!profileSaved) return null;
+      if (!profileSaved) {
+        await logError(db, {
+          category: ErrorCategory.DATABASE,
+          message: 'Failed to save onboarding profile during agent prep (complete_onboarding RPC returned false)',
+          severity: ErrorSeverity.CRITICAL,
+          userId: authUser?.id,
+          component: 'useOnboardingActions.js',
+          operation: 'handlePrepareForAgent.completeOnboarding',
+          context: { onboardingData },
+        });
+        return null;
+      }
 
       return { gymId: onboardingGymId };
     } catch (error) {
       console.error('Error preparing for agent:', error);
+      await logError(db, {
+        category: ErrorCategory.DATABASE,
+        message: error.message || 'Failed to prepare for agent during onboarding',
+        severity: ErrorSeverity.ERROR,
+        userId: authUser?.id,
+        component: 'useOnboardingActions.js',
+        operation: 'handlePrepareForAgent',
+        originalError: error,
+        context: { onboardingData },
+      });
       return null;
     }
   };

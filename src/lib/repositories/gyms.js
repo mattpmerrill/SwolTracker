@@ -27,7 +27,12 @@ export function createGymsRepo(supabase) {
 
     if (error) {
       console.error('Error creating gym:', error)
-      return null
+      // Surface the underlying error so callers (e.g. onboarding) can log
+      // *why* it failed. Existing callers only read `?.id`, so attaching an
+      // `error` field is non-breaking. Returning null here would discard the
+      // reason — which is how the missing create_user_gym RPC (404) went
+      // undiagnosed during onboarding until migration 031.
+      return { id: null, error }
     }
     return { id: data }
   }
