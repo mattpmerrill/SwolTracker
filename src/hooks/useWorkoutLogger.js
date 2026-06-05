@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
-import { getExerciseLogKey } from '../utils/workout';
+import { buildMissingWorkoutSetLogs, getExerciseLogKey } from '../utils/workout';
 
 /**
  * Hook for managing workout set logging and completion tracking
@@ -69,16 +69,47 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     const key = `${currentUser}-${week}-${day}`;
     const wasComplete = completedWorkouts[key] || false;
     const completionPct = getCompletionPercentage(week, day, currentUser);
+    const missingSetLogs = buildMissingWorkoutSetLogs(
+      workoutProgram[week]?.[day],
+      exerciseLog,
+      currentUser,
+      week,
+      day,
+    );
 
     setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
 
     if (wasComplete) {
       await db.unmarkWorkoutComplete(currentUser, gymId, week, day);
     } else {
+      if (missingSetLogs.length > 0) {
+        setExerciseLog(prev => {
+          const next = { ...prev };
+          missingSetLogs.forEach(({ key: logKey, logData }) => {
+            next[logKey] = logData;
+          });
+          return next;
+        });
+
+        if (gymId) {
+          await Promise.all(missingSetLogs.map(({ exerciseIndex, setIndex, exerciseName, logData }) => (
+            db.logSet(
+              currentUser,
+              gymId,
+              week,
+              day,
+              exerciseIndex,
+              setIndex,
+              exerciseName,
+              logData,
+            )
+          )));
+        }
+      }
       await db.markWorkoutComplete(currentUser, gymId, week, day);
     }
 
-    if (!wasComplete && completionPct === 100) {
+    if (!wasComplete && (completionPct === 100 || missingSetLogs.length > 0)) {
       confetti({
         particleCount: 150,
         spread: 70,
@@ -86,7 +117,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         colors: ['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
       });
     }
-  }, [currentUser, gymId, completedWorkouts, getCompletionPercentage]);
+  }, [currentUser, gymId, completedWorkouts, exerciseLog, workoutProgram, getCompletionPercentage]);
 
   return {
     exerciseLog,

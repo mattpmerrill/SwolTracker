@@ -121,3 +121,39 @@ export const getTotalCompletedSets = (exerciseLog, userId) => {
 export const getExerciseLogKey = (userId, week, day, exerciseIndex, setIndex) => {
   return `${userId}-${week}-${day}-${exerciseIndex}-${setIndex}`;
 };
+
+/**
+ * Build log entries for any missing sets in a workout day.
+ * Used when a user taps "Complete Workout" so the persisted set logs match
+ * the completion marker that survives refresh.
+ */
+export const buildMissingWorkoutSetLogs = (workout, exerciseLog, userId, week, day) => {
+  if (!workout?.exercises?.length) return [];
+
+  const entries = [];
+  workout.exercises.forEach((exercise, exerciseIndex) => {
+    for (let setIndex = 0; setIndex < exercise.sets; setIndex++) {
+      const key = getExerciseLogKey(userId, week, day, exerciseIndex, setIndex);
+      if (exerciseLog[key]?.completed) continue;
+
+      const prescribedWeight = exercise.weight_lbs ?? exercise.weight ?? null;
+      const prescribedReps = exercise.reps ?? null;
+
+      entries.push({
+        key,
+        exerciseIndex,
+        setIndex,
+        exerciseName: exercise.name || `Exercise ${exerciseIndex + 1}`,
+        logData: {
+          actualWeight: prescribedWeight,
+          prescribedWeight,
+          actualReps: prescribedReps,
+          prescribedReps,
+          completed: true,
+        },
+      });
+    }
+  });
+
+  return entries;
+};
