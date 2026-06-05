@@ -57,6 +57,7 @@ async function loadUserBundle(authUser) {
     return {
       kind: 'onboarding',
       onboardingData: {
+        id: userId,
         name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || '',
         email: authUser.email,
       },
