@@ -2,6 +2,13 @@
  * Workout logs, completions, and session stats repository
  */
 export function createLogsRepo(supabase) {
+  const normalizeActualReps = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? Math.trunc(value) : null;
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) return Number.parseInt(value, 10);
+    return null;
+  }
+
   const logSet = async (userId, gymId, weekNumber, dayName, exerciseIndex, setIndex, exerciseName, data) => {
     if (!supabase) return null
     const { data: log, error } = await supabase
@@ -17,7 +24,7 @@ export function createLogsRepo(supabase) {
         prescribed_weight: data.prescribedWeight,
         prescribed_reps: data.prescribedReps,
         actual_weight: data.actualWeight || data.prescribedWeight,
-        actual_reps: data.actualReps,
+        actual_reps: normalizeActualReps(data.actualReps),
         completed: data.completed !== undefined ? data.completed : true
       }, {
         onConflict: 'user_id,gym_id,week_number,day_name,exercise_index,set_index'

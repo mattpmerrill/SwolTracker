@@ -122,6 +122,13 @@ export const getExerciseLogKey = (userId, week, day, exerciseIndex, setIndex) =>
   return `${userId}-${week}-${day}-${exerciseIndex}-${setIndex}`;
 };
 
+export const toActualRepsValue = (reps) => {
+  if (reps === null || reps === undefined || reps === '') return null;
+  if (typeof reps === 'number') return Number.isFinite(reps) ? Math.trunc(reps) : null;
+  if (typeof reps === 'string' && /^\d+$/.test(reps.trim())) return Number.parseInt(reps, 10);
+  return null;
+};
+
 /**
  * Build log entries for any missing sets in a workout day.
  * Used when a user taps "Complete Workout" so the persisted set logs match
@@ -138,6 +145,7 @@ export const buildMissingWorkoutSetLogs = (workout, exerciseLog, userId, week, d
 
       const prescribedWeight = exercise.weight_lbs ?? exercise.weight ?? null;
       const prescribedReps = exercise.reps ?? null;
+      const actualReps = toActualRepsValue(prescribedReps);
 
       entries.push({
         key,
@@ -147,7 +155,7 @@ export const buildMissingWorkoutSetLogs = (workout, exerciseLog, userId, week, d
         logData: {
           actualWeight: prescribedWeight,
           prescribedWeight,
-          actualReps: prescribedReps,
+          actualReps,
           prescribedReps,
           completed: true,
         },

@@ -24,7 +24,7 @@ describe('buildMissingWorkoutSetLogs', () => {
         logData: {
           actualWeight: 40,
           prescribedWeight: 40,
-          actualReps: '12',
+          actualReps: 12,
           prescribedReps: '12',
           completed: true,
         },
@@ -37,7 +37,7 @@ describe('buildMissingWorkoutSetLogs', () => {
         logData: {
           actualWeight: null,
           prescribedWeight: null,
-          actualReps: '10',
+          actualReps: 10,
           prescribedReps: '10',
           completed: true,
         },
@@ -47,5 +47,33 @@ describe('buildMissingWorkoutSetLogs', () => {
 
   it('returns no entries for rest days', () => {
     expect(buildMissingWorkoutSetLogs({ focus: 'Rest Day', exercises: [] }, {}, 'u1', 1, 'Sunday')).toEqual([]);
+  });
+
+  it('uses null actual reps for AMRAP or timed missing sets', () => {
+    const workout = {
+      exercises: [
+        { name: 'Push-Ups to Failure', sets: 1, reps: 'AMRAP' },
+        { name: "Farmer's Walk", sets: 1, reps: '30 sec' },
+      ],
+    };
+
+    const logs = buildMissingWorkoutSetLogs(workout, {}, 'u1', 1, 'Saturday');
+
+    expect(logs.map((entry) => entry.logData)).toEqual([
+      {
+        actualWeight: null,
+        prescribedWeight: null,
+        actualReps: null,
+        prescribedReps: 'AMRAP',
+        completed: true,
+      },
+      {
+        actualWeight: null,
+        prescribedWeight: null,
+        actualReps: null,
+        prescribedReps: '30 sec',
+        completed: true,
+      },
+    ]);
   });
 });

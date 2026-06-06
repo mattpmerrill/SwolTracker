@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { db } from '../lib/db';
+import { buildMissingWorkoutSetLogs } from '../../src/utils/workout';
 
 interface WorkoutState {
   // Program data
@@ -133,9 +134,16 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   },
 
   toggleWorkoutComplete: async (userId, gymId, week, day) => {
-    const { completedWorkouts } = get();
+    const { completedWorkouts, exerciseLog, workoutProgram } = get();
     const key = `${userId}-${week}-${day}`;
     const wasComplete = completedWorkouts[key] || false;
+    const missingSetLogs = buildMissingWorkoutSetLogs(
+      workoutProgram[week]?.[day],
+      exerciseLog,
+      userId,
+      week,
+      day
+    );
 
     set((state) => ({
       completedWorkouts: { ...state.completedWorkouts, [key]: !wasComplete },
@@ -144,6 +152,29 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     if (wasComplete) {
       await db.unmarkWorkoutComplete(userId, gymId, week, day);
     } else {
+      if (missingSetLogs.length > 0) {
+        set((state) => {
+          const nextLog = { ...state.exerciseLog };
+          missingSetLogs.forEach(({ key: logKey, logData }: any) => {
+            nextLog[logKey] = logData;
+          });
+          return { exerciseLog: nextLog };
+        });
+
+        await Promise.all(missingSetLogs.map(({ exerciseIndex, setIndex, exerciseName, logData }: any) =>
+          db.logSet(
+            userId,
+            gymId,
+            week,
+            day,
+            exerciseIndex,
+            setIndex,
+            exerciseName,
+            logData
+          )
+        ));
+      }
+
       await db.markWorkoutComplete(userId, gymId, week, day);
     }
 
