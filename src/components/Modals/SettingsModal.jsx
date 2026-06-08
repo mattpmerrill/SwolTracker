@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle } from 'lucide-react';
+import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle, FileText, ClipboardList } from 'lucide-react';
 import { db } from '../../lib/supabase';
+import swoltrackerSkillGuide from '../../../SKILL.md?raw';
 
 /**
  * Main settings modal
@@ -112,8 +113,8 @@ export default function SettingsModal({
         {/* Connect Agent Section */}
         {supabase && <AgentKeysSection supabase={supabase} />}
 
-        {/* Agent Weekly Review Setup */}
-        {supabase && <AgentCronPromptSection supabase={supabase} />}
+        {/* Agent Prompt Library */}
+        <AgentPromptLibrarySection />
 
         {/* Agent Activity — audit log of recent MCP tool calls */}
         {supabase && <AgentActivitySection supabase={supabase} />}
@@ -402,9 +403,9 @@ function AgentKeysSection({ supabase }) {
   );
 }
 
-// ── Agent Cron Prompt Section ─────────────────────────────────
+// ── Agent Prompt Library Section ─────────────────────────────────
 
-const CRON_PROMPT_TEXT = `Set up a weekly cron job (every Sunday at 8 PM) to review my SwolTracker progress. Each week:
+const WEEKLY_REVIEW_PROMPT_TEXT = `Set up a weekly cron job (every Sunday at 8 PM) to review my SwolTracker progress. Each week:
 
 1. Call \`get_training_history_summary\` to see my recent workout data
 2. Call \`get_overload_recommendations\` to check which lifts are ready to progress
@@ -415,49 +416,121 @@ const CRON_PROMPT_TEXT = `Set up a weekly cron job (every Sunday at 8 PM) to rev
 
 Be encouraging but honest. Reference specific exercises and numbers from my data. Keep reviews under 500 words.`;
 
-function AgentCronPromptSection({ supabase }) {
-  const [keys, setKeys] = useState([]);
-  const [copied, setCopied] = useState(false);
+const ONBOARDING_PROMPT_TEXT = `I just set up SwolTracker. Please connect to the SwolTracker MCP server, read the SwolTracker skill guide, interview me, and complete onboarding.
 
-  useEffect(() => {
-    async function checkKeys() {
-      const { data } = await supabase
-        .from('api_keys')
-        .select('id')
-        .is('revoked_at', null)
-        .limit(1);
-      setKeys(data || []);
-    }
-    checkKeys();
-  }, []);
+Start by calling \`get_onboarding_status\` to see what is missing. Ask short grouped questions, then call \`update_profile\` as I answer. When all required fields are present, call \`complete_onboarding\` with my equipment list. After onboarding is complete, generate and save my first 4 weeks of training with \`generate_workout_program\`.
 
-  if (keys.length === 0) return null;
+Keep the interview fast and conversational.`;
+
+const PROGRAM_GENERATION_PROMPT_TEXT = `Please create my next 4 weeks of SwolTracker programming.
+
+1. Read the SwolTracker skill guide and call \`get_prompt_template\` for the programming philosophy
+2. Call \`get_context_bundle\`, \`get_profile\`, \`get_maxes\`, and \`get_training_history_summary\`
+3. Draft the program and confirm it with me before saving
+4. Save the confirmed program with \`generate_workout_program\`
+5. Send me a short summary through \`send_coach_message\` using message_type "program_update"
+
+Use my available equipment, workout days, goals, current maxes, and recent performance.`;
+
+function buildMcpConfigPrompt(origin) {
+  const configSnippet = JSON.stringify({
+    swoltracker: {
+      url: `${origin}/api/mcp`,
+      headers: { Authorization: 'Bearer swol_YOUR_API_KEY' },
+    },
+  }, null, 2);
+
+  return `Add SwolTracker to your MCP config. Replace \`swol_YOUR_API_KEY\` with my real key from SwolTracker Settings.
+
+${configSnippet}
+
+After connecting, read the SwolTracker skill guide and call \`get_context_bundle\` to understand my current workout state.`;
+}
+
+function AgentPromptLibrarySection() {
+  const [copied, setCopied] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const origin = typeof window === 'undefined' ? 'https://swol-tracker.vercel.app' : window.location.origin;
+
+  const prompts = [
+    {
+      id: 'skill',
+      title: 'Agent Skill Guide',
+      description: 'The full SwolTracker operating manual for any MCP-aware agent',
+      content: swoltrackerSkillGuide,
+    },
+    {
+      id: 'config',
+      title: 'MCP Config Reminder',
+      description: 'Connection snippet with the current SwolTracker MCP endpoint',
+      content: buildMcpConfigPrompt(origin),
+    },
+    {
+      id: 'onboarding',
+      title: 'Onboarding Prompt',
+      description: 'Tell an agent to interview the user and finish setup',
+      content: ONBOARDING_PROMPT_TEXT,
+    },
+    {
+      id: 'program',
+      title: 'Program Generation Prompt',
+      description: 'Tell an agent to create and save a confirmed 4-week program',
+      content: PROGRAM_GENERATION_PROMPT_TEXT,
+    },
+    {
+      id: 'weekly',
+      title: 'Weekly Review Cron',
+      description: 'Tell an agent to schedule recurring coaching reviews',
+      content: WEEKLY_REVIEW_PROMPT_TEXT,
+    },
+  ];
+
+  function copyPrompt(prompt) {
+    navigator.clipboard.writeText(prompt.content);
+    setCopied(prompt.id);
+    setTimeout(() => setCopied(null), 2000);
+  }
 
   return (
-    <div className="mb-6 bg-gradient-to-br from-cyan-500/5 to-teal-500/5 rounded-2xl border border-cyan-500/15 p-4">
+    <div className="mb-6 bg-zinc-800/40 rounded-2xl border border-zinc-700/50 p-4">
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center ring-1 ring-cyan-500/20">
-          <Bot className="w-5 h-5 text-cyan-400" />
+        <div className="w-10 h-10 rounded-xl bg-zinc-700/60 flex items-center justify-center">
+          <ClipboardList className="w-5 h-5 text-cyan-300" />
         </div>
         <div>
-          <h3 className="font-bold text-cyan-400 text-sm">Set Up Weekly Reviews</h3>
-          <p className="text-xs text-zinc-400">Copy this prompt to your agent to enable weekly coaching</p>
+          <h3 className="font-bold text-sm">Agent Instructions</h3>
+          <p className="text-xs text-zinc-400">Copyable prompts when your agent needs a reminder</p>
         </div>
       </div>
 
-      <div className="relative">
-        <pre className="text-xs text-zinc-300 bg-zinc-800/80 rounded-xl p-4 pr-16 font-mono whitespace-pre-wrap overflow-y-auto max-h-40 leading-relaxed">{CRON_PROMPT_TEXT}</pre>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(CRON_PROMPT_TEXT);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          }}
-          className="absolute top-3 right-3 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-700/80 hover:bg-zinc-600 border border-zinc-600/50 transition-colors backdrop-blur-sm"
-        >
-          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+      <div className="space-y-2">
+        {prompts.map(prompt => {
+          const isExpanded = expanded === prompt.id;
+          return (
+            <div key={prompt.id} className="bg-zinc-900/60 rounded-xl border border-zinc-700/40 overflow-hidden">
+              <div className="flex items-center gap-3 p-3">
+                <FileText className="w-4 h-4 text-cyan-300 shrink-0" />
+                <button
+                  onClick={() => setExpanded(isExpanded ? null : prompt.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{prompt.title}</p>
+                  <p className="text-xs text-zinc-500 truncate">{prompt.description}</p>
+                </button>
+                <button
+                  onClick={() => copyPrompt(prompt)}
+                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+                >
+                  {copied === prompt.id ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+                  {copied === prompt.id ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              {isExpanded && (
+                <pre className="text-xs text-zinc-300 bg-zinc-950/60 border-t border-zinc-800 p-3 font-mono whitespace-pre-wrap overflow-y-auto max-h-48 leading-relaxed">{prompt.content}</pre>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
