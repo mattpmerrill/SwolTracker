@@ -53,4 +53,23 @@ describe('logsRepo', () => {
     expect(payload.prescribed_reps).toBe(5);
     expect(payload.actual_reps).toBe(5);
   });
+
+  it('logSet persists actual_weight even when the program has no prescribed weight', async () => {
+    const sb = createMockSupabase();
+    sb.respond('workout_logs', 'single', {
+      data: { id: 'l3', actual_weight: 35, prescribed_weight: null, actual_reps: 12 },
+      error: null,
+    });
+    const repo = createLogsRepo(sb);
+    await repo.logSet('u1', 'g1', 1, 'Monday', 1, 0, 'Walking Lunge', {
+      prescribedWeight: null,
+      prescribedReps: 12,
+      actualWeight: 35,
+      actualReps: 12,
+    });
+    const upsertCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'upsert');
+    const payload = upsertCall?.[2]?.[0];
+    expect(payload.prescribed_weight).toBeNull();
+    expect(payload.actual_weight).toBe(35);
+  });
 });

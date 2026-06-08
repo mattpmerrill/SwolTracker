@@ -25,9 +25,11 @@ export default function SetRow({
   onWeightChange,
 }) {
   const isDisabled = isWorkoutComplete;
-  const hasWeight = prescribedWeight != null;
+  const hasPrescribedWeight = prescribedWeight != null;
+  const hasLoggedWeight = weightOverride != null;
+  const hasWeight = hasPrescribedWeight || hasLoggedWeight;
   const displayedWeight = weightOverride ?? prescribedWeight;
-  const isAdjusted = hasWeight && weightOverride != null && weightOverride !== prescribedWeight;
+  const isAdjusted = hasPrescribedWeight && weightOverride != null && weightOverride !== prescribedWeight;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(displayedWeight ?? 0);
@@ -47,7 +49,7 @@ export default function SetRow({
 
   function openEditor(e) {
     e.stopPropagation();
-    if (isDisabled || isLogged || !hasWeight || !onWeightChange) return;
+    if (isDisabled || isLogged || !onWeightChange) return;
     setDraft(displayedWeight ?? 0);
     setEditing(true);
   }
@@ -58,7 +60,7 @@ export default function SetRow({
       setEditing(false);
       return;
     }
-    if (parsed === prescribedWeight) {
+    if (hasPrescribedWeight && parsed === prescribedWeight) {
       onWeightChange?.(null); // snap back → clear override
     } else {
       onWeightChange?.(parsed);
@@ -77,7 +79,7 @@ export default function SetRow({
     const next = Math.max(0, Number(draft || 0) + delta);
     setDraft(next);
     // Commit immediately so every tap persists (no blur race)
-    if (next === prescribedWeight) {
+    if (hasPrescribedWeight && next === prescribedWeight) {
       onWeightChange?.(null);
     } else {
       onWeightChange?.(next);
@@ -154,13 +156,13 @@ export default function SetRow({
               <Plus className="w-4 h-4" />
             </button>
             <span className="text-xs text-zinc-400">lbs</span>
-            {isAdjusted && (
+            {(isAdjusted || (!hasPrescribedWeight && hasLoggedWeight)) && (
               <button
                 type="button"
                 onClick={resetToPrescribed}
                 className="ml-1 text-xs text-zinc-400 hover:text-orange-400 underline underline-offset-2"
               >
-                Reset to {prescribedWeight}
+                {hasPrescribedWeight ? `Reset to ${prescribedWeight}` : 'Clear weight'}
               </button>
             )}
             <button
@@ -222,7 +224,22 @@ export default function SetRow({
                 )}
               </button>
             ) : (
-              <span className="text-zinc-400">Bodyweight / As prescribed</span>
+              <button
+                type="button"
+                onClick={openEditor}
+                disabled={isDisabled || isLogged || !onWeightChange}
+                className={`inline-flex items-center gap-2 text-zinc-400 ${
+                  !isDisabled && !isLogged && onWeightChange
+                    ? 'hover:text-orange-400 transition-colors underline decoration-dotted decoration-zinc-600 underline-offset-4'
+                    : ''
+                }`}
+                title={!isLogged && onWeightChange ? 'Tap to enter actual weight' : undefined}
+              >
+                <span>Bodyweight / As prescribed</span>
+                {!isDisabled && !isLogged && onWeightChange && (
+                  <span className="text-xs text-orange-500 font-medium">+ Weight</span>
+                )}
+              </button>
             )}
           </div>
         )}
