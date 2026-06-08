@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildMissingWorkoutSetLogs } from './workout';
+import { buildMissingWorkoutSetLogs, calculateWeight, findMaxKey } from './workout';
+
+describe('findMaxKey', () => {
+  it('prefers the incline dumbbell max over the incline bench max', () => {
+    const maxes = {
+      'Incline Bench Press': 185,
+      'Incline Dumbbell Press': 65,
+    };
+
+    expect(findMaxKey('Incline Dumbbell Press', maxes)).toBe('Incline Dumbbell Press');
+    expect(calculateWeight(75, maxes, 'Incline Dumbbell Press')).toBe(50);
+  });
+});
 
 describe('buildMissingWorkoutSetLogs', () => {
   it('builds log rows for only the sets missing from local state', () => {

@@ -63,17 +63,32 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     return maxes;
   }
 
+  function roundToNearestFive(weight: number): number {
+    return Math.round(weight / 5) * 5;
+  }
+
+  function resolveMaxForExercise(
+    exerciseName: string,
+    maxes: Record<string, number>
+  ): number | null {
+    const canonical = normalizeExerciseName(exerciseName);
+    const exactKey = Object.keys(maxes).find(
+      (key) => key.toLowerCase() === canonical.toLowerCase()
+    );
+    return exactKey ? maxes[exactKey] : null;
+  }
+
   function enrichExercises(
     exercises: ProgramExercise[],
     maxes: Record<string, number>
   ) {
     return exercises.map((ex, i) => {
-      const max1RM = maxes[ex.name] ?? null;
+      const max1RM = resolveMaxForExercise(ex.name, maxes);
       let weight_lbs: number | null = null;
 
       if (ex.percentages && ex.percentages.length > 0 && max1RM) {
         const maxPct = Math.max(...ex.percentages);
-        weight_lbs = Math.round((maxPct / 100) * max1RM);
+        weight_lbs = roundToNearestFive((maxPct / 100) * max1RM);
       }
 
       return {
@@ -436,7 +451,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     const currentWeek = await resolveCurrentWeek();
     const maxes = await getUserMaxes();
-    const max1RM = maxes[exerciseName] ?? null;
+    const max1RM = resolveMaxForExercise(exerciseName, maxes);
 
     const { data: rows } = await supabase
       .from("workout_programs")
@@ -467,7 +482,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           let weight_lbs: number | null = null;
           if (ex.percentages && ex.percentages.length > 0 && max1RM) {
             const maxPct = Math.max(...ex.percentages);
-            weight_lbs = Math.round((maxPct / 100) * max1RM);
+            weight_lbs = roundToNearestFive((maxPct / 100) * max1RM);
           }
 
           progression.push({

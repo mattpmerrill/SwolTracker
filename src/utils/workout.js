@@ -6,15 +6,17 @@
  */
 export const findMaxKey = (exerciseName, maxes) => {
   const lowerName = exerciseName.toLowerCase();
+  const maxKeys = Object.keys(maxes);
 
-  // First, try direct matching
-  for (const key of Object.keys(maxes)) {
-    if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName.split(' ')[0])) {
+  // First, try exact matching so variants like incline dumbbell press do not
+  // accidentally resolve to incline bench press.
+  for (const key of maxKeys) {
+    if (key.toLowerCase() === lowerName) {
       return key;
     }
   }
 
-  // Fall back to known mappings
+  // Prefer known exercise-specific mappings before fuzzy matching.
   const mappings = {
     'push press': 'Push Press',
     'push jerk': 'Push Press',
@@ -25,8 +27,8 @@ export const findMaxKey = (exerciseName, maxes) => {
     'snatch pull': 'Power Snatch',
     'clean & jerk': 'Power Clean',
     'thrusters': 'Front Squat',
-    'dumbbell bench press': 'Bench Press',
-    'incline dumbbell press': 'Incline Bench Press',
+    'dumbbell bench press': 'Dumbbell Bench Press',
+    'incline dumbbell press': 'Incline Dumbbell Press',
     'seated dumbbell press': 'Overhead Press',
     'dumbbell overhead press': 'Overhead Press',
     'barbell rows': 'Barbell Rows',
@@ -36,7 +38,21 @@ export const findMaxKey = (exerciseName, maxes) => {
     'chest-supported dumbbell rows': 'Barbell Rows',
   };
 
-  return mappings[lowerName] || null;
+  const mappedKey = mappings[lowerName];
+  if (mappedKey) {
+    const exactMappedKey = maxKeys.find((key) => key.toLowerCase() === mappedKey.toLowerCase());
+    if (exactMappedKey) return exactMappedKey;
+  }
+
+  // Then allow full-name containment, but never match on just the first word.
+  for (const key of maxKeys) {
+    const lowerKey = key.toLowerCase();
+    if (lowerName.includes(lowerKey) || lowerKey.includes(lowerName)) {
+      return key;
+    }
+  }
+
+  return mappedKey || null;
 };
 
 /**
