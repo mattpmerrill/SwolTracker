@@ -244,7 +244,24 @@ export default function SetRow({
           </div>
         )}
       </div>
-      <span className="text-sm text-zinc-400 font-medium">{reps}</span>
+      {(() => {
+        // Defensive: reps can be a long string (e.g. "5 warmup, 3 warmup, then 1 rep
+        // attempts until form breaks") if an upstream agent stuffed warmup/cue text
+        // into the reps field. Cap visible width and tooltip the full text.
+        const repsText = reps == null ? '' : String(reps);
+        const REPS_VISIBLE_MAX = 16;
+        const truncated = repsText.length > REPS_VISIBLE_MAX
+          ? `${repsText.slice(0, REPS_VISIBLE_MAX - 1)}…`
+          : repsText;
+        return (
+          <span
+            className="text-sm text-zinc-400 font-medium whitespace-nowrap"
+            title={repsText.length > REPS_VISIBLE_MAX ? repsText : undefined}
+          >
+            {truncated}
+          </span>
+        );
+      })()}
     </div>
   );
 }

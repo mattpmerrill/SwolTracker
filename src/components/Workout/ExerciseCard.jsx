@@ -54,13 +54,23 @@ export default function ExerciseCard({
     setItem(storageKey, {});
   }, [exercise.name, storageKey]);
 
-  // Recommended rest based on reps (heavy = longer rest)
+  // Recommended rest based on reps (heavy = longer rest).
+  // Robust to a polluted "reps" string (e.g. "5 warmup, 3 warmup, then 1 rep..."):
+  // only treat the value as a leading integer if the WHOLE string is a digit run
+  // or a digit run + a single short token (e.g. "30s", "5/side"). Anything more
+  // elaborate falls back to the "conditioning → 60s" default rather than
+  // misclassifying the warmup rep as the working rep count.
   function getRestSeconds(reps) {
-    const r = parseInt(reps, 10);
-    if (isNaN(r) || r <= 3) return 180; // heavy triples → 3 min
-    if (r <= 6) return 150;             // strength work → 2.5 min
-    if (r <= 10) return 90;             // hypertrophy → 90s
-    return 60;                          // high rep / conditioning → 60s
+    if (reps == null) return 60;
+    const text = String(reps).trim();
+    const m = text.match(/^(\d{1,3})(?:\s*(?:reps?|s|sec|seconds?))?$/i);
+    if (!m) return 60;
+    const r = parseInt(m[1], 10);
+    if (!Number.isFinite(r) || r <= 0) return 60;
+    if (r <= 3) return 180; // heavy triples → 3 min
+    if (r <= 6) return 150; // strength work → 2.5 min
+    if (r <= 10) return 90; // hypertrophy → 90s
+    return 60;              // high rep / conditioning → 60s
   }
 
   function handleLogSet(setIdx, data) {
@@ -129,13 +139,27 @@ export default function ExerciseCard({
                 )}
               </button>
             )}
-            <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+            <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 max-w-[60vw] ${
               allDone ? 'bg-green-500/20' : 'bg-zinc-800/80'
             }`}>
-              {allDone && <Check className="w-3.5 h-3.5 text-green-400" />}
-              <span className={`text-sm font-semibold ${allDone ? 'text-green-400' : ''}`}>
-                {exercise.sets}×{exercise.reps}
-              </span>
+              {allDone && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
+              {(() => {
+                // Defensive: same cap as SetRow so a polluted "reps" string cannot
+                // blow out this header badge. Tooltip exposes the full text.
+                const repsText = exercise.reps == null ? '' : String(exercise.reps);
+                const REPS_VISIBLE_MAX = 16;
+                const truncated = repsText.length > REPS_VISIBLE_MAX
+                  ? `${repsText.slice(0, REPS_VISIBLE_MAX - 1)}…`
+                  : repsText;
+                return (
+                  <span
+                    className={`text-sm font-semibold truncate ${allDone ? 'text-green-400' : ''}`}
+                    title={repsText.length > REPS_VISIBLE_MAX ? repsText : undefined}
+                  >
+                    {exercise.sets}×{truncated}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -193,13 +217,23 @@ export default function ExerciseCard({
 
         {exercise.note && (
           <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
-            <p className="text-xs text-zinc-400">{exercise.note}</p>
+            <p
+              className="text-xs text-zinc-400 break-words"
+              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            >
+              {exercise.note}
+            </p>
           </div>
         )}
 
         {overloadRecommendation?.message && (
           <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
-            <p className="text-xs text-zinc-300">{overloadRecommendation.message}</p>
+            <p
+              className="text-xs text-zinc-300 break-words"
+              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            >
+              {overloadRecommendation.message}
+            </p>
           </div>
         )}
 

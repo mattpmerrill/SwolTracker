@@ -109,7 +109,17 @@ describe('event emissions (Phase 3.2 canonical names)', () => {
     sb.respond('workout_programs.single', { data: { id: 'p1', week_number: 1 }, error: null });
     const events = makeEvents();
     const tools = createActionTools(sb, 'u1', events, makeQueries());
-    const r = await tools.save_workout_program('g1', 1, { Monday: {} }, true);
+    // Schema-valid minimal week: all 7 days present, each with an empty exercises array.
+    const validWeek = {
+      Monday: { focus: 'Rest', exercises: [] },
+      Tuesday: { focus: 'Rest', exercises: [] },
+      Wednesday: { focus: 'Rest', exercises: [] },
+      Thursday: { focus: 'Rest', exercises: [] },
+      Friday: { focus: 'Rest', exercises: [] },
+      Saturday: { focus: 'Rest', exercises: [] },
+      Sunday: { focus: 'Rest', exercises: [] },
+    };
+    const r = await tools.save_workout_program('g1', 1, validWeek, true);
     expect(r.success).toBe(true);
     expect(events.emit).toHaveBeenCalledWith(
       'program.saved',

@@ -1,10 +1,66 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { AppError } from "@bot-native/sdk";
 import type { EventEmitter } from "../bot-native-shim.js";
 import type { ToolResult, WeekProgram } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
 import { normalizeExerciseName } from "../exercise-normalizer.js";
 import type { createQueryTools } from "./queries.js";
+
+// ---------------------------------------------------------------------------
+// Workout program validation schema (rejects "5 warmup, 3 warmup, then 1 rep
+// attempts until form breaks"-style reps and other structural drift before it
+// lands in the database). Re-run safe; downstream UI also has defensive caps
+// (see SwolTracker src/components/Workout/SetRow.jsx).
+// ---------------------------------------------------------------------------
+
+const REQUIRED_DAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+const REPS_MAX = 16;
+const NAME_MAX = 100;
+const MUSCLE_MAX = 120;
+const NOTE_MAX = 200;
+const FOCUS_MAX = 80;
+
+const ExerciseSchema = z.object({
+  name: z.string().min(1).max(NAME_MAX),
+  sets: z.number().int().positive().max(20),
+  reps: z.string().min(1).max(REPS_MAX),
+  percentages: z
+    .array(z.number().int().min(1).max(200))
+    .max(20)
+    .nullable()
+    .optional(),
+  muscleGroups: z.string().max(MUSCLE_MAX).optional(),
+  note: z.string().max(NOTE_MAX).optional(),
+});
+
+const DaySchema = z.object({
+  focus: z.string().max(FOCUS_MAX).optional(),
+  exercises: z.array(ExerciseSchema).max(50),
+});
+
+const WeekProgramSchema = z
+  .record(z.enum(REQUIRED_DAYS), DaySchema)
+  .refine(
+    (w) => REQUIRED_DAYS.every((d) => Object.prototype.hasOwnProperty.call(w, d)),
+    { message: `All 7 days (${REQUIRED_DAYS.join(", ")}) must be present` },
+  );
+
+function formatZodIssues(issues: z.ZodIssue[], limit = 5): string {
+  return issues
+    .slice(0, limit)
+    .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+    .join("; ");
+}
 
 interface LogSetParams {
   gym_id?: string;
@@ -433,13 +489,30 @@ export function createActionTools(
       throw AppError.notFound("No gym found.");
     }
 
+    // Structural validation — refuse to save a malformed program. The
+    // downstream LLM that produces this JSON is not always trustworthy, and a
+    // polluted "reps" string (e.g. a full warmup scheme) breaks the workout
+    // screen's per-set layout. We return a clear validation error so the
+    // caller can fix the data and retry.
+    const parsed = WeekProgramSchema.safeParse(programData);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: `Program data validation failed: ${formatZodIssues(parsed.error.issues)}`,
+        data: {
+          issues: parsed.error.issues.slice(0, 20),
+          hint: `Each exercise "reps" must be ≤ ${REPS_MAX} characters (use "note" for warmup schemes or coaching cues). "name" ≤ ${NAME_MAX}, "note" ≤ ${NOTE_MAX}, "muscleGroups" ≤ ${MUSCLE_MAX}, "focus" ≤ ${FOCUS_MAX}. All 7 days must be present.`,
+        },
+      };
+    }
+
     const { data, error } = await supabase
       .from("workout_programs")
       .upsert(
         {
           gym_id: resolvedGymId,
           week_number: weekNumber,
-          program_data: programData as WeekProgram,
+          program_data: parsed.data as unknown as WeekProgram,
           created_by: userId,
           ai_generated: aiGenerated ?? false,
           ai_notes: aiNotes ?? null,
