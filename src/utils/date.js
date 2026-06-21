@@ -1,10 +1,38 @@
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Parse a date for calendar math.
+ *
+ * JS parses bare YYYY-MM-DD strings as UTC instants, which shifts the date back
+ * in negative timezones (for example 2026-03-30 becomes Mar 29 in MDT). Program
+ * start dates are calendar dates, not moments, so date-only values must be
+ * constructed in local time before week/date-label math.
+ *
+ * @param {Date|string} value
+ * @returns {Date}
+ */
+export const parseCalendarDate = (value) => {
+  if (value instanceof Date) return new Date(value);
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = DATE_ONLY_RE.exec(trimmed);
+    if (match) {
+      const [, year, month, day] = match;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+  }
+
+  return new Date(value);
+};
+
 /**
  * Format a date to "Mon DD" format
  * @param {Date|string} date - The date to format
  * @returns {string} Formatted date string
  */
 export const formatDate = (date) => {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return parseCalendarDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
 /**
@@ -14,7 +42,7 @@ export const formatDate = (date) => {
  * @returns {{ start: Date, end: Date }} Start and end dates for the week
  */
 export const getWeekDates = (programStartDate, weekNumber) => {
-  const start = new Date(programStartDate);
+  const start = parseCalendarDate(programStartDate);
   const dayOfWeek = start.getDay();
   const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   start.setDate(start.getDate() - daysToMonday + (weekNumber - 1) * 7);
@@ -32,7 +60,7 @@ export const getWeekDates = (programStartDate, weekNumber) => {
  * @returns {number} The current week number (1-based)
  */
 export const calculateCurrentWeek = (programStartDate) => {
-  const startDate = new Date(programStartDate);
+  const startDate = parseCalendarDate(programStartDate);
   const dayOfWeek = startDate.getDay();
   const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   startDate.setDate(startDate.getDate() - daysToMonday);
