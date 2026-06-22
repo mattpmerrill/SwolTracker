@@ -8,14 +8,36 @@ const DAY_NAMES = [
   "Saturday",
 ];
 
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 /**
- * Calculate the current week number (1-4 cycling) from a program start date.
- * Mirrors the web app: weeksSinceStart % 4 + 1
+ * Parse calendar-only program dates in local time.
+ *
+ * JavaScript parses bare YYYY-MM-DD strings as UTC instants. In negative
+ * timezones that turns a Monday date into Sunday evening locally, which makes
+ * week math snap to the previous Monday. Program start dates are calendar
+ * dates, not moments, so build date-only values with the local constructor.
+ */
+export function parseCalendarDate(value: string | Date): Date {
+  if (value instanceof Date) return new Date(value);
+
+  const match = DATE_ONLY_RE.exec(value.trim());
+  if (match) {
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  return new Date(value);
+}
+
+/**
+ * Calculate the current week number from a program start date.
+ * Mirrors the web app's calendar-date week math.
  */
 export function getCurrentWeek(programStartDate: string | null): number {
   if (!programStartDate) return 1;
 
-  const start = new Date(programStartDate);
+  const start = parseCalendarDate(programStartDate);
   const dayOfWeek = start.getDay();
   const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   start.setDate(start.getDate() - daysToMonday);
