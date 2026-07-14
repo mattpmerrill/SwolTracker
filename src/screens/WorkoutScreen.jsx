@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../lib/supabase';
+import {
+  shouldPromptWeekEndReview,
+  summarizeWeekTraining,
+} from '../lib/programContinuity';
 import { getWeekDates, getTodayDayName } from '../utils/date';
 import {
   WeekSelector,
@@ -8,6 +12,7 @@ import {
   ExerciseCard,
   NoWorkoutState,
   RestDayState,
+  WeekEndReviewCard,
 } from '../components/Workout';
 import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
 import CoachBoardEntry from '../components/AgentChat/CoachBoardEntry';
@@ -54,6 +59,7 @@ export default function WorkoutScreen({
   onSendCoachNote,
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
+  const [dismissedWeekEndReview, setDismissedWeekEndReview] = useState(null);
   const availableWeeks = Object.keys(workoutProgram || {})
     .map((week) => Number(week))
     .filter((week) => Number.isFinite(week))
@@ -69,6 +75,47 @@ export default function WorkoutScreen({
   const dayComplete = user?.id
     ? isWorkoutComplete(currentWeek, currentDay, user.id)
     : false;
+
+  const nextProgramWeek = actualCurrentWeek + 1;
+  const weekEndSummary = useMemo(() => {
+    if (!user?.id || !workoutProgram?.[actualCurrentWeek]) return null;
+    return summarizeWeekTraining({
+      weekProgram: workoutProgram[actualCurrentWeek],
+      weekNumber: actualCurrentWeek,
+      userId: user.id,
+      isWorkoutComplete,
+      isWorkoutMissed,
+    });
+  }, [user?.id, workoutProgram, actualCurrentWeek, isWorkoutComplete, isWorkoutMissed, exerciseLogSize]);
+
+  const showWeekEndReview = useMemo(() => {
+    if (dismissedWeekEndReview === nextProgramWeek) return false;
+    // Surface on current-week view so it doesn't interrupt history browsing
+    if (currentWeek !== actualCurrentWeek) return false;
+    return shouldPromptWeekEndReview({
+      workoutProgram,
+      actualCurrentWeek,
+      todayDayName,
+      userId: user?.id,
+      groupRole,
+      isWorkoutComplete,
+      isWorkoutMissed,
+    });
+  }, [
+    dismissedWeekEndReview,
+    nextProgramWeek,
+    currentWeek,
+    actualCurrentWeek,
+    workoutProgram,
+    todayDayName,
+    user?.id,
+    groupRole,
+    isWorkoutComplete,
+    isWorkoutMissed,
+    exerciseLogSize,
+  ]);
+
+  const overloadCount = Object.keys(overloadByExercise).length;
 
   useEffect(() => {
     let isCancelled = false;
@@ -105,6 +152,18 @@ export default function WorkoutScreen({
         <CoachNoteCard note={latestCoachNote} onOpenChat={onOpenAgentChat} />
       )}
 
+      {/* Phase 3.7 — week-end Review + Generate continuity */}
+      {showWeekEndReview && weekEndSummary && (
+        <WeekEndReviewCard
+          currentWeek={actualCurrentWeek}
+          nextWeek={nextProgramWeek}
+          summary={weekEndSummary}
+          overloadCount={overloadCount}
+          onReviewAndGenerate={() => onGenerateWorkout(nextProgramWeek, { weekCount: 1 })}
+          onDismiss={() => setDismissedWeekEndReview(nextProgramWeek)}
+        />
+      )}
+
       {/* Week Selector */}
       <WeekSelector
         currentWeek={currentWeek}
@@ -139,7 +198,7 @@ export default function WorkoutScreen({
           actualCurrentWeek={actualCurrentWeek}
           groupRole={groupRole}
           groupLeader={groupLeader}
-          onGenerateWorkout={() => onGenerateWorkout(currentWeek)}
+          onGenerateWorkout={() => onGenerateWorkout(currentWeek, { weekCount: 1 })}
           onGoToCurrentWeek={onGoToCurrentWeek}
         />
       )}

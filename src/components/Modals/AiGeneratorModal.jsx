@@ -69,9 +69,9 @@ export default function AiGeneratorModal({
               <Brain className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">AI Workout Generator</h2>
+              <h2 className="text-xl font-bold">Review + Generate</h2>
               <p className="text-sm text-zinc-400">
-                Powered by ChatGPT • Week {generationWeek}
+                Adaptive AI coach • starting Week {generationWeek}
               </p>
             </div>
           </div>
@@ -314,8 +314,7 @@ export default function AiGeneratorModal({
             </button>
 
             <p className="text-xs text-zinc-500 text-center mt-4">
-              Uses GPT-4o to analyze your history and create a progressive
-              program
+              Reviews last 4 weeks of logs, misses, and overload signals before writing the next block
             </p>
           </>
         ) : (

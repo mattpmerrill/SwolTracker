@@ -75,7 +75,9 @@ export default function SettingsModal({
           ) : (
             <button
               onClick={() => {
-                onOpenAiGenerator(getNextUnprogrammedWeek());
+                const nextWeek = getNextUnprogrammedWeek();
+                // Phase 3.7: default single week for continuity; modal can bump length
+                onOpenAiGenerator(nextWeek, { weekCount: 1 });
                 onClose();
               }}
               disabled={currentUser !== userId}
@@ -84,7 +86,7 @@ export default function SettingsModal({
               }`}
             >
               <Zap className="w-4 h-4" />
-              Generate Next Week's Program
+              Review + Generate Next Week
             </button>
           )}
 

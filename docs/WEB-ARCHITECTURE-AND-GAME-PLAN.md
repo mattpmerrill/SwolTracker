@@ -199,7 +199,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 3.4 | Missed-day UX next to complete (MCP/DB support exists) | **Done 2026-07-13** |
 | 3.5 | Coach Board as primary surface, not FAB-only | **Done 2026-07-14** |
 | 3.6 | Post-workout “note to agent” CTA | **Done 2026-07-14** |
-| 3.7 | Week-end Review → Generate next week flow (roadmap 1A) | Open |
+| 3.7 | Week-end Review → Generate next week flow (roadmap 1A) | **Done 2026-07-14** |
 | 3.8 | PWA / add-to-homescreen if web-only for 6+ months | Open |
 
 **Do not do:** Next.js rewrite “because serverless,” Redux for everything, full TypeScript UI migration in one PR.
@@ -258,16 +258,16 @@ migrations/                  # Prefer this as SQL history
 
 ### Suggested next pick-ups for Joi
 
-1. **Phase 3.7** — Week-end Review → Generate next week flow  
-2. Hard-delete legacy onboarding after a short completion window  
-3. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
-4. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
+1. Hard-delete legacy onboarding after a short completion window  
+2. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
+3. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
+4. Phase 3.8 PWA / add-to-homescreen if still web-only long-term  
 
 ### Suggested next pick-ups for Beck
 
 1. Phase 0.6 remainder — live RPC IDOR probes under authenticated non-admin session  
 2. Shared date/week module between web + MCP  
-3. Phase 3.7 Review + Generate next week if product prioritizes continuity  
+3. Phase 2.1–2.2 bootstrap/query efficiency if cold start still feels heavy  
 
 ---
 
@@ -275,6 +275,7 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-14 | Beck | **Phase 3.7:** Week-end Review → Generate next week. Proactive `WeekEndReviewCard` when next calendar week has no program and current week is late/all-accounted; opens AI generator with history/overload already loaded, default `weekCount: 1`. Settings + empty state copy → “Review + Generate”. Helpers/tests in `src/lib/programContinuity.js`. |
 | 2026-07-14 | Beck | **Phase 0.4–0.5 + partial 0.6:** Prod SQL verify for 027–032 markers (functions/tables/prompt). Dual-migration policy: `migrations/` is SoT; `supabase/migrations/` CLI history is incomplete and must not be used as “what’s applied.” Key RPCs use `_require_self` or force `auth.uid()`; full interactive IDOR suite still open. |
 | 2026-07-14 | Beck | **Phase 1.4:** Bounded bootstrap set-log load — last 8 calendar weeks via `getWorkoutLogsInWeekRange`; completions + missed days remain full history (tiny). Lazy-fetch older weeks when the week cursor moves outside the window (`WorkoutLogContext`). Helpers in `src/lib/bootstrapLogs.js`. |
 | 2026-07-14 | Joi | **Phase 3.5 + 3.6:** Coach Board primary surfaces — header Bot button (unread), always-on workout `CoachBoardEntry`, keep FAB as secondary. Post-workout “How was training?” CTA with quick chips + free text → `sendUserMessage`; per week/day dismiss. `useAgentChat.send(override)` + reportWriteFailure + sending state. |

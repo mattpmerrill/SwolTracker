@@ -20,12 +20,17 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
   const [trainingHistorySummary, setTrainingHistorySummary] = useState(null);
   const [overloadRecommendations, setOverloadRecommendations] = useState([]);
 
-  const openAiGenerator = useCallback((weekNum) => {
+  /**
+   * @param {number} weekNum - first week to generate
+   * @param {{ weekCount?: number }} [options] - optional defaults (Phase 3.7 continuity uses weekCount: 1)
+   */
+  const openAiGenerator = useCallback((weekNum, options = {}) => {
+    const nextCount = Number.isFinite(options.weekCount) ? options.weekCount : 4;
     setGenerationWeek(weekNum);
     setAiNotes('');
     setAiError('');
     setGeneratedPreview(null);
-    setWeekCount(4);
+    setWeekCount(nextCount);
     setPreviewWeek('week1');
     setTrainingHistorySummary(null);
     setOverloadRecommendations([]);

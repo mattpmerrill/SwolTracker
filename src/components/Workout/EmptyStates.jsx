@@ -79,7 +79,7 @@ export function NoWorkoutState({
               className="py-4 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/25"
             >
               <Brain className="w-5 h-5" />
-              Generate Week {currentWeek} with AI
+              Review + Generate Week {currentWeek}
             </button>
             <button
               onClick={onGoToCurrentWeek}
