@@ -1,11 +1,17 @@
+import { BrowserRouter } from 'react-router-dom'
 import SwolTracker from './swoltracker'
 import { ToastProvider } from './components/Toast'
+import { SessionProvider } from './contexts'
 
 function App() {
   return (
-    <ToastProvider>
-      <SwolTracker />
-    </ToastProvider>
+    <BrowserRouter>
+      <ToastProvider>
+        <SessionProvider>
+          <SwolTracker />
+        </SessionProvider>
+      </ToastProvider>
+    </BrowserRouter>
   )
 }
 

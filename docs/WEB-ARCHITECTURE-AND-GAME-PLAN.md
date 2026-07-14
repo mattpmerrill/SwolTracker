@@ -173,13 +173,13 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 
 ### Phase 1 — Web structure (3–5 days)
 
-| # | Item | Notes |
-|---|------|-------|
-| 1.1 | Domain contexts; thin `swoltracker.jsx` shell | No UI redesign |
-| 1.2 | URL routing for tabs + admin + settings | Deep links |
-| 1.3 | Onboarding: one path | Flip `VITE_NEW_ONBOARDING_FLOW=true` when ready; archive legacy |
-| 1.4 | Bounded bootstrap log load | Recent weeks first |
-| 1.5 | User-visible errors on all write paths | toast + `errorService` consistently |
+| # | Item | Notes | Status |
+|---|------|-------|--------|
+| 1.1 | Domain contexts; thin `swoltracker.jsx` shell | `SessionContext`, `ProgramContext`, `WorkoutLogContext`; shell in `AuthenticatedShell.jsx` | **Done 2026-07-13** |
+| 1.2 | URL routing for tabs + admin + settings | `react-router-dom`; `/workout` `/maxes` `/progress` `/buddies` `/settings` `/admin` `/onboarding` | **Done 2026-07-13** |
+| 1.3 | Onboarding: one path | Flip `VITE_NEW_ONBOARDING_FLOW=true` when ready; archive legacy | Open |
+| 1.4 | Bounded bootstrap log load | Recent weeks first | Open |
+| 1.5 | User-visible errors on all write paths | toast + `errorService` consistently | Open |
 
 ### Phase 2 — Efficiency & quality (ongoing)
 
@@ -230,7 +230,12 @@ Related product docs already in repo:
 ## Key files map (web)
 
 ```
-src/swoltracker.jsx          # App shell / state wiring
+src/App.jsx                  # BrowserRouter + SessionProvider + Toast
+src/swoltracker.jsx          # Auth / onboarding gate; mounts domain providers
+src/components/AuthenticatedShell.jsx  # Tabs, modals, social/profile shell state
+src/contexts/                # Session, Program, WorkoutLog
+src/hooks/useAppNavigation.js # URL ↔ tab / settings / admin
+src/lib/routes.js            # Path constants
 src/hooks/useAppBootstrap.js # Cold load + reload()
 src/hooks/useWorkoutLogger.js
 src/lib/supabase.js         # db composition
@@ -255,9 +260,9 @@ migrations/                  # Prefer this as SQL history
 
 ### Suggested next pick-ups for Joi
 
-1. **Phase 1.1** — extract `ProgramContext` / `WorkoutLogContext` (product-safe, no UX change)  
-2. **Phase 1.2** — tab routing (enables shareable links later for coach notes)  
-3. **Phase 3.3** — overload recommendation badges on `ExerciseCard` (visible product win using existing data)  
+1. **Phase 1.3** — enable/archive onboarding paths (`VITE_NEW_ONBOARDING_FLOW`)  
+2. **Phase 3.3** — overload recommendation badges on `ExerciseCard` (visible product win using existing data)  
+3. **Phase 1.5** — consistent toast + errorService on remaining write paths  
 4. **Phase 0.4** with Matt — confirm prod migrations  
 
 ### Suggested next pick-ups for Beck
@@ -272,6 +277,7 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-13 | Beck | Phase 1.1–1.2: Session/Program/WorkoutLog contexts; AuthenticatedShell; react-router URL tabs + `/settings` `/admin` `/onboarding` |
 | 2026-07-13 | Beck | Initial architecture review; Phase 0.1–0.3 implemented (equipment persist, log rollback, onboarding re-bootstrap); this doc created |
 
 ---

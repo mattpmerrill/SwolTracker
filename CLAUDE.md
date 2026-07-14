@@ -28,12 +28,14 @@ SwolTracker helps users track their workouts, log 1RM (one-rep max) lifts, and g
 ```
 SwolTracker/
 ├── src/
-│   ├── App.jsx                  # Root component — wraps with ToastProvider
+│   ├── App.jsx                  # BrowserRouter + SessionProvider + ToastProvider
 │   ├── main.jsx                 # React entry point
-│   ├── swoltracker.jsx          # Main app component (~300 lines) — auth, app state, screen routing, agent chat
+│   ├── swoltracker.jsx          # Auth / onboarding gate; mounts Program + WorkoutLog providers
+│   ├── contexts/                # SessionContext, ProgramContext, WorkoutLogContext
 │   ├── index.css                # Tailwind imports + base styles
 │   ├── lib/
 │   │   ├── supabase.js          # Supabase client + composed db object
+│   │   ├── routes.js            # Web URL map (/workout, /settings, /admin, …)
 │   │   ├── llm.js              # Client-side LLM call wrapper (calls /api/llm)
 │   │   ├── errorService.js     # Error logging, categories, user-friendly messages
 │   │   ├── validation.js       # Zod schemas for form + API validation
@@ -52,6 +54,7 @@ SwolTracker/
 │   │       ├── errors.js       # Error logging to database
 │   │       └── onboarding.js   # Onboarding state persistence
 │   ├── components/
+│   │   ├── AuthenticatedShell.jsx # Tab chrome, modals, social/profile shell state
 │   │   ├── Onboarding.jsx       # New user onboarding flow (13 steps, agent-native)
 │   │   ├── Toast.jsx            # Toast notification system (ToastProvider + useToast)
 │   │   ├── AgentChat/           # Coach Board — async notes between user and AI agent
@@ -154,15 +157,24 @@ Domain repositories (`src/lib/repositories/`):
 - `onboarding.js` — onboarding state persistence
 
 ### State Management
-- React useState hooks (no external state library)
-- Main auth + app state lives in `swoltracker.jsx`
-- Screen-specific state in each screen component
-- Custom hooks for complex state: `useSession`, `useAppBootstrap`, `useAdmin`, `useAiGenerator`, `useWorkoutLogger`, `useExerciseSwap`, `useAgentChat`, `useBuddyActions`, `useMaxesActions`, `useProfileActions`
+- React Context for domain slices (no Redux):
+  - `SessionContext` — auth session (`useSessionContext`)
+  - `ProgramContext` — gym, equipment, program, week/day cursor (`useProgram`)
+  - `WorkoutLogContext` — set logs + completions (`useWorkoutLog`)
+- Shell/UI residue (social, maxes edit, modal local state) lives in `AuthenticatedShell.jsx`
+- Custom hooks: `useAppBootstrap`, `useAppNavigation`, `useAdmin`, `useAiGenerator`, `useWorkoutLogger`, `useExerciseSwap`, `useAgentChat`, `useBuddyActions`, `useMaxesActions`, `useProfileActions`
+
+### Routing (web)
+- `react-router-dom` — URL-driven tabs and overlays:
+  - Tabs: `/workout`, `/maxes`, `/progress`, `/buddies`
+  - Overlays: `/settings`, `/admin`
+  - Gate: `/onboarding`
+- Path helpers: `src/lib/routes.js` + `useAppNavigation`
 
 ### Component Organization
 - Screen-level components in `src/screens/`
 - Shared UI components in `src/components/`
-- `swoltracker.jsx` handles auth + app-level state + screen routing + agent chat realtime
+- `swoltracker.jsx` is the auth/onboarding gate; `AuthenticatedShell` is the logged-in chrome
 
 ### Styling
 - Tailwind utility classes throughout
