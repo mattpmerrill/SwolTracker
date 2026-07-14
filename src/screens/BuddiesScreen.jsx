@@ -70,6 +70,18 @@ export default function BuddiesScreen({
         />
       )}
 
+      {/* Leader with no loaded members — should be rare after migration 033 */}
+      {groupRole === 'leader' && groupMembers.length === 0 && (
+        <div className="mb-8 text-center py-6 bg-zinc-900/30 rounded-xl border border-dashed border-zinc-800">
+          <p className="text-zinc-500 text-sm mb-1">
+            No group members loaded yet.
+          </p>
+          <p className="text-zinc-600 text-xs">
+            If someone already accepted your invite, refresh the page. You can also re-send an invite below.
+          </p>
+        </div>
+      )}
+
       {/* Group Invites */}
       {user.receivedRequests?.length > 0 && (
         <GroupInvites

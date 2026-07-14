@@ -94,8 +94,20 @@ async function loadUserBundle(authUser) {
       avatar_url: groupRoleData.leader_avatar_url,
       group_name: groupRoleData.group_name,
     };
-  } else if (groupRoleData.role === 'leader' && groupRoleData.member_count > 0) {
+  } else if (groupRoleData.role === 'leader') {
+    // Always fetch members for leaders (do not gate on member_count alone).
     groupMembers = await db.getGroupMembers(userId);
+    // Fallback: accepted buddies are the same relationship if the RPC fails/empty.
+    if (groupMembers.length === 0 && (groupRoleData.member_count || 0) > 0 && buddies.length > 0) {
+      groupMembers = buddies.map((b) => ({
+        member_id: b.buddy_id,
+        member_name: b.buddy_name,
+        member_avatar: b.buddy_avatar,
+        member_avatar_url: b.buddy_avatar_url || null,
+        member_email: b.buddy_email,
+        joined_at: b.connected_at,
+      }));
+    }
   }
 
   const maxes = (await db.getUserMaxes(userId)) || {};

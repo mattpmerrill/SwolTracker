@@ -139,15 +139,42 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
 
   // Workout Groups
   const getGroupRole = async (userId) => {
-    if (!supabase) return { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+    if (!supabase) {
+      return {
+        role: 'independent',
+        leader_id: null,
+        leader_name: null,
+        leader_avatar: null,
+        leader_avatar_url: null,
+        member_count: 0,
+        group_name: null,
+      }
+    }
     const { data, error } = await supabase
       .rpc('get_group_role', { p_user_id: userId })
 
     if (error) {
-      console.error('Error getting group role:', error)
-      return { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+      console.error('Error getting group role:', error.message || error)
+      return {
+        role: 'independent',
+        leader_id: null,
+        leader_name: null,
+        leader_avatar: null,
+        leader_avatar_url: null,
+        member_count: 0,
+        group_name: null,
+      }
     }
-    return data?.[0] || { role: 'independent', leader_id: null, leader_name: null, leader_avatar: null, member_count: 0 }
+    const row = Array.isArray(data) ? data[0] : data
+    return row || {
+      role: 'independent',
+      leader_id: null,
+      leader_name: null,
+      leader_avatar: null,
+      leader_avatar_url: null,
+      member_count: 0,
+      group_name: null,
+    }
   }
 
   const getGroupMembers = async (leaderId) => {
@@ -156,10 +183,11 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
       .rpc('get_group_members', { p_leader_id: leaderId })
 
     if (error) {
-      console.error('Error getting group members:', error)
+      // Log full error — ambiguous-column / forbidden show up here (see migration 033).
+      console.error('Error getting group members:', error.message || error, error)
       return []
     }
-    return data || []
+    return Array.isArray(data) ? data : (data ? [data] : [])
   }
 
   const getLeaderGymId = async (memberId) => {

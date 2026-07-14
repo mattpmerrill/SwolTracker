@@ -143,7 +143,7 @@ export function useBuddyActions({
       await fail('removeGroupMember', 'removeGroupMember returned false', `Could not remove ${memberName}.`);
       return;
     }
-    setGroupMembers((prev) => prev.filter((m) => m.id !== memberId));
+    setGroupMembers((prev) => prev.filter((m) => m.member_id !== memberId && m.id !== memberId));
     setProfiles((prev) => {
       const u = { ...prev[currentUser] };
       u.buddies = (u.buddies || []).filter((id) => id !== memberId);
