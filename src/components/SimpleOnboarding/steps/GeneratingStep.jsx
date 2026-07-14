@@ -1,5 +1,5 @@
 import { Loader2, Sparkles, AlertCircle, RotateCcw } from 'lucide-react';
-import { LOADING_PHRASES } from '../../Onboarding/constants';
+import { LOADING_PHRASES } from '../../../constants/onboardingOptions';
 
 export default function GeneratingStep({ onboarding }) {
   const { isGenerating, generationFailed, generationProgress, loadingPhraseIndex, handleGenerate, onComplete } = onboarding;

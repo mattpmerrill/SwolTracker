@@ -1,17 +1,31 @@
 /**
- * Feature flag for the agent-native onboarding rewrite.
+ * Feature flag for onboarding path selection (Phase 1.3).
  *
- * When true:  users enter AgentOnboarding (3 screens) with a fallback
- *             path into SimpleOnboarding (4 screens).
- * When false: users see the legacy 13-step Onboarding wizard.
+ * Default (true / unset): AgentOnboarding (3 screens) with SimpleOnboarding
+ *                         fallback ("No agent? Set up manually").
+ * Explicit false:         emergency kill switch → legacy 13-step wizard only.
  *
- * Set VITE_NEW_ONBOARDING_FLOW=true at build time to flip the flag.
- * The old flow stays reachable until the new flow hits its completion
- * target (see AGENT-NATIVE-PLAN.md phase 3.5.4).
+ * Env: VITE_NEW_ONBOARDING_FLOW
+ *   true / "true" / "1" / "on" / unset → agent-native path
+ *   false / "false" / "0" / "off" / "legacy" → legacy wizard
+ *
+ * Legacy code remains in-repo for rollback until a completion window
+ * proves the new path; then hard-delete (see WEB-ARCHITECTURE-AND-GAME-PLAN.md).
  */
 export function isNewOnboardingEnabled(env = import.meta.env) {
   const raw = env?.VITE_NEW_ONBOARDING_FLOW;
+
+  // Explicit boolean from some tooling
   if (raw === true) return true;
-  if (typeof raw !== 'string') return false;
-  return raw.toLowerCase() === 'true' || raw === '1';
+  if (raw === false) return false;
+
+  // Unset / non-string → default ON (Phase 1.3 product path)
+  if (typeof raw !== 'string') return true;
+
+  const v = raw.trim().toLowerCase();
+  if (v === 'false' || v === '0' || v === 'off' || v === 'legacy' || v === 'no') {
+    return false;
+  }
+  // empty string, true, 1, on, anything else → new path
+  return true;
 }

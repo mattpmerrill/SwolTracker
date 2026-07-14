@@ -1,3 +1,9 @@
+/**
+ * @deprecated Phase 1.3 soft-archive.
+ * Rendered only when VITE_NEW_ONBOARDING_FLOW is explicitly false.
+ * Product path is AgentOnboarding + SimpleOnboarding via OnboardingRouter.
+ * Hard-delete after a short completion window.
+ */
 import { Dumbbell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import { STEPS } from './constants';

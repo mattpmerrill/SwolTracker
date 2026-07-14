@@ -1,5 +1,5 @@
 import { Target, Calendar, Clock, Check } from 'lucide-react';
-import { FITNESS_GOALS, DAYS_OF_WEEK, DURATIONS } from '../../Onboarding/constants';
+import { FITNESS_GOALS, DAYS_OF_WEEK, DURATIONS } from '../../../constants/onboardingOptions';
 
 const GOAL_COLORS = {
   orange: 'bg-orange-500/10 border-orange-500/50 text-orange-400',

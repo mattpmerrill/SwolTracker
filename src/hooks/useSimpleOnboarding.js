@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { LOADING_PHRASES } from '../components/Onboarding/constants';
+import { LOADING_PHRASES } from '../constants/onboardingOptions';
 import { canProceed as canProceedFor, compileData } from '../components/SimpleOnboarding/validation';
 
 const SCREENS = ['basics', 'training', 'equipment', 'dates', 'generating'];

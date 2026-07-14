@@ -4,6 +4,10 @@ import { db } from '../lib/supabase';
 import { STEPS, LOADING_PHRASES } from '../components/Onboarding/constants';
 
 /**
+ * @deprecated Phase 1.3 soft-archive — used only by the legacy 13-step wizard
+ * kill switch (VITE_NEW_ONBOARDING_FLOW=false). Prefer useAgentOnboarding /
+ * useSimpleOnboarding for the product path.
+ *
  * Owns all onboarding state + side-effects: form fields, step navigation,
  * agent handshake, workout generation. The presentation layer (step
  * components + container) consumes the returned shape and is otherwise

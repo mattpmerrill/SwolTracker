@@ -1,5 +1,5 @@
 import { Dumbbell, Home, Building2, Check } from 'lucide-react';
-import { EQUIPMENT } from '../../Onboarding/constants';
+import { EQUIPMENT } from '../../../constants/onboardingOptions';
 
 export default function EquipmentStep({ onboarding }) {
   const {

@@ -98,17 +98,15 @@ Suggested first contexts:
 2. `ProgramContext` (program, week, day, gymId, equipment)
 3. `WorkoutLogContext` (exerciseLog, completions)
 
-#### B. Three onboarding systems
+#### B. Three onboarding systems → **one product path (Phase 1.3)**
 
-| Flow | Path |
-|------|------|
-| Legacy 13-step | `Onboarding/` + `useOnboarding` |
-| Agent-native | `AgentOnboarding/` |
-| Simple fallback | `SimpleOnboarding/` |
+| Flow | Path | Status |
+|------|------|--------|
+| Agent-native | `AgentOnboarding/` | **Default** product path |
+| Simple fallback | `SimpleOnboarding/` | "No agent? Set up manually" |
+| Legacy 13-step | `Onboarding/` + `useOnboarding` | Soft-archived; kill switch only |
 
-Flag: `VITE_NEW_ONBOARDING_FLOW` (default **false** → legacy).
-
-**Decision needed:** enable new flow in prod; archive legacy after a completion metric window.
+Flag: `VITE_NEW_ONBOARDING_FLOW` — defaults **true** when unset; set `false` / `0` / `legacy` for emergency rollback. Hard-delete legacy after completion window.
 
 #### C. No real web routing
 
@@ -177,7 +175,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 |---|------|-------|--------|
 | 1.1 | Domain contexts; thin `swoltracker.jsx` shell | `SessionContext`, `ProgramContext`, `WorkoutLogContext`; shell in `AuthenticatedShell.jsx` | **Done 2026-07-13** |
 | 1.2 | URL routing for tabs + admin + settings | `react-router-dom`; `/workout` `/maxes` `/progress` `/buddies` `/settings` `/admin` `/onboarding` | **Done 2026-07-13** |
-| 1.3 | Onboarding: one path | Flip `VITE_NEW_ONBOARDING_FLOW=true` when ready; archive legacy | Open |
+| 1.3 | Onboarding: one path | Agent-native default + Simple fallback; legacy kill-switch only | **Done 2026-07-13** |
 | 1.4 | Bounded bootstrap log load | Recent weeks first | Open |
 | 1.5 | User-visible errors on all write paths | toast + `errorService` consistently | Open |
 
@@ -260,10 +258,10 @@ migrations/                  # Prefer this as SQL history
 
 ### Suggested next pick-ups for Joi
 
-1. **Phase 1.3** — enable/archive onboarding paths (`VITE_NEW_ONBOARDING_FLOW`)  
-2. **Phase 3.3** — overload recommendation badges on `ExerciseCard` (visible product win using existing data)  
-3. **Phase 1.5** — consistent toast + errorService on remaining write paths  
-4. **Phase 0.4** with Matt — confirm prod migrations  
+1. **Phase 1.5** — consistent toast + errorService on remaining write paths  
+2. **Phase 3.4** — missed-day / skip UX next to complete (MCP/DB ready; coach-friendly)  
+3. **Phase 0.4** with Matt — confirm prod migrations  
+4. Hard-delete legacy onboarding after a short completion window (folder `src/components/Onboarding/` + `useOnboarding.js`)  
 
 ### Suggested next pick-ups for Beck
 
@@ -277,6 +275,7 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-13 | Joi | **Phase 1.3:** agent-native onboarding is the default path; SimpleOnboarding remains "No agent?" fallback; legacy 13-step wizard only via kill switch `VITE_NEW_ONBOARDING_FLOW=false`. Shared option lists → `src/constants/onboardingOptions.js`. Soft-archive deprecation on `Onboarding/` + `useOnboarding.js`. Flag defaults **true** when unset. Set `VITE_NEW_ONBOARDING_FLOW=true` in local/prod env files; **also set on Vercel** if cloud build does not load `.env.production`. |
 | 2026-07-13 | Beck | Phase 1.1–1.2: Session/Program/WorkoutLog contexts; AuthenticatedShell; react-router URL tabs + `/settings` `/admin` `/onboarding` |
 | 2026-07-13 | Beck | Initial architecture review; Phase 0.1–0.3 implemented (equipment persist, log rollback, onboarding re-bootstrap); this doc created |
 
