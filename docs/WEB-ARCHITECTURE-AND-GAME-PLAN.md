@@ -98,15 +98,14 @@ Suggested first contexts:
 2. `ProgramContext` (program, week, day, gymId, equipment)
 3. `WorkoutLogContext` (exerciseLog, completions)
 
-#### B. Three onboarding systems → **one product path (Phase 1.3)**
+#### B. Onboarding — **one product path (Phase 1.3 + hard-delete 2026-07-14)**
 
 | Flow | Path | Status |
 |------|------|--------|
 | Agent-native | `AgentOnboarding/` | **Default** product path |
 | Simple fallback | `SimpleOnboarding/` | "No agent? Set up manually" |
-| Legacy 13-step | `Onboarding/` + `useOnboarding` | Soft-archived; kill switch only |
 
-Flag: `VITE_NEW_ONBOARDING_FLOW` — defaults **true** when unset; set `false` / `0` / `legacy` for emergency rollback. Hard-delete legacy after completion window.
+Legacy 13-step (`Onboarding/` + `useOnboarding` + `VITE_NEW_ONBOARDING_FLOW` kill switch) **removed**. Router is Agent → optional Simple only.
 
 #### C. No real web routing
 
@@ -175,7 +174,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 |---|------|-------|--------|
 | 1.1 | Domain contexts; thin `swoltracker.jsx` shell | `SessionContext`, `ProgramContext`, `WorkoutLogContext`; shell in `AuthenticatedShell.jsx` | **Done 2026-07-13** |
 | 1.2 | URL routing for tabs + admin + settings | `react-router-dom`; `/workout` `/maxes` `/progress` `/buddies` `/settings` `/admin` `/onboarding` | **Done 2026-07-13** |
-| 1.3 | Onboarding: one path | Agent-native default + Simple fallback; legacy kill-switch only | **Done 2026-07-13** |
+| 1.3 | Onboarding: one path | Agent-native default + Simple fallback; **legacy hard-deleted 2026-07-14** | **Done** |
 | 1.4 | Bounded bootstrap log load | Recent weeks first; lazy older weeks | **Done 2026-07-14** |
 | 1.5 | User-visible errors on all write paths | toast + `errorService` consistently | **Done 2026-07-13** |
 
@@ -258,10 +257,9 @@ migrations/                  # Prefer this as SQL history
 
 ### Suggested next pick-ups for Joi
 
-1. Hard-delete legacy onboarding after a short completion window  
-2. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
-3. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
-4. Phase 3.8 PWA / add-to-homescreen if still web-only long-term  
+1. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
+2. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
+3. Phase 3.8 PWA / add-to-homescreen if still web-only long-term  
 
 ### Suggested next pick-ups for Beck
 
@@ -275,6 +273,7 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-14 | Beck | **Legacy onboarding hard-delete:** Removed `src/components/Onboarding/`, `useOnboarding.js`, `OnboardingRouter.flag*`, and `handlePrepareForAgent` kill-switch path. `OnboardingRouter` is Agent-native → Simple fallback only. Drop `VITE_NEW_ONBOARDING_FLOW` from env/Vercel (unused). |
 | 2026-07-14 | Beck | **Phase 3.7:** Week-end Review → Generate next week. Proactive `WeekEndReviewCard` when next calendar week has no program and current week is late/all-accounted; opens AI generator with history/overload already loaded, default `weekCount: 1`. Settings + empty state copy → “Review + Generate”. Helpers/tests in `src/lib/programContinuity.js`. |
 | 2026-07-14 | Beck | **Phase 0.4–0.5 + partial 0.6:** Prod SQL verify for 027–032 markers (functions/tables/prompt). Dual-migration policy: `migrations/` is SoT; `supabase/migrations/` CLI history is incomplete and must not be used as “what’s applied.” Key RPCs use `_require_self` or force `auth.uid()`; full interactive IDOR suite still open. |
 | 2026-07-14 | Beck | **Phase 1.4:** Bounded bootstrap set-log load — last 8 calendar weeks via `getWorkoutLogsInWeekRange`; completions + missed days remain full history (tiny). Lazy-fetch older weeks when the week cursor moves outside the window (`WorkoutLogContext`). Helpers in `src/lib/bootstrapLogs.js`. |

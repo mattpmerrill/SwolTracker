@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { supabase, db } from './lib/supabase';
+import { supabase } from './lib/supabase';
 import { useSessionContext, ProgramProvider, WorkoutLogProvider } from './contexts';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useOnboardingActions } from './hooks/useOnboardingActions';
@@ -82,7 +82,7 @@ export default function SwolTracker() {
  */
 function OnboardingGate({ onboardingData, authUser, onComplete }) {
   const [gymId, setGymId] = useState(null);
-  const { handleGenerateOnboardingWorkout, handlePrepareForAgent } = useOnboardingActions({
+  const { handleGenerateOnboardingWorkout } = useOnboardingActions({
     authUser,
     gymId,
     setGymId,
@@ -97,9 +97,7 @@ function OnboardingGate({ onboardingData, authUser, onComplete }) {
             user={onboardingData}
             onComplete={onComplete}
             onGenerateWorkout={handleGenerateOnboardingWorkout}
-            onPrepareForAgent={handlePrepareForAgent}
             supabase={supabase}
-            db={db}
           />
         )}
       />

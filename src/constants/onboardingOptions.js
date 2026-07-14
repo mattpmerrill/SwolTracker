@@ -2,7 +2,7 @@ import { Dumbbell, Heart, Flame, Scale, Wind } from 'lucide-react';
 
 /**
  * Shared option lists for agent-native + simple onboarding.
- * Kept out of the legacy 13-step wizard so SimpleOnboarding does not depend on it.
+ * Shared by SimpleOnboarding (manual path).
  */
 
 export const LOADING_PHRASES = [

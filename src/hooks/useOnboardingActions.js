@@ -3,8 +3,8 @@ import { generateWithLlm } from '../lib/llm';
 import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 
 /**
- * Onboarding-time actions: generate the first 4 weeks via the built-in LLM
- * fallback, or just prepare the gym + profile so the user's agent can do it.
+ * Simple-onboarding actions: create gym, complete profile, generate first 4 weeks
+ * via the built-in LLM. Agent-native onboarding uses useAgentOnboarding instead.
  */
 export function useOnboardingActions({ authUser, gymId, setGymId }) {
   const ensureOnboardingGym = async () => {
@@ -126,46 +126,7 @@ export function useOnboardingActions({ authUser, gymId, setGymId }) {
     }
   };
 
-  const handlePrepareForAgent = async (onboardingData) => {
-    if (!authUser) return null;
-
-    try {
-      const onboardingGymId = await ensureOnboardingGym();
-      if (!onboardingGymId) return null; // ensureOnboardingGym already logged the cause
-
-      const profileSaved = await db.completeOnboarding(authUser.id, onboardingData);
-      if (!profileSaved) {
-        await logError(db, {
-          category: ErrorCategory.DATABASE,
-          message: 'Failed to save onboarding profile during agent prep (complete_onboarding RPC returned false)',
-          severity: ErrorSeverity.CRITICAL,
-          userId: authUser?.id,
-          component: 'useOnboardingActions.js',
-          operation: 'handlePrepareForAgent.completeOnboarding',
-          context: { onboardingData },
-        });
-        return null;
-      }
-
-      return { gymId: onboardingGymId };
-    } catch (error) {
-      console.error('Error preparing for agent:', error);
-      await logError(db, {
-        category: ErrorCategory.DATABASE,
-        message: error.message || 'Failed to prepare for agent during onboarding',
-        severity: ErrorSeverity.ERROR,
-        userId: authUser?.id,
-        component: 'useOnboardingActions.js',
-        operation: 'handlePrepareForAgent',
-        originalError: error,
-        context: { onboardingData },
-      });
-      return null;
-    }
-  };
-
   return {
     handleGenerateOnboardingWorkout,
-    handlePrepareForAgent,
   };
 }

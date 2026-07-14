@@ -55,7 +55,9 @@ SwolTracker/
 │   │       └── onboarding.js   # Onboarding state persistence
 │   ├── components/
 │   │   ├── AuthenticatedShell.jsx # Tab chrome, modals, social/profile shell state
-│   │   ├── Onboarding.jsx       # New user onboarding flow (13 steps, agent-native)
+│   │   ├── OnboardingRouter.jsx # Agent-native onboarding + Simple manual fallback
+│   │   ├── AgentOnboarding/     # Default MCP agent onboarding screens
+│   │   ├── SimpleOnboarding/    # Manual "No agent?" fallback
 │   │   ├── Toast.jsx            # Toast notification system (ToastProvider + useToast)
 │   │   ├── AgentChat/           # Coach Board — async notes between user and AI agent
 │   │   │   ├── AgentChatPanel.jsx    # Slide-up panel with message history + input
@@ -87,11 +89,10 @@ SwolTracker/
 │   │   ├── useBuddyActions.js  # Buddy/group request handling
 │   │   ├── useExerciseSwap.js  # Exercise swap request flow
 │   │   ├── useMaxesActions.js  # 1RM add/edit/accept-swap actions
-│   │   ├── useOnboarding.js    # Legacy onboarding flow
-│   │   ├── useOnboardingActions.js # Onboarding workout generation
+│   │   ├── useOnboardingActions.js # Simple-onboarding first-program generation
 │   │   ├── useProfileActions.js # Profile update + avatar upload
 │   │   ├── useSession.js       # Auth session management
-│   │   ├── useSimpleOnboarding.js # Simplified onboarding flow
+│   │   ├── useSimpleOnboarding.js # Manual onboarding fallback
 │   │   └── useWorkoutLogger.js # Set logging logic
 │   ├── constants/               # App constants (equipment list, etc.)
 │   └── utils/
@@ -194,7 +195,7 @@ Domain repositories (`src/lib/repositories/`):
 4. **AI Workout Generation** - Generate personalized workouts based on user profile (OpenAI, Claude, Gemini, or OpenRouter)
 5. **Workout Groups** - Leaders create programs, members follow
 6. **Buddy System** - Send/accept buddy requests
-7. **Onboarding Flow** - 13-step wizard collecting user info + optional AI agent connection
+7. **Onboarding** — Agent-native by default (`AgentOnboarding`); Simple grouped forms as "No agent?" fallback
 8. **Admin Panel** - Manage API keys, prompt templates, view stats, error logs
 9. **MCP Server** — External AI agents can interact with SwolTracker via Model Context Protocol (30+ tools)
 10. **AI Agent-Native Onboarding** — Users can connect their AI agent (OpenClaw, Hermes, etc.) during signup via MCP API key generation. Agent can generate workout programs during onboarding with live progress polling.
@@ -273,12 +274,11 @@ const result = await generateWithLlm(provider, systemPrompt, userPrompt, 'weekly
 SwolTracker is designed to be **AI agent-native** — users can connect their own AI agents (OpenClaw, Hermes, Claude Desktop, etc.) during onboarding to interact with the app via MCP.
 
 ### Onboarding Agent Flow
-1. Step 2 of onboarding ("Connect Your Agent") generates an MCP API key via `create_api_key` RPC
+1. Welcome → Connect: generates an MCP API key via `create_api_key` RPC
 2. User copies the API key + MCP config JSON to their agent
-3. User completes remaining profile steps (name, gender, age, goals, etc.)
-4. At the generating step, agent-connected users see a copyable context block + live polling for workout programs
-5. As the agent saves programs via `generate_workout_program` MCP tool, week-progress dots fill in real-time
-6. Fallback: "Generate for me instead" uses SwolTracker's built-in LLM proxy
+3. Confirm screen polls profile + equipment while the agent completes onboarding writes
+4. Agent saves programs via MCP tools; UI refreshes when `onboarding_completed` flips
+5. Fallback: "No agent? Set up manually" → `SimpleOnboarding` (forms + built-in LLM first program)
 
 ### MCP Server (`api/mcp.js`)
 - **Auth**: `Authorization: Bearer swol_<key>` — SHA-256 hashed lookup in `api_keys` table
