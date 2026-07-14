@@ -3,7 +3,7 @@ title: SwolTracker Web Architecture Review & Game Plan
 status: active
 created: 2026-07-13
 updated: 2026-07-14
-author: Beck
+author: Beck (+ Joi changelog)
 audience: Matt, Joi, Ada, future agents
 scope: Web app only (src/, api/, mcp/, migrations/) — mobile/ is out of scope
 ---
@@ -114,21 +114,21 @@ Flag: `VITE_NEW_ONBOARDING_FLOW` — defaults **true** when unset; set `false` /
 
 **Add:** lightweight `react-router` (or hash routes) for `/`, `/workout`, `/maxes`, `/progress`, `/buddies`, `/settings`, `/admin`, `/onboarding`.
 
-#### D. Bootstrap loads all workout logs
+#### D. Bootstrap log load — **bounded (Phase 1.4)**
 
-`getAllWorkoutLogs(gymId)` on every cold start. Fine early; will hurt at 6–12 months of daily logging.
+Cold start loads set logs for the last **8** calendar weeks (`getWorkoutLogsInWeekRange`). Completions + missed days stay full history (small rows; Progress totals stay correct). Navigating to an older week lazy-fetches that range into `exerciseLog`.
 
-**Fix:** load current + recent N weeks first; lazy-load history for Progress.
+#### E. Dual migration tracks — **policy set 2026-07-14**
 
-#### E. Dual migration tracks
+| Track | Role |
+|-------|------|
+| **`migrations/`** (001–032) | **Canonical source of truth** for schema intent and hand-applied SQL |
+| `supabase/migrations/` | Stale CLI subset (7 files, last = `missed_days` / 2026-03-11). Supabase Management API history matches only this subset |
+| Root `*.sql` dumps | Historical; not a migration path |
 
-- `migrations/` — sequential 001–032 (canonical intent)
-- `supabase/migrations/` — stale subset
-- Root `*.sql` dumps
+**Prod verify (2026-07-14):** live DB has `_require_self`, hardened `create_user_gym` / `complete_onboarding` / `send_member_invite`, `log_error` + `log_api_usage` force `auth.uid()` for non-service callers, tables `tool_call_audit` / `app_events` / `agent_messages` / `missed_days`, `api_keys.scopes`, and `multi_week_workout_generator` prompt includes the 032 percentage rules. CLI “applied migrations” list is **not** trustworthy as full history — objects were applied outside that track.
 
-**Ops risk:** “works in one environment, 404 in another.” Migration 031 comment documents a real prod gap (`create_user_gym` missing).
-
-**Action:** pick **one** source of truth; verify 027–032 applied on live Supabase.
+**Going forward:** land new SQL in `migrations/0NN-….sql` next number; apply to prod deliberately; note apply in this changelog. Optionally mirror into `supabase/migrations/` only if you also repair CLI history (do not half-sync).
 
 #### F. Frontend JS vs MCP TS
 
@@ -147,12 +147,12 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 
 | Item | Status in code | Prod verification |
 |------|----------------|-------------------|
-| F-001 `resolveGymId` membership check | Fixed in `mcp/src/tools/queries.ts` | Confirm deploy |
-| F-002–F-009 RPC IDOR | Migration `027-rpc-idor-fixes.sql` | Confirm applied |
+| F-001 `resolveGymId` membership check | Fixed in `mcp/src/tools/queries.ts` | Confirm deploy still has check |
+| F-002–F-009 RPC IDOR | Migration `027-rpc-idor-fixes.sql` | **Prod defs match 027 pattern** (2026-07-14) |
 | LLM auth fail-closed | Present in `api/llm.js` | OK |
-| API keys hashed | Migration 021 | OK |
+| API keys hashed | Migration 021 | OK (`key_hash` column present) |
 
-**Phase 0 non-negotiable for multi-user:** re-run short IDOR checklist against live project after confirming migrations.
+**Phase 0.6 remaining:** authenticated-session IDOR probes (call RPCs with another user’s UUID and expect `forbidden`) — not automated yet.
 
 ---
 
@@ -165,9 +165,9 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 0.1 | Equipment persistence | Beck | **Done 2026-07-13** |
 | 0.2 | Log/complete rollback on DB failure | Beck | **Done 2026-07-13** |
 | 0.3 | Onboarding re-bootstrap (no reload) | Beck | **Done 2026-07-13** |
-| 0.4 | Verify migrations 027–032 on prod Supabase | Matt / Beck | Open |
-| 0.5 | Collapse dual migration story (document or sync folders) | Beck | Open |
-| 0.6 | Quick IDOR re-check on agent RPCs + gym write tools | Beck | Open |
+| 0.4 | Verify migrations 027–032 on prod Supabase | Matt / Beck | **Verified 2026-07-14** (objects present; CLI history lag — see 0.5) |
+| 0.5 | Collapse dual migration story (document or sync folders) | Beck | **Documented 2026-07-14** — `migrations/` is SoT; do not treat `supabase/migrations/` as complete |
+| 0.6 | Quick IDOR re-check on agent RPCs + gym write tools | Beck | **Partial 2026-07-14** — prod defs force self/service_role on key RPCs; full runtime IDOR suite still open |
 
 ### Phase 1 — Web structure (3–5 days)
 
@@ -176,7 +176,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 1.1 | Domain contexts; thin `swoltracker.jsx` shell | `SessionContext`, `ProgramContext`, `WorkoutLogContext`; shell in `AuthenticatedShell.jsx` | **Done 2026-07-13** |
 | 1.2 | URL routing for tabs + admin + settings | `react-router-dom`; `/workout` `/maxes` `/progress` `/buddies` `/settings` `/admin` `/onboarding` | **Done 2026-07-13** |
 | 1.3 | Onboarding: one path | Agent-native default + Simple fallback; legacy kill-switch only | **Done 2026-07-13** |
-| 1.4 | Bounded bootstrap log load | Recent weeks first | Open |
+| 1.4 | Bounded bootstrap log load | Recent weeks first; lazy older weeks | **Done 2026-07-14** |
 | 1.5 | User-visible errors on all write paths | toast + `errorService` consistently | **Done 2026-07-13** |
 
 ### Phase 2 — Efficiency & quality (ongoing)
@@ -258,16 +258,16 @@ migrations/                  # Prefer this as SQL history
 
 ### Suggested next pick-ups for Joi
 
-1. **Phase 0.4** with Matt — confirm prod migrations 027–032  
-2. **Phase 1.4** — bounded bootstrap log load  
-3. **Phase 3.7** — Week-end Review → Generate next week flow  
-4. Hard-delete legacy onboarding after a short completion window  
+1. **Phase 3.7** — Week-end Review → Generate next week flow  
+2. Hard-delete legacy onboarding after a short completion window  
+3. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
+4. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
 
 ### Suggested next pick-ups for Beck
 
-1. Phase 0.4–0.6 (prod migrations + IDOR re-check)  
-2. Phase 1.4 bootstrap log bounds  
-3. Shared date/week module between web + MCP  
+1. Phase 0.6 remainder — live RPC IDOR probes under authenticated non-admin session  
+2. Shared date/week module between web + MCP  
+3. Phase 3.7 Review + Generate next week if product prioritizes continuity  
 
 ---
 
@@ -275,6 +275,8 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-14 | Beck | **Phase 0.4–0.5 + partial 0.6:** Prod SQL verify for 027–032 markers (functions/tables/prompt). Dual-migration policy: `migrations/` is SoT; `supabase/migrations/` CLI history is incomplete and must not be used as “what’s applied.” Key RPCs use `_require_self` or force `auth.uid()`; full interactive IDOR suite still open. |
+| 2026-07-14 | Beck | **Phase 1.4:** Bounded bootstrap set-log load — last 8 calendar weeks via `getWorkoutLogsInWeekRange`; completions + missed days remain full history (tiny). Lazy-fetch older weeks when the week cursor moves outside the window (`WorkoutLogContext`). Helpers in `src/lib/bootstrapLogs.js`. |
 | 2026-07-14 | Joi | **Phase 3.5 + 3.6:** Coach Board primary surfaces — header Bot button (unread), always-on workout `CoachBoardEntry`, keep FAB as secondary. Post-workout “How was training?” CTA with quick chips + free text → `sendUserMessage`; per week/day dismiss. `useAgentChat.send(override)` + reportWriteFailure + sending state. |
 | 2026-07-13 | Joi | **Phase 1.5 + 3.4:** `reportWriteFailure` helper; toast+errorService on workout log/complete, maxes, profile, buddies, equipment, swap, AI confirm; web `logMissedDay`/`clearMissedDay`/`getMissedDays`; Skip day UI on WorkoutFocus with reason chips; DaySelector amber missed dots; bootstrap hydrates missed days. |
 | 2026-07-13 | Joi | **Phase 1.3:** agent-native onboarding is the default path; SimpleOnboarding remains "No agent?" fallback; legacy 13-step wizard only via kill switch `VITE_NEW_ONBOARDING_FLOW=false`. Shared option lists → `src/constants/onboardingOptions.js`. Soft-archive deprecation on `Onboarding/` + `useOnboarding.js`. Flag defaults **true** when unset. Set `VITE_NEW_ONBOARDING_FLOW=true` in local/prod env files; **also set on Vercel** if cloud build does not load `.env.production`. |

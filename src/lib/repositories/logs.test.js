@@ -99,4 +99,30 @@ describe('logsRepo', () => {
     const ok = await repo.clearMissedDay('u1', 'g1', 2, 'Wednesday');
     expect(ok).toBe(true);
   });
+
+  it('getWorkoutLogsInWeekRange applies gte/lte week bounds', async () => {
+    const sb = createMockSupabase();
+    sb.respond('workout_logs', 'list', {
+      data: [{ id: 'l1', week_number: 14, day_name: 'Monday' }],
+      error: null,
+    });
+    const repo = createLogsRepo(sb);
+    const rows = await repo.getWorkoutLogsInWeekRange('g1', 13, 20);
+    expect(rows).toHaveLength(1);
+    const gteCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'gte');
+    const lteCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'lte');
+    expect(gteCall?.[2]).toEqual(['week_number', 13]);
+    expect(lteCall?.[2]).toEqual(['week_number', 20]);
+  });
+
+  it('getWorkoutLogsInWeekRange with only fromWeek omits lte', async () => {
+    const sb = createMockSupabase();
+    sb.respond('workout_logs', 'list', { data: [], error: null });
+    const repo = createLogsRepo(sb);
+    await repo.getWorkoutLogsInWeekRange('g1', 10);
+    const gteCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'gte');
+    const lteCall = sb.calls.find(([t, m]) => t === 'workout_logs' && m === 'lte');
+    expect(gteCall?.[2]).toEqual(['week_number', 10]);
+    expect(lteCall).toBeUndefined();
+  });
 });

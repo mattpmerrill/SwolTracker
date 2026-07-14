@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../lib/supabase';
+import {
+  BOOTSTRAP_LOG_LOOKBACK_WEEKS,
+  exerciseLogFromRows,
+  getBootstrapLogFromWeek,
+} from '../lib/bootstrapLogs';
 import { calculateCurrentWeek } from '../utils/date';
 
 /**
@@ -129,6 +134,8 @@ async function loadUserBundle(authUser) {
   let exerciseLog = {};
   let completedWorkouts = {};
   let missedWorkouts = {};
+  // Phase 1.4: set logs are windowed; completions/missed stay full (small).
+  let logFromWeek = 1;
 
   if (gymId) {
     const eq = await db.getGymEquipment(gymId);
@@ -143,11 +150,9 @@ async function loadUserBundle(authUser) {
     const programs = await db.getAllWorkoutPrograms(programGymId);
     if (Object.keys(programs).length > 0) workoutProgram = programs;
 
-    const logs = await db.getAllWorkoutLogs(gymId);
-    logs.forEach((l) => {
-      const key = `${l.user_id}-${l.week_number}-${l.day_name}-${l.exercise_index}-${l.set_index}`;
-      exerciseLog[key] = { completed: l.completed, actualWeight: l.actual_weight, actualReps: l.actual_reps };
-    });
+    logFromWeek = getBootstrapLogFromWeek(currentWeek, BOOTSTRAP_LOG_LOOKBACK_WEEKS);
+    const logs = await db.getWorkoutLogsInWeekRange(gymId, logFromWeek);
+    exerciseLog = exerciseLogFromRows(logs);
 
     const completions = await db.getWorkoutCompletions(gymId);
     completions.forEach((c) => {
@@ -185,6 +190,8 @@ async function loadUserBundle(authUser) {
     exerciseLog,
     completedWorkouts,
     missedWorkouts,
+    /** Earliest week currently in exerciseLog (for lazy older-week fetch). */
+    logFromWeek,
     hasUnreadAgentMessages: unreadAgent,
     latestCoachNote: coachNote,
     hasAgentKey: agentKey,

@@ -89,6 +89,33 @@ export function createLogsRepo(supabase) {
     return data || []
   }
 
+  /**
+   * Bounded log load for cold start / week navigation.
+   * fromWeek inclusive (gte). toWeek optional inclusive (lte).
+   * Omit both to match getAllWorkoutLogs.
+   */
+  const getWorkoutLogsInWeekRange = async (gymId, fromWeek = null, toWeek = null) => {
+    if (!supabase) return []
+    let query = supabase
+      .from('workout_logs')
+      .select('*')
+      .eq('gym_id', gymId)
+
+    if (fromWeek != null && Number.isFinite(fromWeek)) {
+      query = query.gte('week_number', fromWeek)
+    }
+    if (toWeek != null && Number.isFinite(toWeek)) {
+      query = query.lte('week_number', toWeek)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.error('Error fetching workout logs in week range:', error)
+      return []
+    }
+    return data || []
+  }
+
   const getRecentWorkoutLogs = async (userId, limit = 4) => {
     if (!supabase) return []
 
@@ -278,6 +305,7 @@ export function createLogsRepo(supabase) {
     getWorkoutLogs,
     getUserWorkoutLogs,
     getAllWorkoutLogs,
+    getWorkoutLogsInWeekRange,
     getRecentWorkoutLogs,
     markWorkoutComplete,
     unmarkWorkoutComplete,
