@@ -1,4 +1,5 @@
 import { db } from '../lib/supabase';
+import { reportWriteFailure } from '../lib/errorService';
 import { validate, maxWeightSchema } from '../lib/validation';
 import { findMaxKey } from '../utils/workout';
 
@@ -32,7 +33,17 @@ export function useMaxesActions({
     setEditingMax(null);
     const result = await db.updateMax(currentUser, lift, weight);
     if (result?.error) {
-      toast.error(`Failed to save weight: ${result.error.message || 'unknown error'}`);
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: currentUser,
+        component: 'useMaxesActions.js',
+        operation: 'updateMax',
+        message: `Failed to save max for ${lift}: ${result.error.message || 'unknown'}`,
+        userMessage: `Failed to save weight: ${result.error.message || 'unknown error'}`,
+        originalError: result.error,
+        context: { lift, weight },
+      });
       setProfiles((prev) => {
         const nextMaxes = { ...prev[currentUser].maxes };
         if (previous === undefined) delete nextMaxes[lift];
@@ -54,7 +65,16 @@ export function useMaxesActions({
     setNewLiftName(''); setNewLiftWeight(''); setShowAddLift(false);
     const result = await db.updateMax(currentUser, validated.exerciseName, validated.weight);
     if (result?.error) {
-      toast.error(`Failed to save lift: ${result.error.message || 'unknown error'}`);
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: currentUser,
+        component: 'useMaxesActions.js',
+        operation: 'addNewLift',
+        message: `Failed to save lift ${validated.exerciseName}: ${result.error.message || 'unknown'}`,
+        userMessage: `Failed to save lift: ${result.error.message || 'unknown error'}`,
+        originalError: result.error,
+      });
       setProfiles((prev) => {
         const nextMaxes = { ...prev[currentUser].maxes };
         if (hadPrevious) nextMaxes[validated.exerciseName] = previous;
@@ -73,13 +93,30 @@ export function useMaxesActions({
   };
 
   const acceptSwap = async (exerciseIndex, alternative) => {
+    const previousProgram = workoutProgram;
     const updatedDayWorkout = { ...workoutProgram[currentWeek][currentDay] };
     const updatedExercises = [...updatedDayWorkout.exercises];
     updatedExercises[exerciseIndex] = alternative;
     updatedDayWorkout.exercises = updatedExercises;
     const updatedWeekProgram = { ...workoutProgram[currentWeek], [currentDay]: updatedDayWorkout };
     setWorkoutProgram((prev) => ({ ...prev, [currentWeek]: updatedWeekProgram }));
-    if (gymId) await db.saveWorkoutProgram(gymId, currentWeek, updatedWeekProgram, currentUser, false);
+    if (gymId) {
+      const saved = await db.saveWorkoutProgram(gymId, currentWeek, updatedWeekProgram, currentUser, false);
+      if (!saved) {
+        setWorkoutProgram(previousProgram);
+        await reportWriteFailure({
+          db,
+          toast,
+          userId: currentUser,
+          component: 'useMaxesActions.js',
+          operation: 'acceptSwap',
+          message: 'Failed to persist exercise swap',
+          userMessage: 'Could not save that swap. Try again.',
+          context: { exerciseIndex, alternative: alternative?.name },
+        });
+        return;
+      }
+    }
     clearSwap();
     toast.success(`Swapped to ${alternative.name}`);
   };
@@ -91,7 +128,16 @@ export function useMaxesActions({
     setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: newMaxes } }));
     const ok = await db.deleteMax(currentUser, lift);
     if (!ok) {
-      toast.error('Failed to delete lift');
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: currentUser,
+        component: 'useMaxesActions.js',
+        operation: 'deleteLift',
+        message: `Failed to delete max ${lift}`,
+        userMessage: 'Failed to delete lift',
+        context: { lift },
+      });
       setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], maxes: { ...prev[currentUser].maxes, [lift]: previous } } }));
     }
   };

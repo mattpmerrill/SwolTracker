@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
+import { reportWriteFailure } from '../lib/errorService';
 import { buildMissingWorkoutSetLogs, getExerciseLogKey } from '../utils/workout';
 
 /**
- * Hook for managing workout set logging and completion tracking.
+ * Hook for managing workout set logging, completion, and missed-day tracking.
  *
  * Writes are optimistic for snappy UX, then rolled back + toasted if the
  * DB call fails so the UI never lies about what was saved.
@@ -12,6 +13,21 @@ import { buildMissingWorkoutSetLogs, getExerciseLogKey } from '../utils/workout'
 export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workoutProgram, gymId, toast }) {
   const [exerciseLog, setExerciseLog] = useState({});
   const [completedWorkouts, setCompletedWorkouts] = useState({});
+  /** Map of `${userId}-${week}-${day}` → { reason: string|null } */
+  const [missedWorkouts, setMissedWorkouts] = useState({});
+
+  const failWrite = useCallback(async (operation, message, userMessage, context = {}) => {
+    await reportWriteFailure({
+      db,
+      toast,
+      userId: currentUser,
+      component: 'useWorkoutLogger.js',
+      operation,
+      message,
+      userMessage,
+      context,
+    });
+  }, [currentUser, toast]);
 
   const logSet = useCallback(async (exerciseIndex, setIndex, data) => {
     const key = getExerciseLogKey(currentUser, currentWeek, currentDay, exerciseIndex, setIndex);
@@ -52,9 +68,14 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         }
         return next;
       });
-      toast?.error('Could not save that set. Check your connection and try again.');
+      await failWrite(
+        'logSet',
+        'logSet returned null',
+        'Could not save that set. Check your connection and try again.',
+        { week: currentWeek, day: currentDay, exerciseIndex, setIndex },
+      );
     }
-  }, [currentUser, gymId, currentWeek, currentDay, exerciseLog, toast]);
+  }, [currentUser, gymId, currentWeek, currentDay, exerciseLog, failWrite]);
 
   const isSetLogged = useCallback((exerciseIndex, setIndex, targetUserId = currentUser) => {
     return exerciseLog[getExerciseLogKey(targetUserId, currentWeek, currentDay, exerciseIndex, setIndex)]?.completed;
@@ -85,6 +106,14 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
   }, [completedWorkouts, currentUser]);
 
+  const isWorkoutMissed = useCallback((week, day, targetUserId = currentUser) => {
+    return !!missedWorkouts[`${targetUserId}-${week}-${day}`];
+  }, [missedWorkouts, currentUser]);
+
+  const getMissedReason = useCallback((week, day, targetUserId = currentUser) => {
+    return missedWorkouts[`${targetUserId}-${week}-${day}`]?.reason ?? null;
+  }, [missedWorkouts, currentUser]);
+
   const toggleWorkoutComplete = useCallback(async (week, day) => {
     const key = `${currentUser}-${week}-${day}`;
     const wasComplete = completedWorkouts[key] || false;
@@ -99,13 +128,22 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
 
     // Snapshot for rollback
     const previousCompletion = completedWorkouts[key];
+    const previousMissed = missedWorkouts[key];
     const previousLogSnapshot = missingSetLogs.length > 0
       ? Object.fromEntries(missingSetLogs.map(({ key: logKey }) => [logKey, exerciseLog[logKey]]))
       : null;
 
     setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
+    // Completing a day clears missed status optimistically
+    if (!wasComplete && previousMissed) {
+      setMissedWorkouts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
 
-    const rollback = () => {
+    const rollback = async (operation, message) => {
       setCompletedWorkouts(prev => {
         const next = { ...prev };
         if (previousCompletion === undefined) {
@@ -115,6 +153,9 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         }
         return next;
       });
+      if (previousMissed) {
+        setMissedWorkouts((prev) => ({ ...prev, [key]: previousMissed }));
+      }
       if (previousLogSnapshot) {
         setExerciseLog(prev => {
           const next = { ...prev };
@@ -125,7 +166,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
           return next;
         });
       }
-      toast?.error('Could not update workout completion. Try again.');
+      await failWrite(operation, message, 'Could not update workout completion. Try again.', { week, day });
     };
 
     try {
@@ -133,7 +174,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         if (gymId) {
           const ok = await db.unmarkWorkoutComplete(currentUser, gymId, week, day);
           if (ok === false) {
-            rollback();
+            await rollback('unmarkWorkoutComplete', 'unmarkWorkoutComplete returned false');
             return;
           }
         }
@@ -161,21 +202,29 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
               )
             )));
             if (results.some((r) => !r)) {
-              rollback();
+              await rollback('logSet.onComplete', 'one or more missing set logs failed on complete');
               return;
             }
           }
         }
         if (gymId) {
+          // Clear missed day if present (complete supersedes miss)
+          if (previousMissed) {
+            const cleared = await db.clearMissedDay(currentUser, gymId, week, day);
+            if (cleared === false) {
+              await rollback('clearMissedDay.onComplete', 'clearMissedDay returned false');
+              return;
+            }
+          }
           const result = await db.markWorkoutComplete(currentUser, gymId, week, day);
           if (!result) {
-            rollback();
+            await rollback('markWorkoutComplete', 'markWorkoutComplete returned null');
             return;
           }
         }
       }
-    } catch {
-      rollback();
+    } catch (err) {
+      await rollback('toggleWorkoutComplete', err?.message || 'toggleWorkoutComplete threw');
       return;
     }
 
@@ -187,13 +236,82 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         colors: ['#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
       });
     }
-  }, [currentUser, gymId, completedWorkouts, exerciseLog, workoutProgram, getCompletionPercentage, toast]);
+  }, [currentUser, gymId, completedWorkouts, missedWorkouts, exerciseLog, workoutProgram, getCompletionPercentage, failWrite]);
+
+  /**
+   * Mark a scheduled workout day as intentionally missed.
+   * Blocks if already complete. Rest days should not call this (UI guards).
+   */
+  const markWorkoutMissed = useCallback(async (week, day, reason = null) => {
+    const key = `${currentUser}-${week}-${day}`;
+    if (completedWorkouts[key]) {
+      toast?.error?.('Unmark complete before logging a skip.');
+      return false;
+    }
+
+    const previous = missedWorkouts[key];
+    setMissedWorkouts((prev) => ({ ...prev, [key]: { reason: reason || null } }));
+
+    if (!gymId) return true;
+
+    const result = await db.logMissedDay(currentUser, gymId, week, day, reason);
+    if (!result) {
+      setMissedWorkouts((prev) => {
+        const next = { ...prev };
+        if (previous === undefined) delete next[key];
+        else next[key] = previous;
+        return next;
+      });
+      await failWrite(
+        'logMissedDay',
+        'logMissedDay returned null',
+        'Could not log that skip. Try again.',
+        { week, day, reason },
+      );
+      return false;
+    }
+
+    toast?.success?.(reason
+      ? `Logged ${day} as skipped (${reason}). No guilt — we'll adapt.`
+      : `Logged ${day} as skipped. No guilt — we'll adapt.`);
+    return true;
+  }, [currentUser, gymId, completedWorkouts, missedWorkouts, toast, failWrite]);
+
+  const clearWorkoutMissed = useCallback(async (week, day) => {
+    const key = `${currentUser}-${week}-${day}`;
+    const previous = missedWorkouts[key];
+    if (!previous) return true;
+
+    setMissedWorkouts((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+    if (!gymId) return true;
+
+    const ok = await db.clearMissedDay(currentUser, gymId, week, day);
+    if (ok === false) {
+      setMissedWorkouts((prev) => ({ ...prev, [key]: previous }));
+      await failWrite(
+        'clearMissedDay',
+        'clearMissedDay returned false',
+        'Could not undo that skip. Try again.',
+        { week, day },
+      );
+      return false;
+    }
+    toast?.success?.(`Cleared skip for ${day}.`);
+    return true;
+  }, [currentUser, gymId, missedWorkouts, toast, failWrite]);
 
   return {
     exerciseLog,
     setExerciseLog,
     completedWorkouts,
     setCompletedWorkouts,
+    missedWorkouts,
+    setMissedWorkouts,
     logSet,
     isSetLogged,
     getCompletionPercentage,
@@ -201,5 +319,9 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     getTotalCompletedWorkouts,
     isWorkoutComplete,
     toggleWorkoutComplete,
+    isWorkoutMissed,
+    getMissedReason,
+    markWorkoutMissed,
+    clearWorkoutMissed,
   };
 }

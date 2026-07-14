@@ -182,6 +182,57 @@ export async function logError(db, {
 }
 
 /**
+ * Phase 1.5 helper: log a failed write to errorService AND surface a toast.
+ * Prefer this on every user-facing write path so failures are never silent.
+ *
+ * @param {Object} opts
+ * @param {Object} opts.db
+ * @param {{ error?: (msg: string) => void } | null} [opts.toast]
+ * @param {string|null} [opts.userId]
+ * @param {string} opts.component
+ * @param {string} opts.operation
+ * @param {string} opts.message - technical message for logs
+ * @param {string} [opts.userMessage] - toast text (defaults to DATABASE save_failed)
+ * @param {Error|null} [opts.originalError]
+ * @param {string} [opts.category]
+ * @param {string} [opts.severity]
+ * @param {Object} [opts.context]
+ * @param {string} [opts.errorType] - key within category for getUserFriendlyMessage
+ */
+export async function reportWriteFailure({
+  db,
+  toast = null,
+  userId = null,
+  component,
+  operation,
+  message,
+  userMessage = null,
+  originalError = null,
+  category = ErrorCategory.DATABASE,
+  severity = ErrorSeverity.ERROR,
+  context = {},
+  errorType = 'save_failed',
+}) {
+  await logError(db, {
+    category,
+    message,
+    severity,
+    userId,
+    component,
+    operation,
+    originalError,
+    context,
+  });
+
+  const friendly = userMessage || getUserFriendlyMessage(category, errorType);
+  if (toast && typeof toast.error === 'function') {
+    toast.error(friendly);
+  }
+
+  return friendly;
+}
+
+/**
  * Create an enhanced error with user-friendly message and metadata
  * @param {Error} originalError - The original error
  * @param {string} category - Error category

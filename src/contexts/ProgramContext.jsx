@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { db } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { validate, equipmentNameSchema } from '../lib/validation';
+import { reportWriteFailure } from '../lib/errorService';
 import { defaultEquipment } from '../constants';
 import { calculateCurrentWeek, getTodayDayName } from '../utils/date';
 
@@ -56,7 +57,15 @@ export function ProgramProvider({ children, bundle }) {
     const saved = await db.addEquipment(gymId, name);
     if (!saved) {
       setEquipment(previous);
-      toast.error('Could not save equipment. Try again.');
+      await reportWriteFailure({
+        db,
+        toast,
+        component: 'ProgramContext.jsx',
+        operation: 'addEquipment',
+        message: `addEquipment failed for ${name}`,
+        userMessage: 'Could not save equipment. Try again.',
+        context: { gymId, name },
+      });
       return { ok: false, reason: 'save_failed' };
     }
     return { ok: true, name };
@@ -74,7 +83,15 @@ export function ProgramProvider({ children, bundle }) {
     const ok = await db.removeEquipment(gymId, item);
     if (ok === false) {
       setEquipment(previous);
-      toast.error('Could not remove equipment. Try again.');
+      await reportWriteFailure({
+        db,
+        toast,
+        component: 'ProgramContext.jsx',
+        operation: 'removeEquipment',
+        message: `removeEquipment failed for ${item}`,
+        userMessage: 'Could not remove equipment. Try again.',
+        context: { gymId, item },
+      });
       return { ok: false, reason: 'save_failed' };
     }
     return { ok: true };

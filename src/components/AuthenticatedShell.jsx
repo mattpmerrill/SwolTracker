@@ -63,6 +63,10 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     getTotalCompletedWorkouts,
     isWorkoutComplete,
     toggleWorkoutComplete,
+    isWorkoutMissed,
+    getMissedReason,
+    markWorkoutMissed,
+    clearWorkoutMissed,
   } = useWorkoutLog();
 
   const currentUser = authUser.id;
@@ -218,6 +222,10 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             getCompletionPercentage,
             isWorkoutComplete,
             onToggleWorkoutComplete: toggleWorkoutComplete,
+            isWorkoutMissed,
+            getMissedReason,
+            onMarkMissed: (reason) => markWorkoutMissed(currentWeek, currentDay, reason),
+            onClearMissed: () => clearWorkoutMissed(currentWeek, currentDay),
             swapState,
             onRequestSwap: requestSwap,
             onAcceptSwap: maxesActions.acceptSwap,

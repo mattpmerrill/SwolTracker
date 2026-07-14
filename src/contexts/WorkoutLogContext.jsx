@@ -6,7 +6,7 @@ import { useProgram } from './ProgramContext';
 const WorkoutLogContext = createContext(null);
 
 /**
- * Workout log domain: set logging, completion tracking, derived percentages.
+ * Workout log domain: set logging, completion, missed days, derived percentages.
  * Depends on ProgramContext for week/day/program/gym and on the authenticated
  * user id for log keys.
  */
@@ -19,6 +19,8 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     setExerciseLog,
     completedWorkouts,
     setCompletedWorkouts,
+    missedWorkouts,
+    setMissedWorkouts,
     logSet,
     isSetLogged,
     getCompletionPercentage,
@@ -26,6 +28,10 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     getTotalCompletedWorkouts,
     isWorkoutComplete,
     toggleWorkoutComplete,
+    isWorkoutMissed,
+    getMissedReason,
+    markWorkoutMissed,
+    clearWorkoutMissed,
   } = useWorkoutLogger({
     currentUser,
     currentWeek,
@@ -40,13 +46,16 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     if (!bundle || bundle.kind === 'onboarding') return;
     setExerciseLog(bundle.exerciseLog || {});
     setCompletedWorkouts(bundle.completedWorkouts || {});
-  }, [bundle, setExerciseLog, setCompletedWorkouts]);
+    setMissedWorkouts(bundle.missedWorkouts || {});
+  }, [bundle, setExerciseLog, setCompletedWorkouts, setMissedWorkouts]);
 
   const value = useMemo(() => ({
     exerciseLog,
     setExerciseLog,
     completedWorkouts,
     setCompletedWorkouts,
+    missedWorkouts,
+    setMissedWorkouts,
     logSet,
     isSetLogged,
     getCompletionPercentage,
@@ -54,11 +63,17 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     getTotalCompletedWorkouts,
     isWorkoutComplete,
     toggleWorkoutComplete,
+    isWorkoutMissed,
+    getMissedReason,
+    markWorkoutMissed,
+    clearWorkoutMissed,
   }), [
     exerciseLog,
     setExerciseLog,
     completedWorkouts,
     setCompletedWorkouts,
+    missedWorkouts,
+    setMissedWorkouts,
     logSet,
     isSetLogged,
     getCompletionPercentage,
@@ -66,6 +81,10 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     getTotalCompletedWorkouts,
     isWorkoutComplete,
     toggleWorkoutComplete,
+    isWorkoutMissed,
+    getMissedReason,
+    markWorkoutMissed,
+    clearWorkoutMissed,
   ]);
 
   return (

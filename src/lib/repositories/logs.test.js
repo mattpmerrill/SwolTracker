@@ -72,4 +72,31 @@ describe('logsRepo', () => {
     expect(payload.prescribed_weight).toBeNull();
     expect(payload.actual_weight).toBe(35);
   });
+
+  it('logMissedDay upserts with reason', async () => {
+    const sb = createMockSupabase();
+    sb.respond('missed_days', 'single', {
+      data: { id: 'm1', user_id: 'u1', week_number: 2, day_name: 'Wednesday', reason: 'travel' },
+      error: null,
+    });
+    const repo = createLogsRepo(sb);
+    const row = await repo.logMissedDay('u1', 'g1', 2, 'Wednesday', 'travel');
+    expect(row?.id).toBe('m1');
+    const upsertCall = sb.calls.find(([t, m]) => t === 'missed_days' && m === 'upsert');
+    expect(upsertCall?.[2]?.[0]).toMatchObject({
+      user_id: 'u1',
+      gym_id: 'g1',
+      week_number: 2,
+      day_name: 'Wednesday',
+      reason: 'travel',
+    });
+  });
+
+  it('clearMissedDay returns true on success', async () => {
+    const sb = createMockSupabase();
+    sb.respond('missed_days', 'list', { data: null, error: null });
+    const repo = createLogsRepo(sb);
+    const ok = await repo.clearMissedDay('u1', 'g1', 2, 'Wednesday');
+    expect(ok).toBe(true);
+  });
 });

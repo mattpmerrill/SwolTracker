@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { db } from '../lib/supabase';
 import { generateWithLlm } from '../lib/llm';
+import { reportWriteFailure, ErrorCategory } from '../lib/errorService';
 
 /**
  * Hook for handling exercise swap/alternative suggestions
@@ -45,7 +46,18 @@ export function useExerciseSwap({ equipment, currentUser, toast }) {
       setSwapState({ loading: false, exerciseIndex, alternative });
     } catch (error) {
       setSwapState({ loading: false, exerciseIndex: null, alternative: null });
-      toast.error('Failed to find alternative. Try again.');
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: currentUser,
+        component: 'useExerciseSwap.js',
+        operation: 'requestSwap',
+        message: error?.message || 'requestSwap failed',
+        userMessage: 'Failed to find alternative. Try again.',
+        originalError: error,
+        category: ErrorCategory.LLM,
+        context: { exercise: exercise?.name, exerciseIndex },
+      });
     }
   }, [equipment, currentUser, toast]);
 

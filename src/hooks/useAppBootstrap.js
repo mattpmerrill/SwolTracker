@@ -128,6 +128,7 @@ async function loadUserBundle(authUser) {
   let workoutProgram = {};
   let exerciseLog = {};
   let completedWorkouts = {};
+  let missedWorkouts = {};
 
   if (gymId) {
     const eq = await db.getGymEquipment(gymId);
@@ -151,6 +152,13 @@ async function loadUserBundle(authUser) {
     const completions = await db.getWorkoutCompletions(gymId);
     completions.forEach((c) => {
       completedWorkouts[`${c.user_id}-${c.week_number}-${c.day_name}`] = true;
+    });
+
+    const missedRows = await db.getMissedDays(gymId);
+    missedRows.forEach((m) => {
+      missedWorkouts[`${m.user_id}-${m.week_number}-${m.day_name}`] = {
+        reason: m.reason || null,
+      };
     });
   }
 
@@ -176,6 +184,7 @@ async function loadUserBundle(authUser) {
     workoutProgram,
     exerciseLog,
     completedWorkouts,
+    missedWorkouts,
     hasUnreadAgentMessages: unreadAgent,
     latestCoachNote: coachNote,
     hasAgentKey: agentKey,

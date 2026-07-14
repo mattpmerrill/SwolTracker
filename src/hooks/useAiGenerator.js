@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '../lib/supabase';
 import { generateWithLlm } from '../lib/llm';
-import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
+import { logError, reportWriteFailure, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 import { validate, aiNotesSchema, weekCountSchema } from '../lib/validation';
 
 /**
@@ -176,23 +176,42 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
 
     const weekKeys = Object.keys(generatedPreview).filter(k => k.startsWith('week')).sort();
     const updates = {};
+    const previousProgram = workoutProgram;
 
-    for (let i = 0; i < weekKeys.length; i++) {
-      const weekKey = weekKeys[i];
-      const targetWeek = generationWeek + i;
-      updates[targetWeek] = generatedPreview[weekKey];
+    try {
+      for (let i = 0; i < weekKeys.length; i++) {
+        const weekKey = weekKeys[i];
+        const targetWeek = generationWeek + i;
+        updates[targetWeek] = generatedPreview[weekKey];
 
-      if (gymId) {
-        await db.saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes);
+        if (gymId) {
+          const saved = await db.saveWorkoutProgram(gymId, targetWeek, generatedPreview[weekKey], currentUser, true, aiNotes);
+          if (!saved) {
+            throw new Error(`Failed to save week ${targetWeek}`);
+          }
+        }
       }
-    }
 
-    setWorkoutProgram(prev => ({ ...prev, ...updates }));
-    setShowAiGenerator(false);
-    setGeneratedPreview(null);
-    setCurrentWeek(generationWeek);
-    toast.success(`${weekKeys.length} week${weekKeys.length > 1 ? 's' : ''} added to your program!`);
-  }, [generatedPreview, generationWeek, gymId, currentUser, aiNotes, toast, setWorkoutProgram, setCurrentWeek]);
+      setWorkoutProgram(prev => ({ ...prev, ...updates }));
+      setShowAiGenerator(false);
+      setGeneratedPreview(null);
+      setCurrentWeek(generationWeek);
+      toast.success(`${weekKeys.length} week${weekKeys.length > 1 ? 's' : ''} added to your program!`);
+    } catch (error) {
+      setWorkoutProgram(previousProgram);
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: currentUser,
+        component: 'useAiGenerator.js',
+        operation: 'confirmGeneratedWorkout',
+        message: error?.message || 'confirmGeneratedWorkout failed',
+        userMessage: 'Could not save the generated program. Try again.',
+        originalError: error,
+        context: { generationWeek, weekCount: weekKeys.length },
+      });
+    }
+  }, [generatedPreview, generationWeek, gymId, currentUser, aiNotes, toast, setWorkoutProgram, setCurrentWeek, workoutProgram]);
 
   return {
     aiNotes,

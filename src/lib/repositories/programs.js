@@ -28,7 +28,7 @@ export function createProgramsRepo(supabase) {
 
   const saveWorkoutProgram = async (gymId, weekNumber, programData, userId, aiGenerated = false, aiNotes = null) => {
     if (!supabase) return null
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('workout_programs')
       .upsert({
         gym_id: gymId,
@@ -40,6 +40,10 @@ export function createProgramsRepo(supabase) {
       })
       .select()
       .single()
+    if (error) {
+      console.error('Error saving workout program:', error)
+      return null
+    }
     return data
   }
 

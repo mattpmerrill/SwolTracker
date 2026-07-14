@@ -210,6 +210,69 @@ export function createLogsRepo(supabase) {
     }
   }
 
+  /** Log a day as intentionally skipped/missed (upsert). Returns row or null. */
+  const logMissedDay = async (userId, gymId, weekNumber, dayName, reason = null) => {
+    if (!supabase) return null
+    const { data, error } = await supabase
+      .from('missed_days')
+      .upsert({
+        user_id: userId,
+        gym_id: gymId,
+        week_number: weekNumber,
+        day_name: dayName,
+        reason: reason || null,
+      }, {
+        onConflict: 'user_id,gym_id,week_number,day_name',
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error logging missed day:', error)
+      return null
+    }
+    return data
+  }
+
+  /** Clear a missed-day mark. Returns true on success. */
+  const clearMissedDay = async (userId, gymId, weekNumber, dayName) => {
+    if (!supabase) return false
+    const { error } = await supabase
+      .from('missed_days')
+      .delete()
+      .eq('user_id', userId)
+      .eq('gym_id', gymId)
+      .eq('week_number', weekNumber)
+      .eq('day_name', dayName)
+
+    if (error) {
+      console.error('Error clearing missed day:', error)
+      return false
+    }
+    return true
+  }
+
+  /** All missed days for a gym (all members visible via RLS). */
+  const getMissedDays = async (gymId, weekNumber = null) => {
+    if (!supabase) return []
+    let query = supabase
+      .from('missed_days')
+      .select('*')
+      .eq('gym_id', gymId)
+      .order('week_number', { ascending: false })
+
+    if (weekNumber != null) {
+      query = query.eq('week_number', weekNumber)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.error('Error fetching missed days:', error)
+      return []
+    }
+    return data || []
+  }
+
   return {
     logSet,
     getWorkoutLogs,
@@ -221,5 +284,8 @@ export function createLogsRepo(supabase) {
     getWorkoutCompletions,
     getUserWorkoutCompletions,
     getUserStats,
+    logMissedDay,
+    clearMissedDay,
+    getMissedDays,
   }
 }

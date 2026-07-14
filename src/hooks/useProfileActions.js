@@ -1,4 +1,5 @@
 import { db } from '../lib/supabase';
+import { reportWriteFailure, ErrorCategory } from '../lib/errorService';
 import { validate, profileUpdateSchema } from '../lib/validation';
 
 /**
@@ -14,14 +15,54 @@ export function useProfileActions({ authUser, currentUser, setProfiles, setProgr
     if (updated) {
       setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], ...updated } }));
       if (validUpdates.program_start_date) setProgramStartDate(validUpdates.program_start_date);
+      toast.success?.('Profile updated');
+    } else {
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: authUser.id,
+        component: 'useProfileActions.js',
+        operation: 'handleUpdateProfile',
+        message: 'updateProfile returned null/false',
+        userMessage: 'Could not save profile. Try again.',
+        context: { keys: Object.keys(validUpdates || {}) },
+      });
     }
   };
 
   const handleUploadAvatar = async (file) => {
     if (!authUser) return;
-    const result = await db.uploadAvatar(authUser.id, file);
-    if (result?.url) {
-      setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], avatar_url: result.url, avatar: null } }));
+    try {
+      const result = await db.uploadAvatar(authUser.id, file);
+      if (result?.url) {
+        setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], avatar_url: result.url, avatar: null } }));
+        toast.success?.('Photo updated');
+      } else {
+        await reportWriteFailure({
+          db,
+          toast,
+          userId: authUser.id,
+          component: 'useProfileActions.js',
+          operation: 'handleUploadAvatar',
+          message: 'uploadAvatar returned no url',
+          userMessage: 'Failed to upload your photo. Please try a smaller image.',
+          category: ErrorCategory.AVATAR,
+          errorType: 'upload_failed',
+        });
+      }
+    } catch (err) {
+      await reportWriteFailure({
+        db,
+        toast,
+        userId: authUser.id,
+        component: 'useProfileActions.js',
+        operation: 'handleUploadAvatar',
+        message: err?.message || 'uploadAvatar threw',
+        userMessage: 'Failed to upload your photo. Please try a smaller image.',
+        originalError: err,
+        category: ErrorCategory.AVATAR,
+        errorType: 'upload_failed',
+      });
     }
   };
 
