@@ -4,6 +4,7 @@ status: active
 created: 2026-07-13
 updated: 2026-07-14
 author: Beck (+ Joi changelog)
+handoff: joi
 audience: Matt, Joi, Ada, future agents
 scope: Web app only (src/, api/, mcp/, migrations/) — mobile/ is out of scope
 ---
@@ -253,19 +254,64 @@ migrations/                  # Prefer this as SQL history
 4. **Update the changelog** below when you land a row.  
 5. **Ignore `mobile/`** unless Matt explicitly re-scopes.  
 6. **Do not invent a second architecture doc** — edit this one.  
-7. Security-sensitive SQL: land in `migrations/` with the next number; note prod apply in changelog.
+7. Security-sensitive SQL: land in `migrations/0NN-….sql` next number; **apply to prod deliberately**; note apply in changelog.  
+8. **`migrations/` is schema SoT** — do not trust `supabase/migrations/` CLI history as “what’s live.”
+
+---
+
+## Handoff to Joi — 2026-07-14 (Beck)
+
+**Branch:** `main` is clean and deployed. **Pull before anything.**
+
+### Shipped this session (Beck, newest first)
+
+| Commit | What |
+|--------|------|
+| `a8a05b3` | **Buddies fix** — leaders see group members again; migration **033** applied on prod |
+| `c9e28ed` | **Legacy onboarding hard-delete** — Agent + Simple only; no kill switch |
+| `65f2f5e` | **Phase 3.7** — Week-end Review + Generate next week card |
+| `18de7dd` | **Phase 1.4** — bounded bootstrap set logs (8 weeks + lazy older weeks) |
+
+Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
+
+### Critical gotcha for Joi (read this)
+
+**Bug Matt hit:** Swol Patrol leader UI showed **0 members** while Wren still saw the shared program.
+
+- **Data was fine** — `buddy_requests` had Wren + Chase as `accepted`.
+- **Broken RPC:** `get_group_members` after migration 027 used unqualified `member_id` / `leader_id` inside PL/pgSQL `RETURNS TABLE` OUT params → authenticated callers got **ambiguous column**; web client returned `[]`.
+- **Fix:** migration **033** (live on prod). Client also always loads members for leaders + buddy fallback.
+- **When writing PL/pgSQL `RETURNS TABLE` functions:** always table-qualify columns in SQL bodies (`br.member_id`, not `member_id`). Re-test as **authenticated** role, not only as superuser/SQL editor (null `auth.role()` skips some guards and can hide the bug).
+
+### Product paths (current truth)
+
+| Area | State |
+|------|--------|
+| Onboarding | **AgentOnboarding** default → **SimpleOnboarding** fallback only. Legacy 13-step **gone**. `VITE_NEW_ONBOARDING_FLOW` unused — safe to delete from Vercel. |
+| Buddies / groups | Leader list fixed. Swol Patrol: Matt Merrill leader; Wren + Chase members. |
+| Week-end continuity | `WeekEndReviewCard` when next week unprogrammed + late week / all days accounted. |
+| Cold start | Set logs last 8 weeks; completions/missed full history; lazy older weeks on navigate. |
 
 ### Suggested next pick-ups for Joi
 
-1. Phase 2 efficiency (select columns, bootstrap waterfalls, CI gates)  
-2. Optional: authenticated IDOR smoke test (Phase 0.6 remainder) with Matt  
-3. Phase 3.8 PWA / add-to-homescreen if still web-only long-term  
+1. **Phase 2 efficiency** — select columns (not `*`) on hot paths; parallelize remaining bootstrap waterfalls; ESLint + `mcp` `tsc` as CI/Vercel gates  
+2. **Phase 0.6 remainder** — live authenticated IDOR smoke (call RPCs with another user’s UUID; expect `forbidden`). Defs look hardened; runtime probes not automated  
+3. **Phase 3.8** — PWA / add-to-homescreen if web-only stays the plan  
+4. Optional: **shared date/week module** web + MCP (calendar-date bugs hit twice already)  
+5. Optional: remove `VITE_NEW_ONBOARDING_FLOW` from Vercel project env for hygiene  
 
 ### Suggested next pick-ups for Beck
 
-1. Phase 0.6 remainder — live RPC IDOR probes under authenticated non-admin session  
-2. Shared date/week module between web + MCP  
-3. Phase 2.1–2.2 bootstrap/query efficiency if cold start still feels heavy  
+1. Phase 0.6 live IDOR probes if Joi is on product  
+2. Shared week/date helpers web ↔ MCP  
+3. Phase 2.1–2.2 if cold start still feels heavy after 1.4  
+
+### Ops reminders
+
+- Deploy = push `main` → Vercel project `swol-tracker`  
+- New SQL: `migrations/034-….sql` next; apply prod; changelog here  
+- Web-only: ignore `mobile/` unless Matt re-opens iOS  
+- Vault: [[SwolTracker]] in SharedVault + Coordination-Log; durable plan stays **in this file**
 
 ---
 
