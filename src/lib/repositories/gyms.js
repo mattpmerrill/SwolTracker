@@ -83,21 +83,30 @@ export function createGymsRepo(supabase) {
 
   const addEquipment = async (gymId, name) => {
     if (!supabase) return null
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('gym_equipment')
       .insert({ gym_id: gymId, name })
       .select()
       .single()
+    if (error) {
+      console.error('Error adding equipment:', error)
+      return null
+    }
     return data
   }
 
   const removeEquipment = async (gymId, name) => {
-    if (!supabase) return
-    await supabase
+    if (!supabase) return false
+    const { error } = await supabase
       .from('gym_equipment')
       .delete()
       .eq('gym_id', gymId)
       .eq('name', name)
+    if (error) {
+      console.error('Error removing equipment:', error)
+      return false
+    }
+    return true
   }
 
   return {

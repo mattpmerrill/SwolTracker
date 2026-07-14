@@ -30,7 +30,7 @@ export default function SwolTracker() {
   const toast = useToast();
   const { authUser, authLoading, signOut } = useSession();
   const { isAdmin, showAdmin, checkAdmin, openAdmin, closeAdmin } = useAdmin(authUser);
-  const { isLoading, bundle, onboarding } = useAppBootstrap(authUser);
+  const { isLoading, bundle, onboarding, reload: reloadApp } = useAppBootstrap(authUser);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingData, setOnboardingData] = useState(null);
@@ -74,7 +74,7 @@ export default function SwolTracker() {
     logSet, isSetLogged, getCompletionPercentage,
     getTotalCompletedWorkouts,
     isWorkoutComplete, toggleWorkoutComplete,
-  } = useWorkoutLogger({ currentUser, currentWeek, currentDay, workoutProgram, gymId });
+  } = useWorkoutLogger({ currentUser, currentWeek, currentDay, workoutProgram, gymId, toast });
 
   const aiGen = useAiGenerator({ currentUser, profiles, equipment, workoutProgram, gymId, toast, setWorkoutProgram, setCurrentWeek });
   const { swapState, requestSwap, clearSwap } = useExerciseSwap({ equipment, currentUser, toast });
@@ -93,7 +93,8 @@ export default function SwolTracker() {
     authUser, currentUser, setProfiles, setProgramStartDate, toast,
   });
 
-  // Wire bootstrap bundle → local state. Runs once when the bundle resolves.
+  // Wire bootstrap bundle → local state. Runs when the bundle (or onboarding
+  // signal) resolves, including after a post-onboarding reload().
   useEffect(() => {
     if (onboarding) {
       setOnboardingData(onboarding);
@@ -102,6 +103,8 @@ export default function SwolTracker() {
     }
     if (!bundle) return;
 
+    setShowOnboarding(false);
+    setOnboardingData(null);
     setCurrentUser(bundle.userId);
     setProfiles({ [bundle.userId]: bundle.profile });
     setGroupRole(bundle.groupRole);
@@ -132,18 +135,46 @@ export default function SwolTracker() {
 
   const actualCurrentWeek = calculateCurrentWeek(programStartDate);
 
-  const addEquipment = () => {
+  const addEquipment = async () => {
     const { success, data: name } = validate(equipmentNameSchema, newEquipmentName);
     if (!success || equipment.includes(name)) return;
+    if (!gymId) {
+      toast.error('Gym not ready yet. Try again in a moment.');
+      return;
+    }
+
+    const previous = equipment;
     setEquipment((prev) => [...prev, name]);
     setNewEquipmentName('');
     setShowAddEquipment(false);
+
+    const saved = await db.addEquipment(gymId, name);
+    if (!saved) {
+      setEquipment(previous);
+      toast.error('Could not save equipment. Try again.');
+    }
   };
-  const removeEquipment = (item) => setEquipment((prev) => prev.filter((e) => e !== item));
+
+  const removeEquipment = async (item) => {
+    if (!gymId) {
+      toast.error('Gym not ready yet. Try again in a moment.');
+      return;
+    }
+
+    const previous = equipment;
+    setEquipment((prev) => prev.filter((e) => e !== item));
+
+    const ok = await db.removeEquipment(gymId, item);
+    if (ok === false) {
+      setEquipment(previous);
+      toast.error('Could not remove equipment. Try again.');
+    }
+  };
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
-    if (authUser) window.location.reload();
+    setOnboardingData(null);
+    reloadApp();
   };
 
   if (authLoading || isLoading) {

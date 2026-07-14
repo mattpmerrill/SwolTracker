@@ -2,6 +2,13 @@
 
 A workout tracking and AI-powered fitness coaching app built with React and Supabase.
 
+## Architecture review & team game plan
+
+**Web-only architecture review, Phase 0–3 roadmap, and handoff for Joi/Ada:**  
+→ [`docs/WEB-ARCHITECTURE-AND-GAME-PLAN.md`](docs/WEB-ARCHITECTURE-AND-GAME-PLAN.md)
+
+Treat that file as the durable source of truth for refactoring priority. Ignore `mobile/` unless Matt re-scopes iOS.
+
 ## Overview
 
 SwolTracker helps users track their workouts, log 1RM (one-rep max) lifts, and generate personalized weekly workout programs using AI. It supports both individual use and "workout groups" where members can follow a leader's program.

@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { db } from '../lib/supabase';
 import { calculateCurrentWeek } from '../utils/date';
 
 /**
  * One-shot bootstrap that turns an authenticated user into a fully loaded
- * app state bundle. Called once when authUser arrives. Returns a loading
- * flag, an onboarding signal, and the data bundle to hydrate app state with.
+ * app state bundle. Called when authUser arrives, and again when `reload()`
+ * is invoked (e.g. after onboarding completes). Returns a loading flag, an
+ * onboarding signal, the data bundle to hydrate app state with, and reload.
  *
  * Consumers wire the returned bundle into their local state via a single
  * effect; we do not own the state here.
@@ -14,10 +15,17 @@ export function useAppBootstrap(authUser) {
   const [isLoading, setIsLoading] = useState(true);
   const [bundle, setBundle] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const reload = useCallback(() => {
+    setReloadToken((t) => t + 1);
+  }, []);
 
   useEffect(() => {
     if (!authUser) {
       setIsLoading(false);
+      setBundle(null);
+      setOnboarding(null);
       return;
     }
 
@@ -44,9 +52,9 @@ export function useAppBootstrap(authUser) {
     })();
 
     return () => { cancelled = true; };
-  }, [authUser]);
+  }, [authUser, reloadToken]);
 
-  return { isLoading, bundle, onboarding };
+  return { isLoading, bundle, onboarding, reload };
 }
 
 async function loadUserBundle(authUser) {
