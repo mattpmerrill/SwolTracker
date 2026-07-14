@@ -2,7 +2,7 @@
 title: SwolTracker Web Architecture Review & Game Plan
 status: active
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-07-14
 author: Beck
 audience: Matt, Joi, Ada, future agents
 scope: Web app only (src/, api/, mcp/, migrations/) — mobile/ is out of scope
@@ -197,8 +197,8 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 3.2 | Realtime coach notes / program updates (`app_events` migrations exist) | Open |
 | 3.3 | Surface overload recs on ExerciseCard (data already used in AI gen) | Largely shipped |
 | 3.4 | Missed-day UX next to complete (MCP/DB support exists) | **Done 2026-07-13** |
-| 3.5 | Coach Board as primary surface, not FAB-only | Open |
-| 3.6 | Post-workout “note to agent” CTA | Open |
+| 3.5 | Coach Board as primary surface, not FAB-only | **Done 2026-07-14** |
+| 3.6 | Post-workout “note to agent” CTA | **Done 2026-07-14** |
 | 3.7 | Week-end Review → Generate next week flow (roadmap 1A) | Open |
 | 3.8 | PWA / add-to-homescreen if web-only for 6+ months | Open |
 
@@ -260,7 +260,7 @@ migrations/                  # Prefer this as SQL history
 
 1. **Phase 0.4** with Matt — confirm prod migrations 027–032  
 2. **Phase 1.4** — bounded bootstrap log load  
-3. **Phase 3.5 / 3.6** — Coach Board prominence + post-workout note CTA  
+3. **Phase 3.7** — Week-end Review → Generate next week flow  
 4. Hard-delete legacy onboarding after a short completion window  
 
 ### Suggested next pick-ups for Beck
@@ -275,6 +275,7 @@ migrations/                  # Prefer this as SQL history
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-14 | Joi | **Phase 3.5 + 3.6:** Coach Board primary surfaces — header Bot button (unread), always-on workout `CoachBoardEntry`, keep FAB as secondary. Post-workout “How was training?” CTA with quick chips + free text → `sendUserMessage`; per week/day dismiss. `useAgentChat.send(override)` + reportWriteFailure + sending state. |
 | 2026-07-13 | Joi | **Phase 1.5 + 3.4:** `reportWriteFailure` helper; toast+errorService on workout log/complete, maxes, profile, buddies, equipment, swap, AI confirm; web `logMissedDay`/`clearMissedDay`/`getMissedDays`; Skip day UI on WorkoutFocus with reason chips; DaySelector amber missed dots; bootstrap hydrates missed days. |
 | 2026-07-13 | Joi | **Phase 1.3:** agent-native onboarding is the default path; SimpleOnboarding remains "No agent?" fallback; legacy 13-step wizard only via kill switch `VITE_NEW_ONBOARDING_FLOW=false`. Shared option lists → `src/constants/onboardingOptions.js`. Soft-archive deprecation on `Onboarding/` + `useOnboarding.js`. Flag defaults **true** when unset. Set `VITE_NEW_ONBOARDING_FLOW=true` in local/prod env files; **also set on Vercel** if cloud build does not load `.env.production`. |
 | 2026-07-13 | Beck | Phase 1.1–1.2: Session/Program/WorkoutLog contexts; AuthenticatedShell; react-router URL tabs + `/settings` `/admin` `/onboarding` |

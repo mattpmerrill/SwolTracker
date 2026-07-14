@@ -37,6 +37,7 @@ export default function AgentChatPanel({
   messages,
   loading,
   input,
+  sending = false,
   chatEndRef,
   onClose,
   onInputChange,
@@ -216,14 +217,16 @@ export default function AgentChatPanel({
               }}
               placeholder="Leave a note for your coach..."
               maxLength={5000}
-              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-4 focus:outline-none focus:border-cyan-500/50 transition-colors text-sm"
+              disabled={sending}
+              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-4 focus:outline-none focus:border-cyan-500/50 transition-colors text-sm disabled:opacity-50"
             />
             <button
-              onClick={onSend}
-              disabled={!input.trim()}
+              type="button"
+              onClick={() => onSend()}
+              disabled={!input.trim() || sending}
               className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-cyan-400 hover:to-teal-500 transition-all"
             >
-              <Send className="w-4 h-4" />
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </div>
         </div>

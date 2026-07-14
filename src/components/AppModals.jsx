@@ -29,6 +29,7 @@ export default function AppModals({
         messages={agentChat.messages}
         loading={agentChat.loading}
         input={agentChat.input}
+        sending={agentChat.sending}
         chatEndRef={agentChat.chatEndRef}
         onClose={agentChat.close}
         onInputChange={agentChat.setInput}

@@ -195,6 +195,9 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
         user={user}
         onSettingsClick={openSettings}
         onProfileClick={() => setShowProfile(true)}
+        showCoach={hasAgentKey}
+        coachUnread={agentChat.hasUnread}
+        onCoachClick={agentChat.open}
       />
 
       <main className="px-5 py-6">
@@ -232,6 +235,10 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             onCancelSwap: clearSwap,
             latestCoachNote: agentChat.latestCoachNote,
             onOpenAgentChat: agentChat.open,
+            hasAgentKey,
+            coachHasUnread: agentChat.hasUnread,
+            coachSending: agentChat.sending,
+            onSendCoachNote: (content) => agentChat.send(content),
           }}
           maxesProps={{
             user,

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../lib/supabase';
 import { getWeekDates, getTodayDayName } from '../utils/date';
-import { DAYS_OF_WEEK } from '../constants';
 import {
   WeekSelector,
   DaySelector,
@@ -11,6 +10,8 @@ import {
   RestDayState,
 } from '../components/Workout';
 import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
+import CoachBoardEntry from '../components/AgentChat/CoachBoardEntry';
+import PostWorkoutCoachPrompt from '../components/AgentChat/PostWorkoutCoachPrompt';
 
 /**
  * Workout tab screen composition
@@ -47,6 +48,10 @@ export default function WorkoutScreen({
   onCancelSwap,
   latestCoachNote,
   onOpenAgentChat,
+  hasAgentKey = false,
+  coachHasUnread = false,
+  coachSending = false,
+  onSendCoachNote,
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
   const availableWeeks = Object.keys(workoutProgram || {})
@@ -61,6 +66,9 @@ export default function WorkoutScreen({
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
   const todayDayName = getTodayDayName();
   const isViewingToday = currentWeek === actualCurrentWeek && currentDay === todayDayName;
+  const dayComplete = user?.id
+    ? isWorkoutComplete(currentWeek, currentDay, user.id)
+    : false;
 
   useEffect(() => {
     let isCancelled = false;
@@ -83,7 +91,16 @@ export default function WorkoutScreen({
 
   return (
     <>
-      {/* Coach Note Card */}
+      {/* Phase 3.5 — Coach Board primary entry (not FAB-only) */}
+      {hasAgentKey && (
+        <CoachBoardEntry
+          hasUnread={coachHasUnread}
+          hasLatestNote={!!latestCoachNote}
+          onOpen={onOpenAgentChat}
+        />
+      )}
+
+      {/* Latest coach review / program note preview */}
       {latestCoachNote && (
         <CoachNoteCard note={latestCoachNote} onOpenChat={onOpenAgentChat} />
       )}
@@ -133,12 +150,24 @@ export default function WorkoutScreen({
           currentDay={currentDay}
           workout={todayWorkout}
           completionPercentage={getCompletionPercentage(currentWeek, currentDay, user.id)}
-          isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
+          isWorkoutComplete={dayComplete}
           isWorkoutMissed={isWorkoutMissed?.(currentWeek, currentDay, user.id)}
           missedReason={getMissedReason?.(currentWeek, currentDay, user.id)}
           onToggleComplete={() => onToggleWorkoutComplete(currentWeek, currentDay)}
           onMarkMissed={onMarkMissed}
           onClearMissed={onClearMissed}
+        />
+      )}
+
+      {/* Phase 3.6 — post-workout note to agent */}
+      {hasAgentKey && hasWorkoutProgrammed && dayComplete && todayWorkout?.focus !== 'Rest Day' && (
+        <PostWorkoutCoachPrompt
+          week={currentWeek}
+          day={currentDay}
+          focusLabel={todayWorkout?.focus}
+          sending={coachSending}
+          onSend={onSendCoachNote}
+          onOpenFullBoard={onOpenAgentChat}
         />
       )}
 
@@ -173,6 +202,7 @@ export default function WorkoutScreen({
           Positioned above the Coach Board FAB (bottom-24) so they don't overlap. */}
       {!isViewingToday && (
         <button
+          type="button"
           onClick={onGoToCurrentWeek}
           className="fixed bottom-44 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105 active:scale-95 transition-all"
         >
