@@ -13,7 +13,6 @@ import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useProgram, useWorkoutLog } from '../contexts';
 
 import { Header, BottomNav } from './Layout';
-import AgentChatFAB from './AgentChat/AgentChatFAB';
 import ScreenRouter from './ScreenRouter';
 import AppModals from './AppModals';
 
@@ -300,7 +299,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} user={user} />
 
-      {hasAgentKey && <AgentChatFAB hasUnread={agentChat.hasUnread} onClick={agentChat.open} />}
+      {/* Coach Board FAB removed 2026-07-22 — triple entry was clutter.
+          Primary surfaces only: Header Bot + workout CoachBoardEntry. */}
 
       <AppModals
         agentChat={agentChat}

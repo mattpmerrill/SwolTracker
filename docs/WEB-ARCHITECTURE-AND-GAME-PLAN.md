@@ -197,7 +197,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 3.2 | Realtime coach notes / program updates (`app_events` migrations exist) | Open |
 | 3.3 | Surface overload recs on ExerciseCard (data already used in AI gen) | Largely shipped |
 | 3.4 | Missed-day UX next to complete (MCP/DB support exists) | **Done 2026-07-13** |
-| 3.5 | Coach Board as primary surface, not FAB-only | **Done 2026-07-14** |
+| 3.5 | Coach Board as primary surface, not FAB-only | **Done 2026-07-14** (FAB unmounted 2026-07-22 — header + strip only) |
 | 3.6 | Post-workout “note to agent” CTA | **Done 2026-07-14** |
 | 3.7 | Week-end Review → Generate next week flow (roadmap 1A) | **Done 2026-07-14** |
 | 3.8 | PWA / add-to-homescreen if web-only for 6+ months | Open |
@@ -324,6 +324,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 | 2026-07-14 | Beck | **Phase 3.7:** Week-end Review → Generate next week. Proactive `WeekEndReviewCard` when next calendar week has no program and current week is late/all-accounted; opens AI generator with history/overload already loaded, default `weekCount: 1`. Settings + empty state copy → “Review + Generate”. Helpers/tests in `src/lib/programContinuity.js`. |
 | 2026-07-14 | Beck | **Phase 0.4–0.5 + partial 0.6:** Prod SQL verify for 027–032 markers (functions/tables/prompt). Dual-migration policy: `migrations/` is SoT; `supabase/migrations/` CLI history is incomplete and must not be used as “what’s applied.” Key RPCs use `_require_self` or force `auth.uid()`; full interactive IDOR suite still open. |
 | 2026-07-14 | Beck | **Phase 1.4:** Bounded bootstrap set-log load — last 8 calendar weeks via `getWorkoutLogsInWeekRange`; completions + missed days remain full history (tiny). Lazy-fetch older weeks when the week cursor moves outside the window (`WorkoutLogContext`). Helpers in `src/lib/bootstrapLogs.js`. |
+| 2026-07-22 | Joi | **Coach Board FAB removed from shell** — only Header Bot + workout `CoachBoardEntry` remain (was 3 entry points). `AgentChatFAB.jsx` kept but unmounted. Jump-to-Today lowered to `bottom-24`. |
 | 2026-07-14 | Joi | **Phase 3.5 + 3.6:** Coach Board primary surfaces — header Bot button (unread), always-on workout `CoachBoardEntry`, keep FAB as secondary. Post-workout “How was training?” CTA with quick chips + free text → `sendUserMessage`; per week/day dismiss. `useAgentChat.send(override)` + reportWriteFailure + sending state. |
 | 2026-07-13 | Joi | **Phase 1.5 + 3.4:** `reportWriteFailure` helper; toast+errorService on workout log/complete, maxes, profile, buddies, equipment, swap, AI confirm; web `logMissedDay`/`clearMissedDay`/`getMissedDays`; Skip day UI on WorkoutFocus with reason chips; DaySelector amber missed dots; bootstrap hydrates missed days. |
 | 2026-07-13 | Joi | **Phase 1.3:** agent-native onboarding is the default path; SimpleOnboarding remains "No agent?" fallback; legacy 13-step wizard only via kill switch `VITE_NEW_ONBOARDING_FLOW=false`. Shared option lists → `src/constants/onboardingOptions.js`. Soft-archive deprecation on `Onboarding/` + `useOnboarding.js`. Flag defaults **true** when unset. Set `VITE_NEW_ONBOARDING_FLOW=true` in local/prod env files; **also set on Vercel** if cloud build does not load `.env.production`. |

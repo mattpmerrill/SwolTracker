@@ -2,7 +2,10 @@ import { Bot } from 'lucide-react';
 
 /**
  * Floating action button for agent chat — fixed bottom-right, above BottomNav.
- * Secondary entry; primary surfaces are Header + workout Coach strip (Phase 3.5).
+ *
+ * UNUSED as of 2026-07-22: shell no longer mounts this. Coach Board entry is
+ * Header Bot + workout CoachBoardEntry only (triple-entry felt cluttered).
+ * Kept for easy restore if we want a single-tab FAB again.
  */
 export default function AgentChatFAB({ hasUnread, onClick }) {
   return (
