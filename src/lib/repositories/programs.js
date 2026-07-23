@@ -37,7 +37,7 @@ export function createProgramsRepo(supabase) {
         created_by: userId,
         ai_generated: aiGenerated,
         ai_notes: aiNotes
-      })
+      }, { onConflict: 'gym_id,week_number' })
       .select()
       .single()
     if (error) {

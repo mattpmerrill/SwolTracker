@@ -516,7 +516,10 @@ export function createActionTools(
           created_by: userId,
           ai_generated: aiGenerated ?? false,
           ai_notes: aiNotes ?? null,
-        }
+        },
+        // Unique on (gym_id, week_number) — without onConflict PostgREST
+        // treats this as INSERT and 409s when updating an existing week.
+        { onConflict: "gym_id,week_number" },
       )
       .select()
       .single();
