@@ -200,7 +200,7 @@ Full write-up: `SECURITY-REVIEW-2026-04.md`.
 | 3.5 | Coach Board as primary surface, not FAB-only | **Done 2026-07-14** (FAB unmounted 2026-07-22 — header + strip only) |
 | 3.6 | Post-workout “note to agent” CTA | **Done 2026-07-14** |
 | 3.7 | Week-end Review → Generate next week flow (roadmap 1A) | **Done 2026-07-14** |
-| 3.8 | PWA / add-to-homescreen if web-only for 6+ months | Open |
+| 3.8 | PWA / add-to-homescreen + offline set queue | **Done 2026-08-12** (installable PWA + write queue; no Today Home) |
 
 **Do not do:** Next.js rewrite “because serverless,” Redux for everything, full TypeScript UI migration in one PR.
 
@@ -319,6 +319,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-12 | Joi | **Phase 3.8:** Installable PWA (manifest, apple-touch-icon, SW app-shell cache) + offline write queue for set log / complete / skip. Last write per set wins; flush on reconnect. Banner shows pending count. |
 | 2026-08-12 | Joi | **Week math + actual reps:** Insights `getCurrentWeekFromStartDate` now uses Monday-aligned `calculateCurrentWeek` (same as workout + MCP) instead of elapsed-ms. SetRow can edit actual reps; cascade + localStorage match weight overrides; `actual_reps` persists on log. |
 | 2026-07-14 | Beck | **Buddies: leaders saw 0 members** — `get_group_members` (migration 027) used unqualified `member_id`/`leader_id` inside a PL/pgSQL `RETURNS TABLE` function, so authenticated calls raised ambiguous-column and the client returned `[]`. Migration **033** qualifies the IDOR guard; bootstrap always loads members for leaders + buddy fallback. Applied on prod. |
 | 2026-07-14 | Beck | **Legacy onboarding hard-delete:** Removed `src/components/Onboarding/`, `useOnboarding.js`, `OnboardingRouter.flag*`, and `handlePrepareForAgent` kill-switch path. `OnboardingRouter` is Agent-native → Simple fallback only. Drop `VITE_NEW_ONBOARDING_FLOW` from env/Vercel (unused). |

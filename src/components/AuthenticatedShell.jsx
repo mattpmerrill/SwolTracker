@@ -10,11 +10,14 @@ import { useBuddyActions } from '../hooks/useBuddyActions';
 import { useMaxesActions } from '../hooks/useMaxesActions';
 import { useProfileActions } from '../hooks/useProfileActions';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useProgram, useWorkoutLog } from '../contexts';
 
 import { Header, BottomNav } from './Layout';
 import ScreenRouter from './ScreenRouter';
 import AppModals from './AppModals';
+import OfflineSyncBanner from './OfflineSyncBanner';
+import PwaInstallHint from './PwaInstallHint';
 
 /**
  * Authenticated app chrome. Tab + settings/admin overlays are URL-driven
@@ -23,6 +26,7 @@ import AppModals from './AppModals';
  */
 export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   const toast = useToast();
+  const { pending: pendingSync, online: syncOnline } = useOfflineSync({ toast });
   const { isAdmin, adminChecked, checkAdmin } = useAdmin(authUser);
   const {
     activeTab,
@@ -198,6 +202,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
         coachUnread={agentChat.hasUnread}
         onCoachClick={agentChat.open}
       />
+      <OfflineSyncBanner pending={pendingSync} online={syncOnline} />
+      <PwaInstallHint />
 
       <main className="px-5 py-6">
         <ScreenRouter
