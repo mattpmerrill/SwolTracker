@@ -319,6 +319,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-12 | Joi | **PWA safe areas:** header/tab bar respect iPhone notch + home indicator (`env(safe-area-inset-*)`) so Settings/Profile are no longer under the status bar. |
 | 2026-08-12 | Joi | **Phase 3.8:** Installable PWA (manifest, apple-touch-icon, SW app-shell cache) + offline write queue for set log / complete / skip. Last write per set wins; flush on reconnect. Banner shows pending count. |
 | 2026-08-12 | Joi | **Week math + actual reps:** Insights `getCurrentWeekFromStartDate` now uses Monday-aligned `calculateCurrentWeek` (same as workout + MCP) instead of elapsed-ms. SetRow can edit actual reps; cascade + localStorage match weight overrides; `actual_reps` persists on log. |
 | 2026-07-14 | Beck | **Buddies: leaders saw 0 members** — `get_group_members` (migration 027) used unqualified `member_id`/`leader_id` inside a PL/pgSQL `RETURNS TABLE` function, so authenticated calls raised ambiguous-column and the client returned `[]`. Migration **033** qualifies the IDOR guard; bootstrap always loads members for leaders + buddy fallback. Applied on prod. |

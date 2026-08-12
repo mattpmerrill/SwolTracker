@@ -193,7 +193,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-24">
+    <div className="min-h-screen bg-zinc-950 text-white pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <Header
         user={user}
         onSettingsClick={openSettings}

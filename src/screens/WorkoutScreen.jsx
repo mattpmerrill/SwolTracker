@@ -263,7 +263,7 @@ export default function WorkoutScreen({
         <button
           type="button"
           onClick={onGoToCurrentWeek}
-          className="fixed bottom-24 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105 active:scale-95 transition-all"
+          className="float-above-tabbar fixed right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105 active:scale-95 transition-all"
         >
           <span>↩</span>
           <span>Today</span>

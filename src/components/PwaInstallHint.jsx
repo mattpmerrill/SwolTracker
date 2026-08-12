@@ -36,7 +36,7 @@ export default function PwaInstallHint() {
   }
 
   return (
-    <div className="fixed bottom-24 left-4 right-4 z-50 px-4 py-3 rounded-2xl bg-zinc-900 border border-orange-500/40 shadow-xl">
+    <div className="float-above-tabbar fixed left-4 right-4 z-50 px-4 py-3 rounded-2xl bg-zinc-900 border border-orange-500/40 shadow-xl">
       <div className="flex items-start gap-3">
         <div className="flex-1 text-sm text-zinc-200">
           <p className="font-semibold text-white mb-1">Add SwolTracker to your Home Screen</p>

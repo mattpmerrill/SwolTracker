@@ -4,3 +4,16 @@ body {
   margin: 0;
   background: #09090b;
 }
+
+/* iOS standalone PWA: keep chrome out from under notch / home indicator */
+.safe-pad-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-pad-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Sit above BottomNav + iPhone home indicator */
+.float-above-tabbar {
+  bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}

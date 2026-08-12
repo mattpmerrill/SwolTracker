@@ -16,7 +16,7 @@ export default function BottomNav({
   user,
 }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/50 px-6 py-3">
+    <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/50 px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex justify-around max-w-lg mx-auto">
         {TABS.map(tab => {
           let notificationCount = 0;

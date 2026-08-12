@@ -13,7 +13,7 @@ export default function Header({
   onCoachClick,
 }) {
   return (
-    <header className="sticky top-0 z-40 bg-gradient-to-b from-zinc-900 to-zinc-900/95 backdrop-blur-xl border-b border-zinc-800/50">
+    <header className="sticky top-0 z-40 safe-pad-top bg-gradient-to-b from-zinc-900 to-zinc-900/95 backdrop-blur-xl border-b border-zinc-800/50">
       <div className="px-5 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

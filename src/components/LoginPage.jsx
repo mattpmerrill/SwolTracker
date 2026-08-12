@@ -17,7 +17,7 @@ export default function LoginPage({ isLoading }) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col safe-pad-top">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-purple-500/10 pointer-events-none" />
 
