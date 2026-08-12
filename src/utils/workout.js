@@ -145,6 +145,26 @@ export const toActualRepsValue = (reps) => {
   return null;
 };
 
+/** Persist this as actual_reps. An explicit override always wins. */
+export const resolveLoggedReps = (prescribedReps, override) => {
+  if (override !== null && override !== undefined && override !== '') return override;
+  return prescribedReps;
+};
+
+/** Starting value for the inline reps editor. */
+export const parseRepsDraft = (prescribedReps, override) => {
+  if (typeof override === 'number' && Number.isFinite(override)) return override;
+  return toActualRepsValue(prescribedReps) ?? 0;
+};
+
+/** True when the user changed reps off the numeric prescription (or entered a number on AMRAP/timed). */
+export const isRepsAdjusted = (prescribedReps, override) => {
+  if (override === null || override === undefined) return false;
+  const prescribed = toActualRepsValue(prescribedReps);
+  if (prescribed == null) return true;
+  return override !== prescribed;
+};
+
 /**
  * Build log entries for any missing sets in a workout day.
  * Used when a user taps "Complete Workout" so the persisted set logs match

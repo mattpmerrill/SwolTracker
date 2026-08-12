@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
 import RestTimer from './RestTimer';
-import { calculateWeight, findMaxKey } from '../../utils/workout';
+import { calculateWeight, findMaxKey, resolveLoggedReps } from '../../utils/workout';
 import { applyWeightCascade } from '../../utils/weightOverrides';
 import { getItem, setItem } from '../../utils/storage';
 
@@ -33,15 +33,21 @@ export default function ExerciseCard({
   // Per-exercise, per-set weight overrides. Keyed by set index; value is the
   // user's actual lift weight (when they scaled the prescribed number).
   const storageKey = `weightOverrides-${exercise.name}`;
+  const repsStorageKey = `repsOverrides-${exercise.name}`;
   const [weightOverrides, setWeightOverrides] = useState(() => {
     // Load from localStorage on mount
     return getItem(storageKey) || {};
   });
+  const [repsOverrides, setRepsOverrides] = useState(() => getItem(repsStorageKey) || {});
 
   // Persist weight overrides to localStorage whenever they change
   useEffect(() => {
     setItem(storageKey, weightOverrides);
   }, [weightOverrides, storageKey]);
+
+  useEffect(() => {
+    setItem(repsStorageKey, repsOverrides);
+  }, [repsOverrides, repsStorageKey]);
 
   // ExerciseCard is keyed by position, not name — on a swap the component
   // re-renders with a new exercise. Clear stale overrides in that case, but
@@ -51,8 +57,10 @@ export default function ExerciseCard({
     if (prevExerciseName.current === exercise.name) return;
     prevExerciseName.current = exercise.name;
     setWeightOverrides({});
+    setRepsOverrides({});
     setItem(storageKey, {});
-  }, [exercise.name, storageKey]);
+    setItem(repsStorageKey, {});
+  }, [exercise.name, storageKey, repsStorageKey]);
 
   // Recommended rest based on reps (heavy = longer rest).
   // Robust to a polluted "reps" string (e.g. "5 warmup, 3 warmup, then 1 rep..."):
@@ -88,6 +96,18 @@ export default function ExerciseCard({
         prev,
         setIdx,
         newWeight,
+        (i) => isSetLogged(exerciseIndex, i),
+        exercise.sets,
+      ),
+    );
+  }, [exerciseIndex, exercise.sets, isSetLogged]);
+
+  const handleRepsChange = useCallback((setIdx, newReps) => {
+    setRepsOverrides((prev) =>
+      applyWeightCascade(
+        prev,
+        setIdx,
+        newReps,
         (i) => isSetLogged(exerciseIndex, i),
         exercise.sets,
       ),
@@ -247,6 +267,7 @@ export default function ExerciseCard({
                   return key ? (userMaxes[key] ?? null) : (userMaxes?.[exercise.name] ?? null);
                 })();
             const override = weightOverrides[setIdx] ?? null;
+            const repsOverride = repsOverrides[setIdx] ?? null;
             const actualWeight = override ?? prescribedWeight;
             const logged = isSetLogged(exerciseIndex, setIdx);
 
@@ -258,6 +279,7 @@ export default function ExerciseCard({
                 prescribedWeight={prescribedWeight}
                 weightOverride={override}
                 reps={exercise.reps}
+                repsOverride={repsOverride}
                 isLogged={logged}
                 isWorkoutComplete={isWorkoutComplete}
                 exerciseName={exercise.name}
@@ -265,11 +287,12 @@ export default function ExerciseCard({
                   exerciseName: exercise.name,
                   actualWeight,
                   prescribedWeight,
-                  actualReps: exercise.reps,
+                  actualReps: resolveLoggedReps(exercise.reps, repsOverride),
                   prescribedReps: exercise.reps,
                 })}
                 onAddMax={() => onAddMax(exercise.name)}
                 onWeightChange={(newWeight) => handleWeightChange(setIdx, newWeight)}
+                onRepsChange={(newReps) => handleRepsChange(setIdx, newReps)}
               />
             );
           })}

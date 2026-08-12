@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Minus, Plus, X } from 'lucide-react';
+import { isRepsAdjusted, parseRepsDraft, toActualRepsValue } from '../../utils/workout';
 
 const STEP_LBS = 5;
+const STEP_REPS = 1;
+const REPS_VISIBLE_MAX = 16;
 
 /**
- * Individual set row with toggle, editable weight, and log-on-tap.
+ * Individual set row with toggle, editable weight/reps, and log-on-tap.
  *
- * Two interaction surfaces share the row:
- *  - Tap the weight text → enters inline edit mode (stepper + input + reset).
- *  - Tap anywhere else → logs the set (at current displayed weight).
+ * Interaction surfaces:
+ *  - Tap the weight text → inline weight editor (stepper + input + reset).
+ *  - Tap the reps text → inline reps editor (stepper + input + reset).
+ *  - Tap anywhere else → logs the set (at current displayed weight/reps).
  * Edit mode blocks the log tap so the two never collide.
  */
 export default function SetRow({
@@ -17,12 +21,14 @@ export default function SetRow({
   prescribedWeight,
   weightOverride,
   reps,
+  repsOverride,
   isLogged,
   isWorkoutComplete,
   exerciseName,
   onLogSet,
   onAddMax,
   onWeightChange,
+  onRepsChange,
 }) {
   const isDisabled = isWorkoutComplete;
   const hasPrescribedWeight = prescribedWeight != null;
@@ -30,55 +36,79 @@ export default function SetRow({
   const hasWeight = hasPrescribedWeight || hasLoggedWeight;
   const displayedWeight = weightOverride ?? prescribedWeight;
   const isAdjusted = hasPrescribedWeight && weightOverride != null && weightOverride !== prescribedWeight;
+  const repsAdjusted = isRepsAdjusted(reps, repsOverride);
+  const prescribedRepsNumeric = toActualRepsValue(reps);
 
-  const [editing, setEditing] = useState(false);
+  const [editingField, setEditingField] = useState(null); // 'weight' | 'reps' | null
   const [draft, setDraft] = useState(displayedWeight ?? 0);
+  const [repsDraft, setRepsDraft] = useState(parseRepsDraft(reps, repsOverride));
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (editing && inputRef.current) {
+    if (editingField && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [editing]);
+  }, [editingField]);
 
   // If the set gets logged or the workout is completed while editing, close the editor.
   useEffect(() => {
-    if (editing && (isLogged || isWorkoutComplete)) setEditing(false);
-  }, [isLogged, isWorkoutComplete, editing]);
+    if (editingField && (isLogged || isWorkoutComplete)) setEditingField(null);
+  }, [isLogged, isWorkoutComplete, editingField]);
 
-  function openEditor(e) {
+  function openWeightEditor(e) {
     e.stopPropagation();
     if (isDisabled || isLogged || !onWeightChange) return;
     setDraft(displayedWeight ?? 0);
-    setEditing(true);
+    setEditingField('weight');
   }
 
-  function commitDraft() {
+  function openRepsEditor(e) {
+    e.stopPropagation();
+    if (isDisabled || isLogged || !onRepsChange) return;
+    setRepsDraft(parseRepsDraft(reps, repsOverride));
+    setEditingField('reps');
+  }
+
+  function commitWeightDraft() {
     const parsed = Number(draft);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setEditing(false);
+      setEditingField(null);
       return;
     }
     if (hasPrescribedWeight && parsed === prescribedWeight) {
-      onWeightChange?.(null); // snap back → clear override
+      onWeightChange?.(null);
     } else {
       onWeightChange?.(parsed);
     }
-    setEditing(false);
+    setEditingField(null);
+  }
+
+  function commitRepsDraft() {
+    const parsed = Number(repsDraft);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setEditingField(null);
+      return;
+    }
+    const next = Math.trunc(parsed);
+    if (prescribedRepsNumeric != null && next === prescribedRepsNumeric) {
+      onRepsChange?.(null);
+    } else {
+      onRepsChange?.(next);
+    }
+    setEditingField(null);
   }
 
   function cancelEdit(e) {
     e?.stopPropagation();
-    e?.preventDefault(); // prevent blur race on the input
-    setEditing(false);
+    e?.preventDefault();
+    setEditingField(null);
   }
 
-  function bump(delta, e) {
+  function bumpWeight(delta, e) {
     e.stopPropagation();
     const next = Math.max(0, Number(draft || 0) + delta);
     setDraft(next);
-    // Commit immediately so every tap persists (no blur race)
     if (hasPrescribedWeight && next === prescribedWeight) {
       onWeightChange?.(null);
     } else {
@@ -86,14 +116,34 @@ export default function SetRow({
     }
   }
 
-  function resetToPrescribed(e) {
+  function bumpReps(delta, e) {
     e.stopPropagation();
-    e.preventDefault(); // prevent blur race on the input
-    onWeightChange?.(null);
-    setEditing(false);
+    const next = Math.max(0, Number(repsDraft || 0) + delta);
+    setRepsDraft(next);
+    if (prescribedRepsNumeric != null && next === prescribedRepsNumeric) {
+      onRepsChange?.(null);
+    } else if (next <= 0) {
+      onRepsChange?.(null);
+    } else {
+      onRepsChange?.(next);
+    }
   }
 
-  const rowClickable = !isDisabled && !editing;
+  function resetToPrescribed(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    onWeightChange?.(null);
+    setEditingField(null);
+  }
+
+  function resetRepsToPrescribed(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    onRepsChange?.(null);
+    setEditingField(null);
+  }
+
+  const rowClickable = !isDisabled && !editingField;
 
   return (
     <div
@@ -121,14 +171,14 @@ export default function SetRow({
       </div>
 
       <div className="flex-1 min-w-0">
-        {editing ? (
+        {editingField === 'weight' ? (
           <div
             className="flex items-center gap-2"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              onClick={(e) => bump(-STEP_LBS, e)}
+              onClick={(e) => bumpWeight(-STEP_LBS, e)}
               className="w-8 h-8 rounded-lg bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
               aria-label={`Decrease by ${STEP_LBS} lbs`}
             >
@@ -141,15 +191,15 @@ export default function SetRow({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commitDraft(); }
+                if (e.key === 'Enter') { e.preventDefault(); commitWeightDraft(); }
                 if (e.key === 'Escape') { e.preventDefault(); cancelEdit(e); }
               }}
-              onBlur={commitDraft}
+              onBlur={commitWeightDraft}
               className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-lg font-bold text-center focus:outline-none focus:border-orange-500"
             />
             <button
               type="button"
-              onClick={(e) => bump(STEP_LBS, e)}
+              onClick={(e) => bumpWeight(STEP_LBS, e)}
               className="w-8 h-8 rounded-lg bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
               aria-label={`Increase by ${STEP_LBS} lbs`}
             >
@@ -174,13 +224,66 @@ export default function SetRow({
               <X className="w-4 h-4 text-zinc-400" />
             </button>
           </div>
+        ) : editingField === 'reps' ? (
+          <div
+            className="flex items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={(e) => bumpReps(-STEP_REPS, e)}
+              className="w-8 h-8 rounded-lg bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              aria-label={`Decrease by ${STEP_REPS} rep`}
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <input
+              ref={inputRef}
+              type="number"
+              inputMode="numeric"
+              value={repsDraft}
+              onChange={(e) => setRepsDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitRepsDraft(); }
+                if (e.key === 'Escape') { e.preventDefault(); cancelEdit(e); }
+              }}
+              onBlur={commitRepsDraft}
+              className="w-16 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-lg font-bold text-center focus:outline-none focus:border-orange-500"
+            />
+            <button
+              type="button"
+              onClick={(e) => bumpReps(STEP_REPS, e)}
+              className="w-8 h-8 rounded-lg bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              aria-label={`Increase by ${STEP_REPS} rep`}
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-zinc-400">reps</span>
+            {repsAdjusted && (
+              <button
+                type="button"
+                onClick={resetRepsToPrescribed}
+                className="ml-1 text-xs text-zinc-400 hover:text-orange-400 underline underline-offset-2"
+              >
+                {prescribedRepsNumeric != null ? `Reset to ${prescribedRepsNumeric}` : 'Clear reps'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="ml-auto w-7 h-7 rounded-lg hover:bg-zinc-700 flex items-center justify-center"
+              aria-label="Close editor"
+            >
+              <X className="w-4 h-4 text-zinc-400" />
+            </button>
+          </div>
         ) : (
           <div className="flex items-baseline gap-2 flex-wrap">
             {hasWeight ? (
               <>
                 <button
                   type="button"
-                  onClick={openEditor}
+                  onClick={openWeightEditor}
                   disabled={isDisabled || isLogged || !onWeightChange}
                   className={`text-lg font-bold ${
                     !isDisabled && !isLogged && onWeightChange
@@ -226,7 +329,7 @@ export default function SetRow({
             ) : (
               <button
                 type="button"
-                onClick={openEditor}
+                onClick={openWeightEditor}
                 disabled={isDisabled || isLogged || !onWeightChange}
                 className={`inline-flex items-center gap-2 text-zinc-400 ${
                   !isDisabled && !isLogged && onWeightChange
@@ -244,22 +347,41 @@ export default function SetRow({
           </div>
         )}
       </div>
-      {(() => {
-        // Defensive: reps can be a long string (e.g. "5 warmup, 3 warmup, then 1 rep
-        // attempts until form breaks") if an upstream agent stuffed warmup/cue text
-        // into the reps field. Cap visible width and tooltip the full text.
-        const repsText = reps == null ? '' : String(reps);
-        const REPS_VISIBLE_MAX = 16;
+      {editingField !== 'reps' && (() => {
+        const repsText = repsOverride != null
+          ? String(repsOverride)
+          : (reps == null ? '' : String(reps));
         const truncated = repsText.length > REPS_VISIBLE_MAX
           ? `${repsText.slice(0, REPS_VISIBLE_MAX - 1)}…`
           : repsText;
         return (
-          <span
-            className="text-sm text-zinc-400 font-medium whitespace-nowrap"
-            title={repsText.length > REPS_VISIBLE_MAX ? repsText : undefined}
+          <button
+            type="button"
+            onClick={openRepsEditor}
+            disabled={isDisabled || isLogged || !onRepsChange}
+            className={`flex items-center gap-1.5 text-sm font-medium whitespace-nowrap ${
+              !isDisabled && !isLogged && onRepsChange
+                ? 'hover:text-orange-400 transition-colors'
+                : 'text-zinc-400'
+            }`}
+            title={!isLogged && onRepsChange ? 'Tap to log actual reps' : (repsText.length > REPS_VISIBLE_MAX ? repsText : undefined)}
           >
-            {truncated}
-          </span>
+            <span className={repsAdjusted ? 'font-bold text-white' : 'text-zinc-400'}>
+              {truncated}
+            </span>
+            {repsAdjusted && prescribedRepsNumeric != null && (
+              <span
+                className={`text-xs font-medium px-1.5 py-0.5 rounded-md ${
+                  repsOverride < prescribedRepsNumeric
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                }`}
+              >
+                {repsOverride < prescribedRepsNumeric ? '↓' : '↑'}{' '}
+                {Math.abs(repsOverride - prescribedRepsNumeric)}
+              </span>
+            )}
+          </button>
         );
       })()}
     </div>

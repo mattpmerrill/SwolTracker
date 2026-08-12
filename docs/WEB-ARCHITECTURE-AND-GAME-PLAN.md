@@ -2,7 +2,7 @@
 title: SwolTracker Web Architecture Review & Game Plan
 status: active
 created: 2026-07-13
-updated: 2026-07-14
+updated: 2026-08-12
 author: Beck (+ Joi changelog)
 handoff: joi
 audience: Matt, Joi, Ada, future agents
@@ -319,6 +319,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-12 | Joi | **Week math + actual reps:** Insights `getCurrentWeekFromStartDate` now uses Monday-aligned `calculateCurrentWeek` (same as workout + MCP) instead of elapsed-ms. SetRow can edit actual reps; cascade + localStorage match weight overrides; `actual_reps` persists on log. |
 | 2026-07-14 | Beck | **Buddies: leaders saw 0 members** — `get_group_members` (migration 027) used unqualified `member_id`/`leader_id` inside a PL/pgSQL `RETURNS TABLE` function, so authenticated calls raised ambiguous-column and the client returned `[]`. Migration **033** qualifies the IDOR guard; bootstrap always loads members for leaders + buddy fallback. Applied on prod. |
 | 2026-07-14 | Beck | **Legacy onboarding hard-delete:** Removed `src/components/Onboarding/`, `useOnboarding.js`, `OnboardingRouter.flag*`, and `handlePrepareForAgent` kill-switch path. `OnboardingRouter` is Agent-native → Simple fallback only. Drop `VITE_NEW_ONBOARDING_FLOW` from env/Vercel (unused). |
 | 2026-07-14 | Beck | **Phase 3.7:** Week-end Review → Generate next week. Proactive `WeekEndReviewCard` when next calendar week has no program and current week is late/all-accounted; opens AI generator with history/overload already loaded, default `weekCount: 1`. Settings + empty state copy → “Review + Generate”. Helpers/tests in `src/lib/programContinuity.js`. |

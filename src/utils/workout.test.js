@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildMissingWorkoutSetLogs, calculateWeight, findMaxKey } from './workout';
+import {
+  buildMissingWorkoutSetLogs,
+  calculateWeight,
+  findMaxKey,
+  isRepsAdjusted,
+  parseRepsDraft,
+  resolveLoggedReps,
+} from './workout';
 
 describe('findMaxKey', () => {
   it('prefers the incline dumbbell max over the incline bench max', () => {
@@ -87,5 +94,49 @@ describe('buildMissingWorkoutSetLogs', () => {
         completed: true,
       },
     ]);
+  });
+});
+
+describe('resolveLoggedReps', () => {
+  it('prefers an explicit override over the prescription', () => {
+    expect(resolveLoggedReps('8', 6)).toBe(6);
+    expect(resolveLoggedReps(8, 6)).toBe(6);
+  });
+
+  it('passes the prescription through when there is no override', () => {
+    expect(resolveLoggedReps('8', null)).toBe('8');
+    expect(resolveLoggedReps('AMRAP', null)).toBe('AMRAP');
+    expect(resolveLoggedReps('8-10', undefined)).toBe('8-10');
+  });
+});
+
+describe('parseRepsDraft', () => {
+  it('uses the override when present', () => {
+    expect(parseRepsDraft('8', 6)).toBe(6);
+  });
+
+  it('uses a numeric prescription as the draft', () => {
+    expect(parseRepsDraft('8', null)).toBe(8);
+    expect(parseRepsDraft(10, null)).toBe(10);
+  });
+
+  it('starts AMRAP and timed prescriptions at 0', () => {
+    expect(parseRepsDraft('AMRAP', null)).toBe(0);
+    expect(parseRepsDraft('30 sec', null)).toBe(0);
+  });
+});
+
+describe('isRepsAdjusted', () => {
+  it('is false when there is no override', () => {
+    expect(isRepsAdjusted('8', null)).toBe(false);
+  });
+
+  it('is true when the override differs from a numeric prescription', () => {
+    expect(isRepsAdjusted('8', 6)).toBe(true);
+    expect(isRepsAdjusted('8', 8)).toBe(false);
+  });
+
+  it('is true when the user entered a number on a non-numeric prescription', () => {
+    expect(isRepsAdjusted('AMRAP', 12)).toBe(true);
   });
 });
