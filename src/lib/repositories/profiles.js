@@ -49,7 +49,7 @@ export function createProfilesRepo(supabase) {
         await supabase.storage.from('avatars').remove(filePaths)
       }
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('avatars')
         .upload(fileName, file, {
           cacheControl: '3600',

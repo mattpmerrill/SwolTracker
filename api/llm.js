@@ -5,8 +5,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { PROVIDER_CONFIGS, ENV_KEYS, callLlmWithConfig, resolveProviderWithFallback } from './_llm-core.js';
 import { setCorsHeaders } from './_mcp-shared.js';
+import { isPromptTooLarge, publicLlmError } from './_llm-guard.js';
+import { captureException, initSentry } from './_sentry.js';
 
 const AI_DAILY_LIMIT = 20; // max AI generations per user per day
+
+initSentry();
 
 export default async function handler(req, res) {
   setCorsHeaders(res, req);
@@ -14,11 +18,22 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  let user = null;
+  let supabase = null;
+  let requestType = 'weekly';
+  let effectiveModel = null;
+
   try {
-    const { provider, systemPrompt, userPrompt, requestType } = req.body;
+    const body = req.body || {};
+    const { provider, systemPrompt, userPrompt } = body;
+    requestType = body.requestType || 'weekly';
 
     if (!provider || !systemPrompt || !userPrompt) {
       return res.status(400).json({ error: 'Missing required fields: provider, systemPrompt, userPrompt' });
+    }
+
+    if (isPromptTooLarge(systemPrompt, userPrompt)) {
+      return res.status(413).json({ error: 'Prompt too large.' });
     }
 
     const config = PROVIDER_CONFIGS[provider];
@@ -63,9 +78,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Missing Authorization header.' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
     const token = authHeader.slice(7);
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const authResult = await supabase.auth.getUser(token);
+    const authError = authResult.error;
+    user = authResult.data?.user;
 
     if (authError || !user) {
       return res.status(401).json({ error: 'Invalid or expired token.' });
@@ -85,7 +102,7 @@ export default async function handler(req, res) {
 
     // Per-provider model override from app_settings (request-scoped — never mutate
     // PROVIDER_CONFIGS, which is module-level shared state. F-013.)
-    let effectiveModel = effectiveConfig.models[requestType] || effectiveConfig.defaultModel;
+    effectiveModel = effectiveConfig.models[requestType] || effectiveConfig.defaultModel;
     const modelOverrideKey = `llm_model_${effectiveProvider}`;
     const { data: modelOverride } = await supabase
       .rpc('get_app_setting', { p_key: modelOverrideKey });
@@ -103,13 +120,36 @@ export default async function handler(req, res) {
       requestType,
     });
 
+    await supabase.rpc('log_api_usage', {
+      p_user_id: user.id,
+      p_request_type: requestType,
+      p_model: result.model || effectiveModel,
+      p_prompt_tokens: result.usage?.prompt_tokens ?? null,
+      p_completion_tokens: result.usage?.completion_tokens ?? null,
+      p_success: true,
+      p_error_message: null,
+    }).then(({ error: logError }) => {
+      if (logError) console.error('log_api_usage failed:', logError.message);
+    });
+
     return res.status(200).json({ ...result, provider: effectiveProvider });
   } catch (error) {
     console.error('LLM proxy error:', error);
-    const status = error.message?.includes('401') || error.message?.includes('API key') ? 401
-      : error.message?.includes('429') || error.message?.includes('rate limit') ? 429
-      : error.message?.includes('timeout') ? 504
-      : 500;
-    return res.status(status).json({ error: error.message || 'Internal server error' });
+    captureException(error, { tags: { endpoint: 'llm' } });
+    if (supabase && user) {
+      supabase.rpc('log_api_usage', {
+        p_user_id: user.id,
+        p_request_type: requestType,
+        p_model: effectiveModel,
+        p_prompt_tokens: null,
+        p_completion_tokens: null,
+        p_success: false,
+        p_error_message: (error?.message || 'error').slice(0, 500),
+      }).then(({ error: logError }) => {
+        if (logError) console.error('log_api_usage failed:', logError.message);
+      });
+    }
+    const mapped = publicLlmError(error);
+    return res.status(mapped.status).json({ error: mapped.error });
   }
 }

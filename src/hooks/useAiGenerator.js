@@ -95,7 +95,7 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
 
       let promptTemplate = await db.getPromptTemplate('multi_week_workout_generator');
 
-      const athletesInfo = Object.entries(profiles).map(([id, p]) =>
+      const athletesInfo = Object.entries(profiles).map(([, p]) =>
         `${p.name}: maxes = ${JSON.stringify(p.maxes || {})}`
       ).join('\n');
 

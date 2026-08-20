@@ -89,7 +89,7 @@ export function createErrorContext(additionalInfo = {}) {
  * @param {string} defaultCategory - Default category if unable to determine
  * @returns {Object} { type: string, severity: string }
  */
-export function categorizeError(error, defaultCategory = ErrorCategory.UNKNOWN) {
+export function categorizeError(error, _defaultCategory = ErrorCategory.UNKNOWN) {
   const message = error?.message?.toLowerCase() || '';
 
   // Network/timeout errors

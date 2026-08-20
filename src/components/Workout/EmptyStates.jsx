@@ -5,7 +5,7 @@ import { Brain, Clock } from 'lucide-react';
  */
 export function NoWorkoutState({
   currentWeek,
-  actualCurrentWeek,
+  _actualCurrentWeek,
   groupRole,
   groupLeader,
   onGenerateWorkout,

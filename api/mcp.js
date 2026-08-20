@@ -17,6 +17,9 @@ import {
   setCorsHeaders,
   writeAudit,
 } from './_mcp-shared.js';
+import { captureException, initSentry } from './_sentry.js';
+
+initSentry();
 
 function extractToolName(body) {
   if (body && !Array.isArray(body) && body.method === 'tools/call') return body.params?.name || null;
@@ -79,6 +82,7 @@ export default async function handler(req, res) {
     auditOk = res.statusCode < 400;
   } catch (error) {
     console.error('MCP endpoint error:', error);
+    captureException(error, { tags: { endpoint: 'mcp' } });
     auditOk = false;
     auditError = error?.message ?? String(error);
     if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });

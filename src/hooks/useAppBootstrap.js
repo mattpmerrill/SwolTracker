@@ -150,9 +150,7 @@ async function loadUserBundle(authUser) {
   }
 
   const gyms = await db.getMyGyms(userId);
-  const gymId = gyms.length === 0
-    ? (await db.createGym('Personal Gym', userId))?.id
-    : gyms[0].id;
+  const gymId = gyms[0]?.id ?? null;
 
   let equipment = null;
   let leaderGymId = null;

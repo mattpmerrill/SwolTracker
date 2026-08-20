@@ -24,7 +24,7 @@ export default function SetRow({
   repsOverride,
   isLogged,
   isWorkoutComplete,
-  exerciseName,
+  _exerciseName,
   onLogSet,
   onAddMax,
   onWeightChange,
