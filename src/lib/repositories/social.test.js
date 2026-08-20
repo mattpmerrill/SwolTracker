@@ -33,4 +33,26 @@ describe('socialRepo', () => {
     const result = await repo.getBuddyProfile('b1');
     expect(result).toEqual({ id: 'b1', name: 'Buddy', maxes: { Bench: 225 } });
   });
+
+  it('acceptGroupInvite returns the JSONB payload (success: false is still an object)', async () => {
+    const sb = createMockSupabase();
+    sb.respond('rpc.accept_group_invite', {
+      data: { success: false, error: 'Invalid request or already processed' },
+      error: null,
+    });
+    const repo = createSocialRepo(sb, deps());
+    const result = await repo.acceptGroupInvite('req-1', 'u1');
+    expect(result).toEqual({ success: false, error: 'Invalid request or already processed' });
+  });
+
+  it('acceptGroupInvite returns { success: false } when the rpc errors', async () => {
+    const sb = createMockSupabase();
+    sb.respond('rpc.accept_group_invite', {
+      data: null,
+      error: { message: 'forbidden' },
+    });
+    const repo = createSocialRepo(sb, deps());
+    const result = await repo.acceptGroupInvite('req-1', 'u1');
+    expect(result).toEqual({ success: false, error: 'forbidden' });
+  });
 });

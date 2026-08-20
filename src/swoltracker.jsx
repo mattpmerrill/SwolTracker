@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { useSessionContext, ProgramProvider, WorkoutLogProvider } from './contexts';
-import { useAppBootstrap } from './hooks/useAppBootstrap';
+import { isBootstrapLoadError, useAppBootstrap } from './hooks/useAppBootstrap';
 import { useOnboardingActions } from './hooks/useOnboardingActions';
 import { ROUTES } from './lib/routes';
 
@@ -18,7 +18,7 @@ import AuthenticatedShell from './components/AuthenticatedShell';
  */
 export default function SwolTracker() {
   const { authUser, authLoading, signOut } = useSessionContext();
-  const { isLoading, bundle, onboarding, reload: reloadApp } = useAppBootstrap(authUser);
+  const { isLoading, bundle, onboarding, reload: reloadApp, loadError } = useAppBootstrap(authUser);
 
   if (authLoading || (authUser && isLoading)) {
     return (
@@ -46,6 +46,25 @@ export default function SwolTracker() {
   }
 
   if (!bundle) {
+    if (isBootstrapLoadError(loadError, bundle)) {
+      return (
+        <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center px-6">
+          <div className="text-center max-w-sm">
+            <p className="text-lg font-semibold mb-2">Couldn&apos;t load your training data</p>
+            <p className="text-zinc-400 text-sm mb-6">
+              Check your connection and try again. Your sets are not lost.
+            </p>
+            <button
+              type="button"
+              onClick={reloadApp}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold hover:opacity-90"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="text-center">

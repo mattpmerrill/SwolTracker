@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { db } from '../lib/supabase';
 import { useToast } from './Toast';
 import { useAdmin } from '../hooks/useAdmin';
 import { useAiGenerator } from '../hooks/useAiGenerator';
@@ -284,9 +283,9 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
               groupMembers.find((m) => m.member_id === id)?.member_name,
             ),
             onStartEditGroupName: () => setEditingGroupName(true),
-            onSaveGroupName: () => {
-              db.updateProfile(currentUser, { group_name: groupName });
-              setEditingGroupName(false);
+            onSaveGroupName: async () => {
+              const ok = await handleUpdateProfile({ group_name: groupName });
+              if (ok) setEditingGroupName(false);
             },
             onCancelEditGroupName: () => setEditingGroupName(false),
             onGroupNameChange: setGroupName,

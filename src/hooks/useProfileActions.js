@@ -8,26 +8,27 @@ import { validate, profileUpdateSchema } from '../lib/validation';
  */
 export function useProfileActions({ authUser, currentUser, setProfiles, setProgramStartDate, toast }) {
   const handleUpdateProfile = async (updates) => {
-    if (!authUser) return;
+    if (!authUser) return false;
     const { success, data: validUpdates, error } = validate(profileUpdateSchema, updates);
-    if (!success) { toast.error(error); return; }
+    if (!success) { toast.error(error); return false; }
     const updated = await db.updateProfile(authUser.id, validUpdates);
     if (updated) {
       setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], ...updated } }));
       if (validUpdates.program_start_date) setProgramStartDate(validUpdates.program_start_date);
       toast.success?.('Profile updated');
-    } else {
-      await reportWriteFailure({
-        db,
-        toast,
-        userId: authUser.id,
-        component: 'useProfileActions.js',
-        operation: 'handleUpdateProfile',
-        message: 'updateProfile returned null/false',
-        userMessage: 'Could not save profile. Try again.',
-        context: { keys: Object.keys(validUpdates || {}) },
-      });
+      return true;
     }
+    await reportWriteFailure({
+      db,
+      toast,
+      userId: authUser.id,
+      component: 'useProfileActions.js',
+      operation: 'handleUpdateProfile',
+      message: 'updateProfile returned null/false',
+      userMessage: 'Could not save profile. Try again.',
+      context: { keys: Object.keys(validUpdates || {}) },
+    });
+    return false;
   };
 
   const handleUploadAvatar = async (file) => {

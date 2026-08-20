@@ -1,6 +1,7 @@
 import { db } from '../lib/supabase';
 import { validate, searchQuerySchema } from '../lib/validation';
 import { reportWriteFailure } from '../lib/errorService';
+import { inviteSucceeded, programMapFromRepo } from '../lib/groupJoin';
 import confetti from 'canvas-confetti';
 
 /**
@@ -58,18 +59,21 @@ export function useBuddyActions({
   };
 
   const acceptBuddyRequest = async (requestId, requesterId, requesterName = '', requesterAvatar = '') => {
-    const success = await db.acceptGroupInvite(requestId, currentUser);
-    if (!success) {
-      await fail('acceptBuddyRequest', 'acceptGroupInvite returned false', 'Could not accept invite. Try again.');
+    const result = await db.acceptGroupInvite(requestId, currentUser);
+    if (!inviteSucceeded(result)) {
+      await fail(
+        'acceptBuddyRequest',
+        result?.error || 'acceptGroupInvite did not succeed',
+        result?.error || 'Could not accept invite. Try again.',
+      );
       return;
     }
     const leaderGym = await db.getLeaderGymId(currentUser);
     if (leaderGym) {
       setLeaderGymId(leaderGym);
       const programs = await db.getAllWorkoutPrograms(leaderGym);
-      if (programs.length > 0) {
-        setWorkoutProgram(programs.find((p) => p.is_active)?.program_data || programs[0] || {});
-      }
+      const programMap = programMapFromRepo(programs);
+      if (programMap) setWorkoutProgram(programMap);
     }
     setGroupRole('member');
     setGroupLeader({ id: requesterId, name: requesterName, avatar: requesterAvatar });

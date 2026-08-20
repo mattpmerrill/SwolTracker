@@ -7,19 +7,27 @@ import {
 } from '../lib/bootstrapLogs';
 import { calculateCurrentWeek } from '../utils/date';
 
+/** True when the first load failed and there is nothing to show. */
+export function isBootstrapLoadError(loadError, bundle) {
+  return Boolean(loadError) && !bundle;
+}
+
 /**
  * One-shot bootstrap that turns an authenticated user into a fully loaded
  * app state bundle. Called when authUser arrives, and again when `reload()`
  * is invoked (e.g. after onboarding completes). Returns a loading flag, an
- * onboarding signal, the data bundle to hydrate app state with, and reload.
+ * onboarding signal, the data bundle to hydrate app state with, reload, and
+ * loadError (set when the bundle load throws; retry via reload()).
  *
  * Consumers wire the returned bundle into their local state via a single
  * effect; we do not own the state here.
  */
+
 export function useAppBootstrap(authUser) {
   const [isLoading, setIsLoading] = useState(true);
   const [bundle, setBundle] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const reload = useCallback(() => {
@@ -31,6 +39,7 @@ export function useAppBootstrap(authUser) {
       setIsLoading(false);
       setBundle(null);
       setOnboarding(null);
+      setLoadError(null);
       return;
     }
 
@@ -38,6 +47,7 @@ export function useAppBootstrap(authUser) {
 
     (async () => {
       setIsLoading(true);
+      setLoadError(null);
       try {
         const loaded = await loadUserBundle(authUser);
         if (cancelled) return;
@@ -51,6 +61,10 @@ export function useAppBootstrap(authUser) {
         }
       } catch (error) {
         console.error('Error loading app bundle:', error);
+        if (!cancelled) {
+          setLoadError(error);
+          setOnboarding(null);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -59,7 +73,7 @@ export function useAppBootstrap(authUser) {
     return () => { cancelled = true; };
   }, [authUser, reloadToken]);
 
-  return { isLoading, bundle, onboarding, reload };
+  return { isLoading, bundle, onboarding, reload, loadError };
 }
 
 async function loadUserBundle(authUser) {
