@@ -18,7 +18,7 @@ const APP_NAME = 'swoltracker';
 const AUDIT_TOOL_NAME = 'context.fetch';
 
 export default async function handler(req, res) {
-  setCorsHeaders(res);
+  setCorsHeaders(res, req);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET' && req.method !== 'POST') {

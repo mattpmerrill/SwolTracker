@@ -96,6 +96,16 @@ export function createActionTools(
   events: EventEmitter,
   queries: ReturnType<typeof createQueryTools>
 ) {
+  async function requireWritableGym(gymId?: string): Promise<string> {
+    const writableId = await queries.resolveWritableGymId(gymId);
+    if (writableId) return writableId;
+    const memberGym = await queries.resolveGymId(gymId);
+    if (memberGym) {
+      throw AppError.forbidden("Only the gym owner can save a workout program.");
+    }
+    throw AppError.notFound("No gym found.");
+  }
+
   async function resolveWorkoutSlot(gymId?: string, weekNumber?: number, dayName?: string) {
     const resolvedGymId = await queries.resolveGymId(gymId);
     if (!resolvedGymId) return null;
@@ -484,10 +494,7 @@ export function createActionTools(
     aiGenerated?: boolean,
     aiNotes?: string
   ): Promise<ToolResult> {
-    const resolvedGymId = await queries.resolveGymId(gymId);
-    if (!resolvedGymId) {
-      throw AppError.notFound("No gym found.");
-    }
+    const resolvedGymId = await requireWritableGym(gymId);
 
     // Structural validation — refuse to save a malformed program. The
     // downstream LLM that produces this JSON is not always trustworthy, and a
@@ -563,10 +570,7 @@ export function createActionTools(
       );
     }
 
-    const resolvedGymId = await queries.resolveGymId(gymId);
-    if (!resolvedGymId) {
-      throw AppError.notFound("No gym found.");
-    }
+    const resolvedGymId = await requireWritableGym(gymId);
 
     const { data: rows, error: readErr } = await supabase
       .from("workout_programs")

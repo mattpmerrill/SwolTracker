@@ -30,7 +30,7 @@ export const maxWeightSchema = z.object({
 
 export const equipmentNameSchema = z.string().min(1).max(100).trim()
 
-export const searchQuerySchema = z.string().min(1).max(100).trim()
+export const searchQuerySchema = z.string().min(2).max(50).trim()
 
 // Onboarding schema
 export const onboardingSchema = z.object({

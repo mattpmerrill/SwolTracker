@@ -4,6 +4,7 @@ import { createMcpMockSupabase } from './mockSupabase.js';
 
 const stubQueries = {
   resolveGymId: vi.fn(async (gymId?: string) => gymId ?? 'g1'),
+  resolveWritableGymId: vi.fn(async (gymId?: string) => gymId ?? 'g1'),
 } as any;
 
 function buildSavedActions(

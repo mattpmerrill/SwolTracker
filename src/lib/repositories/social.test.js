@@ -45,6 +45,16 @@ describe('socialRepo', () => {
     expect(result).toEqual({ success: false, error: 'Invalid request or already processed' });
   });
 
+  it('searchUsers calls search_users with only search_term (no spoofable user id)', async () => {
+    const sb = createMockSupabase();
+    sb.respond('rpc.search_users', { data: [{ user_id: 'u2', name: 'Wren', email: null }], error: null });
+    const repo = createSocialRepo(sb, deps());
+    const rows = await repo.searchUsers('Wren', 'attacker-id');
+    expect(rows).toEqual([{ user_id: 'u2', name: 'Wren', email: null }]);
+    const rpcCall = sb.calls.find((c) => c[0] === 'rpc' && c[1] === 'search_users');
+    expect(rpcCall[2]).toEqual({ search_term: 'Wren' });
+  });
+
   it('acceptGroupInvite returns { success: false } when the rpc errors', async () => {
     const sb = createMockSupabase();
     sb.respond('rpc.accept_group_invite', {

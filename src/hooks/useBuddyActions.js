@@ -161,7 +161,7 @@ export function useBuddyActions({
     const { success, data: query } = validate(searchQuerySchema, searchTerm);
     if (!success) { setSearchResults([]); return; }
     setSearchLoading(true);
-    const results = await db.searchUsers(query, currentUser);
+    const results = await db.searchUsers(query);
     if (results?.rateLimited) {
       toast.error(results.error);
       setSearchResults([]);

@@ -216,7 +216,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | Slice | Theme | Why | Owner | Status |
 |-------|-------|-----|-------|--------|
 | **1** | App currently lies | Invite / profile / bootstrap can show success or spin forever when the write failed | Beck | **Done 2026-08-20** |
-| **2** | Stranger-safe | Remaining IDOR / key-RPC / CORS holes before inviting anyone new | — | Not started |
+| **2** | Stranger-safe | Remaining IDOR / key-RPC / CORS holes before inviting anyone new | Beck | **Done 2026-08-20** |
 | **3** | Today session | Daily gym-floor UX: open PWA → today’s workout, not a week planner | — | Not started |
 | **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | — | Not started |
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | — | Not started |
@@ -242,13 +242,13 @@ The UI currently reports success (or hangs) when the data layer failed. Fix befo
 
 April review criticals were mostly closed (027 + `resolveGymId`). These remain. New SQL is `migrations/034-….sql`; apply to prod deliberately; changelog here.
 
-| # | Ticket | Files | Done when |
-|---|--------|-------|-----------|
-| 2.1 | **`search_users` (F-011).** Rate limit keyed on `current_user_id` param, not `auth.uid()`. Returns emails. No `_require_self`. | `migrations/034-….sql`, `src/lib/repositories/social.js` | Function forces `auth.uid()`, length-checks term (2–50), does not return email to non-admins. Client stops passing a spoofable user id. |
-| 2.2 | **Settings-key RPCs.** `get_app_setting` / `get_global_llm_api_key` / `get_llm_api_key_for_provider` are `SECURITY DEFINER` + `GRANT … TO authenticated` and return any `app_settings` value, including `llm_api_key_*` if ever stored there. | `migrations/034-….sql` | Non-admin callers cannot read API keys or arbitrary settings. Prefer Vercel env for provider keys; drop or admin-gate the key RPCs. |
-| 2.3 | **CORS `*`** on `/api/llm` and `/api/mcp` (F-014). | `api/llm.js`, `api/_mcp-shared.js` | `ALLOWED_ORIGINS` env (prod origin + localhost). No wildcard. |
-| 2.4 | **Any gym member can overwrite the shared JSONB program via MCP.** `resolveGymId` checks membership, not leader. | `mcp/src/tools/actions.ts` (`save_workout_program`) | Non-leader `save_workout_program` fails closed. Contract test: member key cannot write. |
-| 2.5 | **Authenticated IDOR smoke** (Phase 0.6 remainder). 027 looks right; unproven at runtime. | `mcp/src/__tests__/` + a small SQL/RPC probe script or vitest against mocked forbidden | Calling RPCs with another user’s UUID returns `forbidden`. At least `accept_group_invite`, `get_agent_messages`, `get_error_logs`. |
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 2.1 | **`search_users` (F-011).** Rate limit keyed on `current_user_id` param, not `auth.uid()`. Returns emails. No `_require_self`. | `migrations/034-stranger-safe.sql`, `src/lib/repositories/social.js` | Function forces `auth.uid()`, length-checks term (2–50), does not return email to non-admins. Client stops passing a spoofable user id. | **Done 2026-08-20** (034 applied on prod) |
+| 2.2 | **Settings-key RPCs.** `get_app_setting` / `get_global_llm_api_key` / `get_llm_api_key_for_provider` are `SECURITY DEFINER` + `GRANT … TO authenticated` and return any `app_settings` value, including `llm_api_key_*` if ever stored there. | `migrations/034-stranger-safe.sql` | Non-admin callers cannot read API keys or arbitrary settings. Prefer Vercel env for provider keys; drop or admin-gate the key RPCs. | **Done 2026-08-20** (034 applied on prod; service_role still allowed for `/api/llm`) |
+| 2.3 | **CORS `*`** on `/api/llm` and `/api/mcp` (F-014). | `api/llm.js`, `api/_mcp-shared.js` | `ALLOWED_ORIGINS` env (prod origin + localhost). No wildcard. | **Done 2026-08-20** — defaults to `https://swol-tracker.vercel.app` + localhost Vite; override with `ALLOWED_ORIGINS` |
+| 2.4 | **Any gym member can overwrite the shared JSONB program via MCP.** `resolveGymId` checks membership, not leader. | `mcp/src/tools/actions.ts` (`save_workout_program`) | Non-leader `save_workout_program` fails closed. Contract test: member key cannot write. | **Done 2026-08-20** — `resolveWritableGymId` requires `owner`/`leader`; members get `forbidden` |
+| 2.5 | **Authenticated IDOR smoke** (Phase 0.6 remainder). 027 looks right; unproven at runtime. | `mcp/src/__tests__/` + a small SQL/RPC probe script or vitest against mocked forbidden | Calling RPCs with another user’s UUID returns `forbidden`. At least `accept_group_invite`, `get_agent_messages`, `get_error_logs`. | **Done 2026-08-20** — `idor-guards.test.ts` asserts 027/034 function bodies; `resolveGymId` foreign-gym test |
 
 ---
 
@@ -337,7 +337,7 @@ migrations/                  # Prefer this as SQL history
 5. **Update the changelog** below when you land a row; flip the ticket Status.  
 6. **Ignore `mobile/`** unless Matt explicitly re-scopes.  
 7. **Do not invent a second architecture doc** — edit this one.  
-8. Security-sensitive SQL: land in `migrations/0NN-….sql` next number; **apply to prod deliberately**; note apply in changelog.  
+8. Security-sensitive SQL: land in `migrations/0NN-….sql` next number (**035**); **apply to prod deliberately**; note apply in changelog.  
 9. **`migrations/` is schema SoT** — do not trust `supabase/migrations/` CLI history as “what’s live.”
 
 ---
@@ -377,7 +377,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 ### Suggested next pick-ups for Joi
 
-Current queue (2026-08-20) supersedes the July 14 list. Slice 1 is **Done**. Next is **slice 2.1 `search_users`** unless Matt says otherwise. Do not start slice 2 until Matt green-lights it (one slice at a time).
+Current queue (2026-08-20) supersedes the July 14 list. Slices 1–2 are **Done**. Next is **slice 3.1 Today session** unless Matt says otherwise. Do not start slice 3 until Matt green-lights it.
 
 July leftovers that still matter, now mapped:
 
@@ -389,12 +389,12 @@ July leftovers that still matter, now mapped:
 
 ### Suggested next pick-ups for Beck
 
-Slice 1 done. Stop and wait for Matt before slice 2.  
+Slices 1–2 done. Stop and wait for Matt before slice 3 (Today session).  
 
 ### Ops reminders
 
 - Deploy = push `main` → Vercel project `swol-tracker`  
-- New SQL: `migrations/034-….sql` next; apply prod; changelog here  
+- New SQL: `migrations/035-….sql` next; apply prod; changelog here  
 - Web-only: ignore `mobile/` unless Matt re-opens iOS  
 - Vault: [[SwolTracker]] in SharedVault + Coordination-Log; durable plan stays **in this file**
 
@@ -404,6 +404,7 @@ Slice 1 done. Stop and wait for Matt before slice 2.
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-20 | Beck | **Slice 2 done.** Migration **034** applied on prod: `search_users(search_term)` uses `auth.uid()`, 2–50 chars, email only for admins; `get_app_setting` / LLM key RPCs admin-or-service_role. CORS no longer `*` (`ALLOWED_ORIGINS` or built-in prod+localhost list). MCP `save_workout_program` requires gym `owner`/`leader`. Tests: `idor-guards`, `resolveGymId` foreign gym, member save forbidden, CORS allow list. |
 | 2026-08-20 | Beck | **Slice 1 done.** Invite accept checks `success === true` (no more confetti on `{ success: false }`). Join hydrates the week-keyed program map. Profile Zod accepts fitness/start-date/group name; group name save awaits + toasts; failed save keeps the editor open. Bootstrap failure shows retry instead of an infinite spinner. Helpers/tests: `src/lib/groupJoin.js`, `validation.test.js`, `useAppBootstrap.test.js`. |
 | 2026-08-20 | Beck | **Production slices queued.** Fresh web-only diagnosis: app is not a rewrite; P0 is “UI lies” then remaining IDOR/CORS, then Today + closed weekly loop. New section **Current work queue — production slices (2026-08-20)** with tickets 1.1–5.4. Joi: next unowned slice is **2** after slice 1 is on `main`. |
 | 2026-08-12 | Joi | **PWA safe areas:** header/tab bar respect iPhone notch + home indicator (`env(safe-area-inset-*)`) so Settings/Profile are no longer under the status bar. |

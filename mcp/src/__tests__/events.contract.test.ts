@@ -10,6 +10,7 @@ function makeEvents(): EventEmitter & { emit: ReturnType<typeof vi.fn> } {
 function makeQueries(todaysWorkout?: unknown) {
   return {
     resolveGymId: vi.fn(async (_g?: string) => 'g1'),
+    resolveWritableGymId: vi.fn(async (_g?: string) => 'g1'),
     get_todays_workout: vi.fn(async () => ({
       success: true,
       message: '',

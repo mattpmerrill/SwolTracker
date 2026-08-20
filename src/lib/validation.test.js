@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { profileUpdateSchema, validate } from './validation';
+import { profileUpdateSchema, searchQuerySchema, validate } from './validation';
 
 describe('validate()', () => {
   it('returns data on success', () => {
@@ -51,5 +51,13 @@ describe('profileUpdateSchema', () => {
     expect(validate(profileUpdateSchema, { not_a_column: true }).success).toBe(false);
     expect(validate(profileUpdateSchema, { age: 12 }).success).toBe(false);
     expect(validate(profileUpdateSchema, { gender: 'nah' }).success).toBe(false);
+  });
+});
+
+describe('searchQuerySchema', () => {
+  it('requires 2–50 characters after trim', () => {
+    expect(validate(searchQuerySchema, 'Wren').success).toBe(true);
+    expect(validate(searchQuerySchema, 'a').success).toBe(false);
+    expect(validate(searchQuerySchema, 'x'.repeat(51)).success).toBe(false);
   });
 });

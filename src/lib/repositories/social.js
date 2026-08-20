@@ -39,10 +39,10 @@ export function createSocialRepo(supabase, { getProfile, getUserMaxes }) {
     return data || []
   }
 
-  const searchUsers = async (searchTerm, currentUserId) => {
+  const searchUsers = async (searchTerm) => {
     if (!supabase) return []
     const { data, error } = await supabase
-      .rpc('search_users', { search_term: searchTerm, current_user_id: currentUserId })
+      .rpc('search_users', { search_term: searchTerm })
 
     if (error) {
       console.error('Error searching users:', error)

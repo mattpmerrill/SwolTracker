@@ -99,8 +99,33 @@ export function writeAudit(supabase, { userId, apiKeyId, toolName, argsHash, ok,
     .then(({ error }) => { if (error) console.error('tool_call_audit insert failed:', error.message); });
 }
 
-export function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://swol-tracker.vercel.app',
+  'https://swol-tracker-matts-projects-628fad4b.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:4173',
+];
+
+export function allowedOrigins(env = process.env) {
+  const raw = env.ALLOWED_ORIGINS;
+  if (raw && raw.trim()) {
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return DEFAULT_ALLOWED_ORIGINS;
+}
+
+/** Echo the request origin only when it is on the allow list. Never '*'. */
+export function pickAllowedOrigin(requestOrigin, allowed = allowedOrigins()) {
+  if (requestOrigin && allowed.includes(requestOrigin)) return requestOrigin;
+  return null;
+}
+
+export function setCorsHeaders(res, req) {
+  const allowed = pickAllowedOrigin(req?.headers?.origin);
+  if (allowed) {
+    res.setHeader('Access-Control-Allow-Origin', allowed);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
 }

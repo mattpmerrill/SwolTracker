@@ -42,6 +42,18 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     return gyms.find((g) => g.id === gymId)?.id ?? null;
   }
 
+  function isGymWriter(role?: string | null): boolean {
+    return role === "owner" || role === "leader";
+  }
+
+  /** Membership + owner/leader. Members can log sets; they cannot overwrite the shared program. */
+  async function resolveWritableGymId(gymId?: string): Promise<string | null> {
+    const gyms = await getMyGyms();
+    const writable = gyms.filter((g) => isGymWriter(g.role));
+    if (!gymId) return writable[0]?.id ?? null;
+    return writable.find((g) => g.id === gymId)?.id ?? null;
+  }
+
   async function resolveCurrentWeek(): Promise<number> {
     const { data: profile } = await supabase
       .from("profiles")
@@ -1170,5 +1182,6 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     // Expose helpers for other tool modules
     getMyGyms,
     resolveGymId,
+    resolveWritableGymId,
   };
 }

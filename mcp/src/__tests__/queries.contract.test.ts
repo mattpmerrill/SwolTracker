@@ -80,6 +80,32 @@ describe('MCP queries contract', () => {
     expect((result.data as any).exercises[0].weight_lbs).toBe(50);
   });
 
+  it('resolveGymId returns null when the caller is not a member of the supplied gym', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g-mine', role: 'owner', gyms: { id: 'g-mine', name: 'Mine' } }],
+      error: null,
+    });
+    const tools = createQueryTools(sb, 'u1');
+    expect(await tools.resolveGymId('g-stranger')).toBeNull();
+    expect(await tools.resolveGymId('g-mine')).toBe('g-mine');
+  });
+
+  it('resolveWritableGymId ignores gyms the caller only belongs to as a member', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [
+        { gym_id: 'g-shared', role: 'member', gyms: { id: 'g-shared', name: 'Shared' } },
+        { gym_id: 'g-mine', role: 'owner', gyms: { id: 'g-mine', name: 'Mine' } },
+      ],
+      error: null,
+    });
+    const tools = createQueryTools(sb, 'u1');
+    expect(await tools.resolveWritableGymId('g-shared')).toBeNull();
+    expect(await tools.resolveWritableGymId('g-mine')).toBe('g-mine');
+    expect(await tools.resolveWritableGymId()).toBe('g-mine');
+  });
+
   it('compare_weeks throws AppError.invalidArgs when weeks are equal', async () => {
     const sb = createMcpMockSupabase();
     sb.respond('gym_members.list', {

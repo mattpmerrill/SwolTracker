@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isAppError } from '@bot-native/sdk';
 import { createActionTools } from '../tools/actions.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
 import type { EventEmitter } from '../bot-native-shim.js';
@@ -9,6 +10,7 @@ const stubEvents: EventEmitter = {
 
 const stubQueries = {
   resolveGymId: vi.fn(async (_gymId?: string) => 'g1'),
+  resolveWritableGymId: vi.fn(async (_gymId?: string) => 'g1'),
   // only methods actually invoked by update_max/log_set are referenced
 } as any;
 
@@ -177,5 +179,28 @@ describe('MCP actions contract', () => {
     expect(result.success).toBe(true);
     expect((result.data as any).new_start_date).toBe('2026-04-13');
     expect(result.message).toContain('back 1 week');
+  });
+
+  it('save_workout_program forbids a gym member from overwriting the shared program', async () => {
+    const sb = createMcpMockSupabase();
+    const memberQueries = {
+      resolveGymId: vi.fn(async () => 'g-shared'),
+      resolveWritableGymId: vi.fn(async () => null),
+    } as any;
+    const tools = createActionTools(sb, 'u-member', stubEvents, memberQueries);
+    const validWeek = {
+      Monday: { focus: 'Rest', exercises: [] },
+      Tuesday: { focus: 'Rest', exercises: [] },
+      Wednesday: { focus: 'Rest', exercises: [] },
+      Thursday: { focus: 'Rest', exercises: [] },
+      Friday: { focus: 'Rest', exercises: [] },
+      Saturday: { focus: 'Rest', exercises: [] },
+      Sunday: { focus: 'Rest', exercises: [] },
+    };
+    await expect(tools.save_workout_program('g-shared', 1, validWeek)).rejects.toSatisfy((e: unknown) => {
+      if (!isAppError(e)) return false;
+      return e.code === 'forbidden';
+    });
+    expect(memberQueries.resolveWritableGymId).toHaveBeenCalledWith('g-shared');
   });
 });
