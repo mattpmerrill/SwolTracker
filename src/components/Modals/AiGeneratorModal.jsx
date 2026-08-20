@@ -243,7 +243,7 @@ export default function AiGeneratorModal({
                   Program Length
                 </h3>
                 <div className="flex gap-2">
-                  {[2, 4, 6].map(count => (
+                  {[1, 2, 4, 6].map(count => (
                     <button
                       key={count}
                       onClick={() => onWeekCountChange(count)}
@@ -253,12 +253,14 @@ export default function AiGeneratorModal({
                           : 'bg-zinc-700/50 border-2 border-transparent text-zinc-400 hover:text-white'
                       }`}
                     >
-                      {count} Weeks
+                      {count} {count === 1 ? 'Week' : 'Weeks'}
                     </button>
                   ))}
                 </div>
                 <p className="text-xs text-zinc-500 mt-2 text-center">
-                  Generating weeks {generationWeek} - {generationWeek + weekCount - 1}
+                  {weekCount === 1
+                    ? `Generating Week ${generationWeek} only`
+                    : `Generating weeks ${generationWeek} - ${generationWeek + weekCount - 1}`}
                 </p>
               </div>
             </div>

@@ -218,7 +218,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | **1** | App currently lies | Invite / profile / bootstrap can show success or spin forever when the write failed | Beck | **Done 2026-08-20** |
 | **2** | Stranger-safe | Remaining IDOR / key-RPC / CORS holes before inviting anyone new | Beck | **Done 2026-08-20** |
 | **3** | Today session | Daily gym-floor UX: open PWA → today’s workout, not a week planner | Beck | **Done 2026-08-20** |
-| **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | — | Not started |
+| **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | Beck | **Done 2026-08-20** |
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | — | Not started |
 
 ---
@@ -268,10 +268,10 @@ The daily loop already exists (today cursor, Today FAB, focus ring, set log, res
 
 Phase 1A/1B/1C shipped. The loop still doesn’t close; in-app ChatGPT and the MCP agent both write programs; gym completions are loaded and never shown.
 
-| # | Ticket | Files | Done when |
-|---|--------|-------|-----------|
-| 4.1 | **Week-end IS generate for one week.** Modal currently highlights 2/4/6 so `weekCount: 1` has no selected chip. Prefill `aiNotes` from this week’s skip reasons, post-workout chips, overload count. If `hasAgentKey`, primary CTA is “ask your coach” (same prefill into Coach Board); do not show two competing generate buttons. | `src/components/Modals/AiGeneratorModal.jsx`, `useAiGenerator.js`, `WeekEndReviewCard.jsx`, `programContinuity.js` | Week-end path generates **one** week with notes prefilled. Agent users are not offered a second brain on that card. |
-| 4.2 | **Squad strip on Today.** Bootstrap already hydrates gym-wide `completedWorkouts` / `missedWorkouts`. Render who trained / skipped / still due. Buddies tab recedes to invites. | `src/screens/WorkoutScreen.jsx`, `AuthenticatedShell.jsx` (groupMembers already in shell) | Today shows a one-line group status when `groupMembers.length > 0` or role is member. No new tables. |
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 4.1 | **Week-end IS generate for one week.** Modal currently highlights 2/4/6 so `weekCount: 1` has no selected chip. Prefill `aiNotes` from this week’s skip reasons, post-workout chips, overload count. If `hasAgentKey`, primary CTA is “ask your coach” (same prefill into Coach Board); do not show two competing generate buttons. | `src/components/Modals/AiGeneratorModal.jsx`, `useAiGenerator.js`, `WeekEndReviewCard.jsx`, `programContinuity.js` | Week-end path generates **one** week with notes prefilled. Agent users are not offered a second brain on that card. | **Done 2026-08-20** — 1-week chip; notes prefilled; agent CTA is Coach Board only |
+| 4.2 | **Squad strip on Today.** Bootstrap already hydrates gym-wide `completedWorkouts` / `missedWorkouts`. Render who trained / skipped / still due. Buddies tab recedes to invites. | `src/screens/WorkoutScreen.jsx`, `AuthenticatedShell.jsx` (groupMembers already in shell) | Today shows a one-line group status when `groupMembers.length > 0` or role is member. No new tables. | **Done 2026-08-20** — `SquadStrip` from existing complete/miss maps |
 
 ---
 
@@ -377,7 +377,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 ### Suggested next pick-ups for Joi
 
-Current queue (2026-08-20) supersedes the July 14 list. Slices 1–3 are **Done**. Next is **slice 4.1 week-end loop** unless Matt says otherwise. Do not start slice 4 until Matt green-lights it.
+Current queue (2026-08-20) supersedes the July 14 list. Slices 1–4 are **Done**. Next is **slice 5.1 Sentry** unless Matt says otherwise. Do not start slice 5 until Matt green-lights it.
 
 July leftovers that still matter, now mapped:
 
@@ -389,7 +389,7 @@ July leftovers that still matter, now mapped:
 
 ### Suggested next pick-ups for Beck
 
-Slices 1–3 done. Stop and wait for Matt before slice 4 (weekly loop + squad strip).  
+Slices 1–4 done. Stop and wait for Matt before slice 5 (operable: Sentry, usage logs, eslint CI).  
 
 ### Ops reminders
 
@@ -404,6 +404,7 @@ Slices 1–3 done. Stop and wait for Matt before slice 4 (weekly loop + squad st
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-20 | Beck | **Slice 4 done.** Week-end card: 1-week generate with skip/overload/session notes prefilled; agent users get “Ask your coach” only (no second generate button). Squad strip on Today from existing completions/misses. |
 | 2026-08-20 | Beck | **Slice 3 done.** Workout tab is a Today session: focus + sets first, week/day picker behind “This week.” One rest timer for the session (vibrate + beep at 0). Weight/rep overrides keyed by week+day+exercise. |
 | 2026-08-20 | Beck | **Slice 2 done.** Migration **034** applied on prod: `search_users(search_term)` uses `auth.uid()`, 2–50 chars, email only for admins; `get_app_setting` / LLM key RPCs admin-or-service_role. CORS no longer `*` (`ALLOWED_ORIGINS` or built-in prod+localhost list). MCP `save_workout_program` requires gym `owner`/`leader`. Tests: `idor-guards`, `resolveGymId` foreign gym, member save forbidden, CORS allow list. |
 | 2026-08-20 | Beck | **Slice 1 done.** Invite accept checks `success === true` (no more confetti on `{ success: false }`). Join hydrates the week-keyed program map. Profile Zod accepts fitness/start-date/group name; group name save awaits + toasts; failed save keeps the editor open. Bootstrap failure shows retry instead of an infinite spinner. Helpers/tests: `src/lib/groupJoin.js`, `validation.test.js`, `useAppBootstrap.test.js`. |

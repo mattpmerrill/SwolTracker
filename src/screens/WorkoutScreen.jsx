@@ -4,7 +4,10 @@ import { db } from '../lib/supabase';
 import {
   shouldPromptWeekEndReview,
   summarizeWeekTraining,
+  buildWeekEndNotes,
 } from '../lib/programContinuity';
+import { getWeekSessionNotes } from '../lib/sessionNotes';
+import { buildSquadStatuses } from '../lib/squadStatus';
 import { getWeekDates, getTodayDayName } from '../utils/date';
 import { unlockRestAudio } from '../utils/restCue';
 import {
@@ -16,6 +19,7 @@ import {
   NoWorkoutState,
   RestDayState,
   WeekEndReviewCard,
+  SquadStrip,
 } from '../components/Workout';
 import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
 import CoachBoardEntry from '../components/AgentChat/CoachBoardEntry';
@@ -33,6 +37,7 @@ export default function WorkoutScreen({
   user,
   groupRole,
   groupLeader,
+  groupMembers = [],
   gymId,
   exerciseLogSize,
   onPreviousWeek,
@@ -122,6 +127,55 @@ export default function WorkoutScreen({
 
   const overloadCount = Object.keys(overloadByExercise).length;
 
+  const weekEndNotes = useMemo(() => {
+    if (!weekEndSummary) return '';
+    return buildWeekEndNotes({
+      summary: weekEndSummary,
+      weekNumber: actualCurrentWeek,
+      userId: user?.id,
+      getMissedReason,
+      overloadCount,
+      sessionNotes: getWeekSessionNotes(actualCurrentWeek),
+    });
+  }, [weekEndSummary, actualCurrentWeek, user?.id, getMissedReason, overloadCount, exerciseLogSize]);
+
+  const squad = useMemo(() => {
+    if (!isViewingToday) return [];
+    return buildSquadStatuses({
+      currentUserId: user?.id,
+      userName: user?.display_name || user?.name,
+      groupRole,
+      groupLeader,
+      groupMembers,
+      week: actualCurrentWeek,
+      day: todayDayName,
+      isWorkoutComplete,
+      isWorkoutMissed,
+    });
+  }, [
+    isViewingToday,
+    user?.id,
+    user?.display_name,
+    user?.name,
+    groupRole,
+    groupLeader,
+    groupMembers,
+    actualCurrentWeek,
+    todayDayName,
+    isWorkoutComplete,
+    isWorkoutMissed,
+    exerciseLogSize,
+  ]);
+
+  const handleAskCoachForNextWeek = async () => {
+    const body = weekEndNotes
+      ? `Week-end review — please plan Week ${nextProgramWeek}.\n\n${weekEndNotes}`
+      : `Week-end review — please plan Week ${nextProgramWeek}.`;
+    const ok = await onSendCoachNote?.(body);
+    onOpenAgentChat?.();
+    if (ok !== false) setDismissedWeekEndReview(nextProgramWeek);
+  };
+
   useEffect(() => {
     if (!isViewingToday) setShowThisWeek(true);
   }, [isViewingToday]);
@@ -206,6 +260,10 @@ export default function WorkoutScreen({
         />
       )}
 
+      {isViewingToday && squad.length > 0 && (
+        <SquadStrip people={squad} dayLabel={todayDayName} />
+      )}
+
       {hasAgentKey && hasWorkoutProgrammed && dayComplete && todayWorkout?.focus !== 'Rest Day' && (
         <PostWorkoutCoachPrompt
           week={currentWeek}
@@ -259,7 +317,12 @@ export default function WorkoutScreen({
             nextWeek={nextProgramWeek}
             summary={weekEndSummary}
             overloadCount={overloadCount}
-            onReviewAndGenerate={() => onGenerateWorkout(nextProgramWeek, { weekCount: 1 })}
+            hasAgentKey={hasAgentKey}
+            onReviewAndGenerate={() => onGenerateWorkout(nextProgramWeek, {
+              weekCount: 1,
+              notes: weekEndNotes,
+            })}
+            onAskCoach={handleAskCoachForNextWeek}
             onDismiss={() => setDismissedWeekEndReview(nextProgramWeek)}
           />
         </div>

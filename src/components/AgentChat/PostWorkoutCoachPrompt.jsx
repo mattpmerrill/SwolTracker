@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Bot, Send, Loader2, X } from 'lucide-react';
 import { getString, setString } from '../../utils/storage';
+import { recordWeekSessionNote } from '../../lib/sessionNotes';
 
 const DISMISS_PREFIX = 'swoltracker-postworkout-note:';
 
@@ -50,7 +51,10 @@ export default function PostWorkoutCoachPrompt({
     setActiveChip(chip.id);
     const msg = buildMessage(chip.text);
     const ok = await onSend?.(msg);
-    if (ok) handleDismiss();
+    if (ok) {
+      recordWeekSessionNote(week, day, chip.text, chip.label);
+      handleDismiss();
+    }
     setActiveChip(null);
   };
 
@@ -59,6 +63,7 @@ export default function PostWorkoutCoachPrompt({
     if (!msg) return;
     const ok = await onSend?.(msg);
     if (ok) {
+      recordWeekSessionNote(week, day, custom.trim());
       setCustom('');
       handleDismiss();
     }

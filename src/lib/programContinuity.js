@@ -89,3 +89,50 @@ export function shouldPromptWeekEndReview({
   const lateInWeek = LATE_WEEK_DAYS.has(todayDayName);
   return summary.allAccounted || lateInWeek;
 }
+
+const NOTES_MAX = 1000;
+
+/**
+ * Prefill for Review + Generate / coach week-end note.
+ * Built from skips, remaining days, overload count, and optional session chips.
+ */
+export function buildWeekEndNotes({
+  summary,
+  weekNumber,
+  userId,
+  getMissedReason,
+  overloadCount = 0,
+  sessionNotes = [],
+}) {
+  if (!summary) return '';
+  const lines = [];
+
+  if (summary.completedDays?.length) {
+    lines.push(`Completed: ${summary.completedDays.join(', ')}.`);
+  }
+  if (summary.missedDays?.length) {
+    const skipped = summary.missedDays.map((day) => {
+      const reason = getMissedReason?.(weekNumber, day, userId);
+      return reason ? `${day} (${reason})` : day;
+    });
+    lines.push(`Skipped: ${skipped.join(', ')}.`);
+  }
+  if (summary.remainingDays?.length) {
+    lines.push(`Still open: ${summary.remainingDays.join(', ')}.`);
+  }
+  if (overloadCount > 0) {
+    lines.push(`${overloadCount} overload signal${overloadCount === 1 ? '' : 's'} this block.`);
+  }
+  if (sessionNotes.length > 0) {
+    lines.push('Session notes:');
+    sessionNotes.forEach((note) => {
+      const label = note.day || 'Session';
+      const text = (note.text || note.label || '').trim();
+      if (text) lines.push(`- ${label}: ${text}`);
+    });
+  }
+
+  const joined = lines.join('\n');
+  if (joined.length <= NOTES_MAX) return joined;
+  return `${joined.slice(0, NOTES_MAX - 1)}…`;
+}

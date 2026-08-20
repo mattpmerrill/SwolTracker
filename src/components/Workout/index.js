@@ -5,4 +5,5 @@ export { default as WorkoutFocus } from './WorkoutFocus';
 export { default as ExerciseCard } from './ExerciseCard';
 export { default as SetRow } from './SetRow';
 export { default as WeekEndReviewCard } from './WeekEndReviewCard';
+export { default as SquadStrip } from './SquadStrip';
 export { NoWorkoutState, RestDayState } from './EmptyStates';

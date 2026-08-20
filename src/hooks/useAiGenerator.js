@@ -27,7 +27,7 @@ export function useAiGenerator({ currentUser, profiles, equipment, workoutProgra
   const openAiGenerator = useCallback((weekNum, options = {}) => {
     const nextCount = Number.isFinite(options.weekCount) ? options.weekCount : 4;
     setGenerationWeek(weekNum);
-    setAiNotes('');
+    setAiNotes(typeof options.notes === 'string' ? options.notes : '');
     setAiError('');
     setGeneratedPreview(null);
     setWeekCount(nextCount);

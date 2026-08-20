@@ -216,6 +216,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             user,
             groupRole,
             groupLeader,
+            groupMembers,
             gymId,
             exerciseLogSize: Object.keys(exerciseLog).length,
             onPreviousWeek: goToPreviousWeek,

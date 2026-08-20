@@ -4,6 +4,7 @@ import {
   getScheduledTrainingDays,
   summarizeWeekTraining,
   shouldPromptWeekEndReview,
+  buildWeekEndNotes,
 } from './programContinuity';
 
 const weekProgram = {
@@ -98,5 +99,33 @@ describe('programContinuity', () => {
       isWorkoutComplete: () => false,
       isWorkoutMissed: () => false,
     })).toBe(false);
+  });
+});
+
+describe('buildWeekEndNotes', () => {
+  const summary = {
+    completedDays: ['Monday'],
+    missedDays: ['Wednesday'],
+    remainingDays: ['Friday'],
+  };
+
+  it('includes skips with reasons, remaining days, overload, and session chips', () => {
+    const notes = buildWeekEndNotes({
+      summary,
+      weekNumber: 5,
+      userId: 'u1',
+      getMissedReason: (_w, day) => (day === 'Wednesday' ? 'travel' : null),
+      overloadCount: 2,
+      sessionNotes: [{ day: 'Monday', text: 'Felt strong today.' }],
+    });
+    expect(notes).toContain('Completed: Monday.');
+    expect(notes).toContain('Skipped: Wednesday (travel).');
+    expect(notes).toContain('Still open: Friday.');
+    expect(notes).toContain('2 overload signals this block.');
+    expect(notes).toContain('- Monday: Felt strong today.');
+  });
+
+  it('returns empty string without a summary', () => {
+    expect(buildWeekEndNotes({ summary: null })).toBe('');
   });
 });

@@ -1,4 +1,4 @@
-import { Brain, CalendarCheck, TrendingUp, X } from 'lucide-react';
+import { Brain, Bot, CalendarCheck, TrendingUp, X } from 'lucide-react';
 
 /**
  * Phase 3.7 — proactive week-end continuity card.
@@ -10,7 +10,9 @@ export default function WeekEndReviewCard({
   nextWeek,
   summary,
   overloadCount = 0,
+  hasAgentKey = false,
   onReviewAndGenerate,
+  onAskCoach,
   onDismiss,
 }) {
   if (!summary) return null;
@@ -80,19 +82,32 @@ export default function WeekEndReviewCard({
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={onReviewAndGenerate}
-        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
-      >
-        <Brain className="w-5 h-5" />
-        Review + Generate Week {nextWeek}
-      </button>
+      {hasAgentKey ? (
+        <button
+          type="button"
+          onClick={onAskCoach}
+          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
+        >
+          <Bot className="w-5 h-5" />
+          Ask your coach to plan Week {nextWeek}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onReviewAndGenerate}
+          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
+        >
+          <Brain className="w-5 h-5" />
+          Review + Generate Week {nextWeek}
+        </button>
+      )}
 
       {overloadCount > 0 && (
         <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
           <TrendingUp className="w-3 h-3 text-emerald-400" />
-          Progressive overload recs load in the review step
+          {hasAgentKey
+            ? 'Overload signals go in the note to your coach'
+            : 'Progressive overload recs load in the review step'}
         </p>
       )}
     </div>
