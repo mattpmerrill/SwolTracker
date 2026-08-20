@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { db } from '../lib/supabase';
 import {
   shouldPromptWeekEndReview,
   summarizeWeekTraining,
 } from '../lib/programContinuity';
 import { getWeekDates, getTodayDayName } from '../utils/date';
+import { unlockRestAudio } from '../utils/restCue';
 import {
   WeekSelector,
   DaySelector,
   WorkoutFocus,
   ExerciseCard,
+  RestTimer,
   NoWorkoutState,
   RestDayState,
   WeekEndReviewCard,
@@ -60,6 +63,8 @@ export default function WorkoutScreen({
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
   const [dismissedWeekEndReview, setDismissedWeekEndReview] = useState(null);
+  const [showThisWeek, setShowThisWeek] = useState(false);
+  const [sessionRest, setSessionRest] = useState(null);
   const availableWeeks = Object.keys(workoutProgram || {})
     .map((week) => Number(week))
     .filter((week) => Number.isFinite(week))
@@ -118,6 +123,43 @@ export default function WorkoutScreen({
   const overloadCount = Object.keys(overloadByExercise).length;
 
   useEffect(() => {
+    if (!isViewingToday) setShowThisWeek(true);
+  }, [isViewingToday]);
+
+  const handleRestStart = (payload) => {
+    unlockRestAudio();
+    setSessionRest({ ...payload, id: Date.now() });
+  };
+
+  const weekPicker = (
+    <>
+      <WeekSelector
+        currentWeek={currentWeek}
+        actualCurrentWeek={actualCurrentWeek}
+        weekDates={weekDates}
+        onPreviousWeek={onPreviousWeek}
+        onNextWeek={onNextWeek}
+        workoutProgram={workoutProgram}
+        isWorkoutComplete={isWorkoutComplete}
+        userId={user?.id}
+        minAvailableWeek={minAvailableWeek}
+        maxAvailableWeek={maxAvailableWeek}
+      />
+      <DaySelector
+        currentDay={currentDay}
+        currentWeek={currentWeek}
+        actualCurrentWeek={actualCurrentWeek}
+        weekDates={weekDates}
+        onDayChange={onDayChange}
+        isWorkoutComplete={isWorkoutComplete}
+        isWorkoutMissed={isWorkoutMissed}
+        workoutProgram={workoutProgram}
+        userId={user?.id}
+      />
+    </>
+  );
+
+  useEffect(() => {
     let isCancelled = false;
 
     const loadOverloadRecommendations = async () => {
@@ -136,62 +178,8 @@ export default function WorkoutScreen({
     };
   }, [gymId, user?.id, currentWeek, exerciseLogSize]);
 
-  return (
+  const session = (
     <>
-      {/* Phase 3.5 — Coach Board primary entry (not FAB-only) */}
-      {hasAgentKey && (
-        <CoachBoardEntry
-          hasUnread={coachHasUnread}
-          hasLatestNote={!!latestCoachNote}
-          onOpen={onOpenAgentChat}
-        />
-      )}
-
-      {/* Latest coach review / program note preview */}
-      {latestCoachNote && (
-        <CoachNoteCard note={latestCoachNote} onOpenChat={onOpenAgentChat} />
-      )}
-
-      {/* Phase 3.7 — week-end Review + Generate continuity */}
-      {showWeekEndReview && weekEndSummary && (
-        <WeekEndReviewCard
-          currentWeek={actualCurrentWeek}
-          nextWeek={nextProgramWeek}
-          summary={weekEndSummary}
-          overloadCount={overloadCount}
-          onReviewAndGenerate={() => onGenerateWorkout(nextProgramWeek, { weekCount: 1 })}
-          onDismiss={() => setDismissedWeekEndReview(nextProgramWeek)}
-        />
-      )}
-
-      {/* Week Selector */}
-      <WeekSelector
-        currentWeek={currentWeek}
-        actualCurrentWeek={actualCurrentWeek}
-        weekDates={weekDates}
-        onPreviousWeek={onPreviousWeek}
-        onNextWeek={onNextWeek}
-        workoutProgram={workoutProgram}
-        isWorkoutComplete={isWorkoutComplete}
-        userId={user?.id}
-        minAvailableWeek={minAvailableWeek}
-        maxAvailableWeek={maxAvailableWeek}
-      />
-
-      {/* Day Selector */}
-      <DaySelector
-        currentDay={currentDay}
-        currentWeek={currentWeek}
-        actualCurrentWeek={actualCurrentWeek}
-        weekDates={weekDates}
-        onDayChange={onDayChange}
-        isWorkoutComplete={isWorkoutComplete}
-        isWorkoutMissed={isWorkoutMissed}
-        workoutProgram={workoutProgram}
-        userId={user?.id}
-      />
-
-      {/* No Workout Programmed State */}
       {!hasWorkoutProgrammed && (
         <NoWorkoutState
           currentWeek={currentWeek}
@@ -203,10 +191,10 @@ export default function WorkoutScreen({
         />
       )}
 
-      {/* Today's Focus */}
       {hasWorkoutProgrammed && todayWorkout && (
         <WorkoutFocus
           currentDay={currentDay}
+          isViewingToday={isViewingToday}
           workout={todayWorkout}
           completionPercentage={getCompletionPercentage(currentWeek, currentDay, user.id)}
           isWorkoutComplete={dayComplete}
@@ -218,7 +206,6 @@ export default function WorkoutScreen({
         />
       )}
 
-      {/* Phase 3.6 — post-workout note to agent */}
       {hasAgentKey && hasWorkoutProgrammed && dayComplete && todayWorkout?.focus !== 'Rest Day' && (
         <PostWorkoutCoachPrompt
           week={currentWeek}
@@ -230,7 +217,6 @@ export default function WorkoutScreen({
         />
       )}
 
-      {/* Exercises */}
       {hasWorkoutProgrammed && (
         todayWorkout?.focus === 'Rest Day' ? (
           <RestDayState />
@@ -238,15 +224,18 @@ export default function WorkoutScreen({
           <div className="space-y-4">
             {todayWorkout?.exercises?.map((exercise, exIdx) => (
               <ExerciseCard
-                key={exIdx}
+                key={`${currentWeek}-${currentDay}-${exIdx}-${exercise.name}`}
                 exercise={exercise}
                 exerciseIndex={exIdx}
+                currentWeek={currentWeek}
+                currentDay={currentDay}
                 userMaxes={user?.maxes}
                 overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
                 isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}
                 onAddMax={onAddMax}
+                onRestStart={handleRestStart}
                 swapState={swapState}
                 onRequestSwap={onRequestSwap}
                 onAcceptSwap={onAcceptSwap}
@@ -256,13 +245,79 @@ export default function WorkoutScreen({
           </div>
         )
       )}
+    </>
+  );
 
-      {/* Jump to Today floating button — only when not viewing today.
-          bottom-24 clears BottomNav; Coach Board FAB no longer occupies this corner. */}
+  return (
+    <>
+      {session}
+
+      {showWeekEndReview && weekEndSummary && (
+        <div className="mt-6">
+          <WeekEndReviewCard
+            currentWeek={actualCurrentWeek}
+            nextWeek={nextProgramWeek}
+            summary={weekEndSummary}
+            overloadCount={overloadCount}
+            onReviewAndGenerate={() => onGenerateWorkout(nextProgramWeek, { weekCount: 1 })}
+            onDismiss={() => setDismissedWeekEndReview(nextProgramWeek)}
+          />
+        </div>
+      )}
+
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={() => setShowThisWeek((open) => !open)}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-left hover:border-zinc-700 transition-colors"
+          aria-expanded={showThisWeek}
+        >
+          <div>
+            <p className="text-sm font-semibold text-white">This week</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {isViewingToday
+                ? `Week ${currentWeek} · ${currentDay}`
+                : `Viewing Week ${currentWeek} · ${currentDay}`}
+            </p>
+          </div>
+          <ChevronDown
+            className={`w-5 h-5 text-zinc-500 transition-transform ${showThisWeek ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {showThisWeek && <div className="mt-4">{weekPicker}</div>}
+      </div>
+
+      {hasAgentKey && (
+        <div className="mt-4">
+          <CoachBoardEntry
+            hasUnread={coachHasUnread}
+            hasLatestNote={!!latestCoachNote}
+            onOpen={onOpenAgentChat}
+          />
+        </div>
+      )}
+      {latestCoachNote && (
+        <CoachNoteCard note={latestCoachNote} onOpenChat={onOpenAgentChat} />
+      )}
+
+      {sessionRest && (
+        <RestTimer
+          key={sessionRest.id}
+          exerciseName={sessionRest.exerciseName}
+          setIndex={sessionRest.setIndex}
+          totalSets={sessionRest.totalSets}
+          restSeconds={sessionRest.restSeconds}
+          onDismiss={() => setSessionRest(null)}
+        />
+      )}
+
       {!isViewingToday && (
         <button
           type="button"
-          onClick={onGoToCurrentWeek}
+          onClick={() => {
+            onGoToCurrentWeek();
+            setShowThisWeek(false);
+          }}
           className="float-above-tabbar fixed right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-105 active:scale-95 transition-all"
         >
           <span>↩</span>

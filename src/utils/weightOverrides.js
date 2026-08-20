@@ -1,4 +1,12 @@
 /**
+ * localStorage key for a per-session (week + day + exercise) override map.
+ * Older keys were `weightOverrides-${exerciseName}` and leaked across days.
+ */
+export function overrideStorageKey(kind, week, day, exerciseName) {
+  return `${kind}-${week}-${day}-${exerciseName}`;
+}
+
+/**
  * Apply a weight override and cascade it to later unlogged sets.
  *
  * When a lifter scales a set down ("I'm not feeling it — 170 instead of 185"),

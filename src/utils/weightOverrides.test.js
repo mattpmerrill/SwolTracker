@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { applyWeightCascade } from './weightOverrides';
+import { applyWeightCascade, overrideStorageKey } from './weightOverrides';
+
+describe('overrideStorageKey', () => {
+  it('scopes by week, day, and exercise so Thursday does not leak into this week', () => {
+    expect(overrideStorageKey('weightOverrides', 4, 'Thursday', 'Bench Press'))
+      .toBe('weightOverrides-4-Thursday-Bench Press');
+    expect(overrideStorageKey('weightOverrides', 5, 'Thursday', 'Bench Press'))
+      .not.toBe(overrideStorageKey('weightOverrides', 4, 'Thursday', 'Bench Press'));
+    expect(overrideStorageKey('repsOverrides', 4, 'Monday', 'Squat'))
+      .toBe('repsOverrides-4-Monday-Squat');
+  });
+});
 
 const noneLogged = () => false;
 

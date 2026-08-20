@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, SkipForward } from 'lucide-react';
+import { signalRestComplete } from '../../utils/restCue';
 
 /**
  * Rest timer that appears after logging a set.
@@ -22,6 +23,7 @@ export default function RestTimer({
 }) {
   const [secondsLeft, setSecondsLeft] = useState(restSeconds);
   const intervalRef = useRef(null);
+  const cuedRef = useRef(false);
 
   const dismiss = useCallback(() => {
     clearInterval(intervalRef.current);
@@ -33,6 +35,10 @@ export default function RestTimer({
       setSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(intervalRef.current);
+          if (!cuedRef.current) {
+            cuedRef.current = true;
+            signalRestComplete();
+          }
           // Small delay so user sees 0:00 briefly before auto-dismiss
           setTimeout(() => onDismiss?.(), 600);
           return 0;

@@ -217,7 +217,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 |-------|-------|-----|-------|--------|
 | **1** | App currently lies | Invite / profile / bootstrap can show success or spin forever when the write failed | Beck | **Done 2026-08-20** |
 | **2** | Stranger-safe | Remaining IDOR / key-RPC / CORS holes before inviting anyone new | Beck | **Done 2026-08-20** |
-| **3** | Today session | Daily gym-floor UX: open PWA → today’s workout, not a week planner | — | Not started |
+| **3** | Today session | Daily gym-floor UX: open PWA → today’s workout, not a week planner | Beck | **Done 2026-08-20** |
 | **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | — | Not started |
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | — | Not started |
 
@@ -256,11 +256,11 @@ April review criticals were mostly closed (027 + `resolveGymId`). These remain. 
 
 The daily loop already exists (today cursor, Today FAB, focus ring, set log, rest timer, skip, complete). Priority is wrong: open app → week picker.
 
-| # | Ticket | Files | Done when |
-|---|--------|-------|-----------|
-| 3.1 | **`/workout` is Today.** Week/day picker behind a “This week” disclosure. `WorkoutFocus` labeled Today when `isViewingToday`. | `src/screens/WorkoutScreen.jsx`, `WeekSelector.jsx`, `DaySelector.jsx`, `WorkoutFocus.jsx` | Cold open (PWA `start_url` `/workout`) shows today’s focus + first unlogged set without scrolling past a week chrome. Week picker still reachable. |
-| 3.2 | **One rest timer for the session** (not per `ExerciseCard`) + haptic or beep at 0. Silent-in-pocket is the current gap. | `src/components/Workout/RestTimer.jsx`, `ExerciseCard.jsx` | One timer; completion is perceptible with the phone in a pocket (vibrate or short tone). |
-| 3.3 | **Weight/rep overrides keyed by week+day+exercise.** Today they are `localStorage` keyed only by exercise name → last Thursday’s bench leaks into this week. | `src/utils/weightOverrides.js`, `SetRow.jsx` | Overrides do not cross week/day. Existing tests extended. |
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 3.1 | **`/workout` is Today.** Week/day picker behind a “This week” disclosure. `WorkoutFocus` labeled Today when `isViewingToday`. | `src/screens/WorkoutScreen.jsx`, `WeekSelector.jsx`, `DaySelector.jsx`, `WorkoutFocus.jsx` | Cold open (PWA `start_url` `/workout`) shows today’s focus + first unlogged set without scrolling past a week chrome. Week picker still reachable. | **Done 2026-08-20** — session first; week/day behind “This week”; focus labeled Today · {day} |
+| 3.2 | **One rest timer for the session** (not per `ExerciseCard`) + haptic or beep at 0. Silent-in-pocket is the current gap. | `src/components/Workout/RestTimer.jsx`, `ExerciseCard.jsx` | One timer; completion is perceptible with the phone in a pocket (vibrate or short tone). | **Done 2026-08-20** — one `sessionRest` on WorkoutScreen; vibrate + 880Hz beep at 0 |
+| 3.3 | **Weight/rep overrides keyed by week+day+exercise.** Today they are `localStorage` keyed only by exercise name → last Thursday’s bench leaks into this week. | `src/utils/weightOverrides.js`, `SetRow.jsx` | Overrides do not cross week/day. Existing tests extended. | **Done 2026-08-20** — `overrideStorageKey(kind, week, day, name)` |
 
 ---
 
@@ -282,7 +282,7 @@ Phase 1A/1B/1C shipped. The loop still doesn’t close; in-app ChatGPT and the M
 | 5.1 | Sentry (or equivalent) on web + `/api/llm` + `/api/mcp`. `error_logs` is browser-only today. | `src/main.jsx`, `api/llm.js`, `api/mcp.js` | Uncaught errors and 5xx on those functions show up in one dashboard. No secrets in breadcrumbs. |
 | 5.2 | Log LLM usage **on the server** (`log_api_usage` from `api/llm.js`), not only after the client succeeds. Cap `systemPrompt`/`userPrompt` byte size; do not return raw provider `error.message`. | `api/llm.js` | Admin usage reflects proxy calls even if the tab dies. Oversize body → 413. |
 | 5.3 | ESLint in CI. Config exists; `package.json` has no `lint` script; `.github/workflows/test.yml` does not run it. | `package.json`, `.github/workflows/test.yml` | `npm run lint` is a required CI step. |
-| 5.4 | Migration hygiene. Next SQL is `034`. Do not `supabase db push` from `supabase/migrations/` (7-file stale subset). Optional: stop auto-`createGym` on login (explicit in onboarding). | `migrations/`, bootstrap if touching gym create | 034 applied on prod + changelog row. CLI folder still not treated as live history. |
+| 5.4 | Migration hygiene. Next SQL is `035`. Do not `supabase db push` from `supabase/migrations/` (7-file stale subset). Optional: stop auto-`createGym` on login (explicit in onboarding). | `migrations/`, bootstrap if touching gym create | 034 already applied on prod. CLI folder still not treated as live history. |
 
 **Related later (not a slice):** shared week/date module web↔MCP; dual-write validator so web `logSet`/`saveWorkoutProgram` match MCP Zod; screens reading contexts directly (kill prop bags) — do that when touching slice 3, not as its own project.
 
@@ -377,7 +377,7 @@ Prior Joi work on `main` still stands: 1.3 / 1.5 / 3.4 / 3.5 / 3.6.
 
 ### Suggested next pick-ups for Joi
 
-Current queue (2026-08-20) supersedes the July 14 list. Slices 1–2 are **Done**. Next is **slice 3.1 Today session** unless Matt says otherwise. Do not start slice 3 until Matt green-lights it.
+Current queue (2026-08-20) supersedes the July 14 list. Slices 1–3 are **Done**. Next is **slice 4.1 week-end loop** unless Matt says otherwise. Do not start slice 4 until Matt green-lights it.
 
 July leftovers that still matter, now mapped:
 
@@ -389,7 +389,7 @@ July leftovers that still matter, now mapped:
 
 ### Suggested next pick-ups for Beck
 
-Slices 1–2 done. Stop and wait for Matt before slice 3 (Today session).  
+Slices 1–3 done. Stop and wait for Matt before slice 4 (weekly loop + squad strip).  
 
 ### Ops reminders
 
@@ -404,6 +404,7 @@ Slices 1–2 done. Stop and wait for Matt before slice 3 (Today session).
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-08-20 | Beck | **Slice 3 done.** Workout tab is a Today session: focus + sets first, week/day picker behind “This week.” One rest timer for the session (vibrate + beep at 0). Weight/rep overrides keyed by week+day+exercise. |
 | 2026-08-20 | Beck | **Slice 2 done.** Migration **034** applied on prod: `search_users(search_term)` uses `auth.uid()`, 2–50 chars, email only for admins; `get_app_setting` / LLM key RPCs admin-or-service_role. CORS no longer `*` (`ALLOWED_ORIGINS` or built-in prod+localhost list). MCP `save_workout_program` requires gym `owner`/`leader`. Tests: `idor-guards`, `resolveGymId` foreign gym, member save forbidden, CORS allow list. |
 | 2026-08-20 | Beck | **Slice 1 done.** Invite accept checks `success === true` (no more confetti on `{ success: false }`). Join hydrates the week-keyed program map. Profile Zod accepts fitness/start-date/group name; group name save awaits + toasts; failed save keeps the editor open. Bootstrap failure shows retry instead of an infinite spinner. Helpers/tests: `src/lib/groupJoin.js`, `validation.test.js`, `useAppBootstrap.test.js`. |
 | 2026-08-20 | Beck | **Production slices queued.** Fresh web-only diagnosis: app is not a rewrite; P0 is “UI lies” then remaining IDOR/CORS, then Today + closed weekly loop. New section **Current work queue — production slices (2026-08-20)** with tickets 1.1–5.4. Joi: next unowned slice is **2** after slice 1 is on `main`. |

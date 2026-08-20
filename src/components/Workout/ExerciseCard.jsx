@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
-import RestTimer from './RestTimer';
 import { calculateWeight, findMaxKey, resolveLoggedReps } from '../../utils/workout';
-import { applyWeightCascade } from '../../utils/weightOverrides';
+import { applyWeightCascade, overrideStorageKey } from '../../utils/weightOverrides';
+import { getRestSeconds } from '../../utils/restCue';
 import { getItem, setItem } from '../../utils/storage';
 
 /**
@@ -13,12 +13,15 @@ import { getItem, setItem } from '../../utils/storage';
 export default function ExerciseCard({
   exercise,
   exerciseIndex,
+  currentWeek,
+  currentDay,
   userMaxes,
   overloadRecommendation,
   isWorkoutComplete,
   isSetLogged,
   onLogSet,
   onAddMax,
+  onRestStart,
   swapState,
   onRequestSwap,
   onAcceptSwap,
@@ -27,20 +30,11 @@ export default function ExerciseCard({
   const isSwapping = swapState?.loading && swapState?.exerciseIndex === exerciseIndex;
   const hasAlternative = swapState?.exerciseIndex === exerciseIndex && swapState?.alternative;
 
-  // Rest timer state
-  const [restTimer, setRestTimer] = useState(null); // { setIndex }
-
-  // Per-exercise, per-set weight overrides. Keyed by set index; value is the
-  // user's actual lift weight (when they scaled the prescribed number).
-  const storageKey = `weightOverrides-${exercise.name}`;
-  const repsStorageKey = `repsOverrides-${exercise.name}`;
-  const [weightOverrides, setWeightOverrides] = useState(() => {
-    // Load from localStorage on mount
-    return getItem(storageKey) || {};
-  });
+  const storageKey = overrideStorageKey('weightOverrides', currentWeek, currentDay, exercise.name);
+  const repsStorageKey = overrideStorageKey('repsOverrides', currentWeek, currentDay, exercise.name);
+  const [weightOverrides, setWeightOverrides] = useState(() => getItem(storageKey) || {});
   const [repsOverrides, setRepsOverrides] = useState(() => getItem(repsStorageKey) || {});
 
-  // Persist weight overrides to localStorage whenever they change
   useEffect(() => {
     setItem(storageKey, weightOverrides);
   }, [weightOverrides, storageKey]);
@@ -49,44 +43,16 @@ export default function ExerciseCard({
     setItem(repsStorageKey, repsOverrides);
   }, [repsOverrides, repsStorageKey]);
 
-  // ExerciseCard is keyed by position, not name — on a swap the component
-  // re-renders with a new exercise. Clear stale overrides in that case, but
-  // skip the first mount so we don't wipe the values we just loaded.
-  const prevExerciseName = useRef(exercise.name);
-  useEffect(() => {
-    if (prevExerciseName.current === exercise.name) return;
-    prevExerciseName.current = exercise.name;
-    setWeightOverrides({});
-    setRepsOverrides({});
-    setItem(storageKey, {});
-    setItem(repsStorageKey, {});
-  }, [exercise.name, storageKey, repsStorageKey]);
-
-  // Recommended rest based on reps (heavy = longer rest).
-  // Robust to a polluted "reps" string (e.g. "5 warmup, 3 warmup, then 1 rep..."):
-  // only treat the value as a leading integer if the WHOLE string is a digit run
-  // or a digit run + a single short token (e.g. "30s", "5/side"). Anything more
-  // elaborate falls back to the "conditioning → 60s" default rather than
-  // misclassifying the warmup rep as the working rep count.
-  function getRestSeconds(reps) {
-    if (reps == null) return 60;
-    const text = String(reps).trim();
-    const m = text.match(/^(\d{1,3})(?:\s*(?:reps?|s|sec|seconds?))?$/i);
-    if (!m) return 60;
-    const r = parseInt(m[1], 10);
-    if (!Number.isFinite(r) || r <= 0) return 60;
-    if (r <= 3) return 180; // heavy triples → 3 min
-    if (r <= 6) return 150; // strength work → 2.5 min
-    if (r <= 10) return 90; // hypertrophy → 90s
-    return 60;              // high rep / conditioning → 60s
-  }
-
   function handleLogSet(setIdx, data) {
     onLogSet(exerciseIndex, setIdx, data);
-    // Only show timer if this set wasn't already logged (i.e. we're logging it, not unlogging)
     const alreadyLogged = isSetLogged(exerciseIndex, setIdx);
     if (!alreadyLogged && !isWorkoutComplete) {
-      setRestTimer({ setIndex: setIdx });
+      onRestStart?.({
+        exerciseName: exercise.name,
+        setIndex: setIdx,
+        totalSets: exercise.sets,
+        restSeconds: getRestSeconds(exercise.reps),
+      });
     }
   }
 
@@ -298,17 +264,6 @@ export default function ExerciseCard({
           })}
         </div>
       </div>
-
-      {/* Rest timer — shown after a set is logged */}
-      {restTimer && (
-        <RestTimer
-          exerciseName={exercise.name}
-          setIndex={restTimer.setIndex}
-          totalSets={exercise.sets}
-          restSeconds={getRestSeconds(exercise.reps)}
-          onDismiss={() => setRestTimer(null)}
-        />
-      )}
     </div>
   );
 }
