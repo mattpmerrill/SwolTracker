@@ -26,6 +26,7 @@ export default function ExerciseCard({
   onRequestSwap,
   onAcceptSwap,
   onCancelSwap,
+  lastAvgReps = null,
 }) {
   const isSwapping = swapState?.loading && swapState?.exerciseIndex === exerciseIndex;
   const hasAlternative = swapState?.exerciseIndex === exerciseIndex && swapState?.alternative;
@@ -259,6 +260,7 @@ export default function ExerciseCard({
                 onAddMax={() => onAddMax(exercise.name)}
                 onWeightChange={(newWeight) => handleWeightChange(setIdx, newWeight)}
                 onRepsChange={(newReps) => handleRepsChange(setIdx, newReps)}
+                lastAvgReps={lastAvgReps}
               />
             );
           })}

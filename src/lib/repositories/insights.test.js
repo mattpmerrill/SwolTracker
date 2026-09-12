@@ -19,6 +19,7 @@ describe('insightsRepo', () => {
     const overload = await repo.getOverloadRecommendations(null, null, 4);
     expect(overload.recommendations).toEqual([]);
     expect(overload.byExercise).toEqual({});
+    expect(overload.lastByExercise).toEqual({});
     expect(overload.summary).toBe('No overload recommendations right now.');
   });
 });

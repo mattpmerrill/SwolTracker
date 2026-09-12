@@ -26,6 +26,7 @@ export function createInsightsRepo(supabase) {
     return overload || {
       recommendations: [],
       byExercise: {},
+      lastByExercise: {},
       currentWeek: 1,
       lookbackWeeks,
       summary: 'No overload recommendations right now.',

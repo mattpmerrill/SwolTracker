@@ -5,6 +5,11 @@ import {
   getAverage,
   getRecentWeekRange,
 } from '../insightsHelpers'
+import {
+  isBodyweightSession,
+  overloadDeloadMessage,
+  overloadIncreaseMessage,
+} from '../../utils/bodyweight'
 
 export async function buildTrainingInsights(supabase, userId, gymId, lookbackWeeks = 4) {
   if (!supabase || !userId || !gymId) return null
@@ -189,6 +194,7 @@ export async function buildOverloadInsights(supabase, userId, gymId, lookbackWee
 
   const recommendations = []
   const byExercise = {}
+  const lastByExercise = {}
 
   Array.from(sessionsByExercise.entries()).forEach(([exerciseName, sessions]) => {
     const ordered = [...sessions].sort((a, b) => {
@@ -197,6 +203,12 @@ export async function buildOverloadInsights(supabase, userId, gymId, lookbackWee
     })
     const latest = ordered[0]
     if (!latest) return
+
+    const bodyweight = isBodyweightSession(latest)
+    lastByExercise[exerciseName.toLowerCase()] = {
+      avg_actual_reps: latest.avg_actual_reps || null,
+      is_bodyweight: bodyweight,
+    }
 
     let consecutiveHits = 0
     let consecutiveMisses = 0
@@ -228,10 +240,14 @@ export async function buildOverloadInsights(supabase, userId, gymId, lookbackWee
         exercise_name: exerciseName,
         type: 'increase',
         status_label: 'Ready to level up',
-        suggested_increment: 5,
+        suggested_increment: bodyweight ? 2 : 5,
         streak_count: consecutiveHits,
         last_seen_week: latest.week_number,
-        message: `${exerciseName} hit prescribed reps for ${consecutiveHits} straight sessions. Add 5 lbs next time.`,
+        message: overloadIncreaseMessage({
+          exerciseName,
+          consecutiveHits,
+          isBodyweight: bodyweight,
+        }),
       }
     } else if (consecutiveMisses >= 2) {
       rec = {
@@ -241,7 +257,11 @@ export async function buildOverloadInsights(supabase, userId, gymId, lookbackWee
         suggested_increment: 0,
         streak_count: consecutiveMisses,
         last_seen_week: latest.week_number,
-        message: `${exerciseName} has missed prescribed reps for ${consecutiveMisses} straight sessions. Consider a deload or form check.`,
+        message: overloadDeloadMessage({
+          exerciseName,
+          consecutiveMisses,
+          isBodyweight: bodyweight,
+        }),
       }
     }
 
@@ -258,6 +278,7 @@ export async function buildOverloadInsights(supabase, userId, gymId, lookbackWee
   return {
     recommendations,
     byExercise,
+    lastByExercise,
     currentWeek: history.current_week,
     lookbackWeeks: history.lookback_weeks,
     summary: recommendations.length

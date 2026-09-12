@@ -944,13 +944,14 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const recommendations: Recommendation[] = [];
-    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; hit_all_reps: boolean }>>();
+    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; hit_all_reps: boolean; hasWeight: boolean }>>();
     Array.from(sessionMap.values()).forEach((session) => {
       const sessions = byExercise.get(session.exercise_name) ?? [];
       sessions.push({
         week_number: session.week_number,
         day_name: session.day_name,
         hit_all_reps: session.hit_all_reps,
+        hasWeight: session.actual_weights.some((w) => w > 0) || session.prescribed_weights.some((w) => w > 0),
       });
       byExercise.set(session.exercise_name, sessions);
     });
@@ -990,13 +991,16 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         }
       }
 
+      const isBodyweight = !latest.hasWeight;
       if (consecutiveHits >= 3) {
         recommendations.push({
           exercise_name: ex,
           type: "increase",
           status_label: "Ready to level up",
-          message: `${ex}: Hit all prescribed reps for ${consecutiveHits} straight sessions. Ready to add 5 lbs.`,
-          suggested_increment: 5,
+          message: isBodyweight
+            ? `${ex}: Hit all prescribed reps for ${consecutiveHits} straight sessions. Ready to add 2 reps.`
+            : `${ex}: Hit all prescribed reps for ${consecutiveHits} straight sessions. Ready to add 5 lbs.`,
+          suggested_increment: isBodyweight ? 2 : 5,
           streak_count: consecutiveHits,
           last_seen_week: latest.week_number,
         });
@@ -1005,7 +1009,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           exercise_name: ex,
           type: "deload",
           status_label: "Check load",
-          message: `${ex}: Missed prescribed reps for ${consecutiveMisses} straight sessions. Consider a deload or form check before increasing weight.`,
+          message: isBodyweight
+            ? `${ex}: Missed prescribed reps for ${consecutiveMisses} straight sessions. Consider fewer reps or an easier variation.`
+            : `${ex}: Missed prescribed reps for ${consecutiveMisses} straight sessions. Consider a deload or form check before increasing weight.`,
           streak_count: consecutiveMisses,
           last_seen_week: latest.week_number,
         });

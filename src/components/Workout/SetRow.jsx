@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Minus, Plus, X } from 'lucide-react';
 import { isRepsAdjusted, parseRepsDraft, toActualRepsValue } from '../../utils/workout';
+import { bodyweightRowHint } from '../../utils/bodyweight';
 
 const STEP_LBS = 5;
 const STEP_REPS = 1;
@@ -13,6 +14,8 @@ const REPS_VISIBLE_MAX = 16;
  *  - Tap the weight text → inline weight editor (stepper + input + reset).
  *  - Tap the reps text → inline reps editor (stepper + input + reset).
  *  - Tap anywhere else → logs the set (at current displayed weight/reps).
+ * Bodyweight rows have no weight control — the vacated column shows last
+ * session / effort / rest so the whole row stays a log tap.
  * Edit mode blocks the log tap so the two never collide.
  */
 export default function SetRow({
@@ -29,6 +32,7 @@ export default function SetRow({
   onAddMax,
   onWeightChange,
   onRepsChange,
+  lastAvgReps = null,
 }) {
   const isDisabled = isWorkoutComplete;
   const hasPrescribedWeight = prescribedWeight != null;
@@ -38,6 +42,9 @@ export default function SetRow({
   const isAdjusted = hasPrescribedWeight && weightOverride != null && weightOverride !== prescribedWeight;
   const repsAdjusted = isRepsAdjusted(reps, repsOverride);
   const prescribedRepsNumeric = toActualRepsValue(reps);
+  const bodyweightHint = !hasWeight && !percentage
+    ? bodyweightRowHint({ reps, isLogged, lastAvgReps })
+    : '';
 
   const [editingField, setEditingField] = useState(null); // 'weight' | 'reps' | null
   const [draft, setDraft] = useState(displayedWeight ?? 0);
@@ -327,22 +334,11 @@ export default function SetRow({
                 )}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={openWeightEditor}
-                disabled={isDisabled || isLogged || !onWeightChange}
-                className={`inline-flex items-center gap-2 text-zinc-400 ${
-                  !isDisabled && !isLogged && onWeightChange
-                    ? 'hover:text-orange-400 transition-colors underline decoration-dotted decoration-zinc-600 underline-offset-4'
-                    : ''
-                }`}
-                title={!isLogged && onWeightChange ? 'Tap to enter actual weight' : undefined}
-              >
-                <span>Bodyweight / As prescribed</span>
-                {!isDisabled && !isLogged && onWeightChange && (
-                  <span className="text-xs text-orange-500 font-medium">+ Weight</span>
-                )}
-              </button>
+              bodyweightHint ? (
+                <span className="text-sm text-zinc-400 truncate">
+                  {bodyweightHint}
+                </span>
+              ) : null
             )}
           </div>
         )}

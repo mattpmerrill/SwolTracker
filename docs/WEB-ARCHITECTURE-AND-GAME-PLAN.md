@@ -2,7 +2,7 @@
 title: SwolTracker Web Architecture Review & Game Plan
 status: active
 created: 2026-07-13
-updated: 2026-08-20
+updated: 2026-09-12
 author: Beck (+ Joi changelog)
 handoff: joi
 audience: Matt, Joi, Ada, future agents
@@ -404,6 +404,7 @@ Slices 1–5 done. Production-readiness queue is complete. Product follow-ups ar
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-12 | Joi | **Bodyweight set rows:** dropped `+ Weight` and `Bodyweight / As prescribed` so the row is a log tap. Vacated space shows last-session reps, AMRAP “Max effort”, or rest. Overload copy for unloaded work is +2 reps, not +5 lbs. |
 | 2026-08-20 | Beck | **Slice 5 done.** Sentry wired env-gated (`SENTRY_DSN` / `VITE_SENTRY_DSN`, no-op until set). `/api/llm` logs usage server-side, 413 on oversized prompts, no raw provider errors. `npm run lint` is a CI gate. Bootstrap no longer auto-creates a gym. |
 | 2026-08-20 | Beck | **Slice 4 done.** Week-end card: 1-week generate with skip/overload/session notes prefilled; agent users get “Ask your coach” only (no second generate button). Squad strip on Today from existing completions/misses. |
 | 2026-08-20 | Beck | **Slice 3 done.** Workout tab is a Today session: focus + sets first, week/day picker behind “This week.” One rest timer for the session (vibrate + beep at 0). Weight/rep overrides keyed by week+day+exercise. |

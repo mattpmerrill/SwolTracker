@@ -67,6 +67,7 @@ export default function WorkoutScreen({
   onSendCoachNote,
 }) {
   const [overloadByExercise, setOverloadByExercise] = useState({});
+  const [lastByExercise, setLastByExercise] = useState({});
   const [dismissedWeekEndReview, setDismissedWeekEndReview] = useState(null);
   const [showThisWeek, setShowThisWeek] = useState(false);
   const [sessionRest, setSessionRest] = useState(null);
@@ -222,6 +223,7 @@ export default function WorkoutScreen({
       const overload = await db.getOverloadRecommendations(user.id, gymId, 4);
       if (!isCancelled) {
         setOverloadByExercise(overload?.byExercise || {});
+        setLastByExercise(overload?.lastByExercise || {});
       }
     };
 
@@ -289,6 +291,7 @@ export default function WorkoutScreen({
                 currentDay={currentDay}
                 userMaxes={user?.maxes}
                 overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
+                lastAvgReps={lastByExercise[exercise.name.toLowerCase()]?.avg_actual_reps}
                 isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
                 isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
                 onLogSet={onLogSet}
