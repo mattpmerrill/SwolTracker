@@ -106,8 +106,10 @@ const recentLogsModule: ContextModule<ContextDeps> = {
     }>;
 
     const sessionKeys = new Set(logs.map((l) => `${l.week_number}::${l.day_name}`));
+    const loadedLogs = logs.filter((l) => (l.actual_weight || 0) > 0);
+    const countSource = loadedLogs.length > 0 ? loadedLogs : logs;
     const exerciseCounts = new Map<string, number>();
-    for (const log of logs) {
+    for (const log of countSource) {
       exerciseCounts.set(log.exercise_name, (exerciseCounts.get(log.exercise_name) ?? 0) + 1);
     }
 

@@ -40,6 +40,8 @@ export interface ProgramExercise {
   sets: number;
   reps: number | string;
   percentages?: number[];
+  /** Optional prescribed load. Used when no 1RM resolves. */
+  weight_lbs?: number;
 }
 
 /** A single day in the workout program */

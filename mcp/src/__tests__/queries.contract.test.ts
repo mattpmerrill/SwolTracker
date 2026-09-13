@@ -80,6 +80,68 @@ describe('MCP queries contract', () => {
     expect((result.data as any).exercises[0].weight_lbs).toBe(50);
   });
 
+  it('get_todays_workout matches 1RMs on the raw maxes key, not only canonical aliases', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'member', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    sb.respond('workout_programs.single', {
+      data: {
+        id: 'p1',
+        gym_id: 'g1',
+        week_number: 34,
+        program_data: {
+          Monday: {
+            focus: 'Upper',
+            exercises: [
+              {
+                name: 'Incline Bench Press',
+                sets: 4,
+                reps: '8',
+                percentages: [70, 73, 76, 78],
+                weight_lbs: 145,
+              },
+              {
+                name: 'Pendlay Rows',
+                sets: 4,
+                reps: '6',
+                percentages: [70, 73, 75, 75],
+                weight_lbs: 125,
+              },
+            ],
+          },
+        },
+        created_by: 'u1',
+        ai_generated: true,
+        ai_notes: null,
+        created_at: '2026-09-13T00:00:00.000Z',
+      },
+      error: null,
+    });
+    sb.respond('current_user_maxes.list', {
+      data: [
+        { user_id: 'u1', exercise_name: 'Incline Bench Press', weight_lbs: 185 },
+        { user_id: 'u1', exercise_name: 'Pendlay Rows', weight_lbs: 165 },
+      ],
+      error: null,
+    });
+    sb.respond('workout_logs.list', { data: [], error: null });
+    sb.respond('workout_completions.maybeSingle', { data: null, error: null });
+
+    const tools = createQueryTools(sb, 'u1');
+    const result = await tools.get_todays_workout('g1', 'Monday', 34);
+
+    expect(result.success).toBe(true);
+    const exercises = (result.data as any).exercises;
+    expect(exercises[0].name).toBe('Incline Bench Press');
+    expect(exercises[0].max_1rm).toBe(185);
+    expect(exercises[0].weight_lbs).toBe(145); // 78% of 185 → 144.3 → 145
+    expect(exercises[1].name).toBe('Pendlay Rows');
+    expect(exercises[1].max_1rm).toBe(165);
+    expect(exercises[1].weight_lbs).toBe(125); // 75% of 165 → 123.75 → 125
+  });
+
   it('resolveGymId returns null when the caller is not a member of the supplied gym', async () => {
     const sb = createMcpMockSupabase();
     sb.respond('gym_members.list', {

@@ -83,11 +83,19 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     exerciseName: string,
     maxes: Record<string, number>
   ): number | null {
-    const canonical = normalizeExerciseName(exerciseName);
+    const nameLc = exerciseName.toLowerCase().trim();
+    // Exact key first — program names often match maxes keys that are NOT
+    // the canonical alias (e.g. "Incline Bench Press", "Pendlay Rows").
     const exactKey = Object.keys(maxes).find(
-      (key) => key.toLowerCase() === canonical.toLowerCase()
+      (key) => key.toLowerCase().trim() === nameLc
     );
-    return exactKey ? maxes[exactKey] : null;
+    if (exactKey) return maxes[exactKey];
+
+    const canonical = normalizeExerciseName(exerciseName).toLowerCase();
+    const byCanon = Object.keys(maxes).find(
+      (key) => normalizeExerciseName(key).toLowerCase() === canonical
+    );
+    return byCanon ? maxes[byCanon] : null;
   }
 
   function enrichExercises(
@@ -101,6 +109,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       if (ex.percentages && ex.percentages.length > 0 && max1RM) {
         const maxPct = Math.max(...ex.percentages);
         weight_lbs = roundToNearestFive((maxPct / 100) * max1RM);
+      } else if (typeof ex.weight_lbs === "number") {
+        weight_lbs = ex.weight_lbs;
       }
 
       return {
@@ -814,6 +824,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         : `${ws.completed_days.length} days`;
 
       const exLines = ws.exercise_sessions
+        .slice()
+        .sort((a, b) => {
+          const wa = a.avg_actual_weight || a.avg_prescribed_weight || 0;
+          const wb = b.avg_actual_weight || b.avg_prescribed_weight || 0;
+          if (wb !== wa) return wb - wa;
+          return b.sets_logged - a.sets_logged;
+        })
         .slice(0, 4)
         .map((session) => {
           const targetWeight = session.avg_actual_weight || session.avg_prescribed_weight || 0;
