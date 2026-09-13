@@ -34,7 +34,7 @@ interface LogWorkoutSummaryParams {
   mark_complete?: boolean;
 }
 
-interface ResolvedProgramExercise extends Omit<ProgramExercise, "percentages"> {
+interface ResolvedProgramExercise extends Omit<ProgramExercise, "percentages" | "weight_lbs"> {
   exercise_index: number;
   weight_lbs: number | null;
   max_1rm: number | null;
