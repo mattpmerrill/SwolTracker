@@ -220,6 +220,10 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | **3** | Today session | Daily gym-floor UX: open PWA → today’s workout, not a week planner | Beck | **Done 2026-08-20** |
 | **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | Beck | **Done 2026-08-20** |
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | Beck | **Done 2026-08-20** |
+| **6** | Instant cold open | Bootstrap is a ~10-call serial waterfall; 672KB single bundle; 36 `select('*')` | Joi | **Proposed 2026-09-23** — Matt to lock order |
+| **7** | PR moments (e1RM) | PRs only exist when a 1RM is typed by hand; no estimated-max math anywhere | Joi | **Proposed 2026-09-23** |
+| **8** | Shared domain core | Week math, exercise aliases, and program/log Zod duplicated across web JS + MCP TS (Zod v4 vs v3) | Joi | **Proposed 2026-09-23** |
+| **9** | Coach that remembers + nudges | Session notes are localStorage-only (agent can't see them); reminders never reach the user | Joi | **Proposed 2026-09-23** |
 
 ---
 
@@ -283,6 +287,54 @@ Phase 1A/1B/1C shipped. The loop still doesn’t close; in-app ChatGPT and the M
 | 5.2 | Log LLM usage **on the server** (`log_api_usage` from `api/llm.js`), not only after the client succeeds. Cap `systemPrompt`/`userPrompt` byte size; do not return raw provider `error.message`. | `api/llm.js` | Admin usage reflects proxy calls even if the tab dies. Oversize body → 413. | **Done 2026-08-20** |
 | 5.3 | ESLint in CI. Config exists; `package.json` has no `lint` script; `.github/workflows/test.yml` does not run it. | `package.json`, `.github/workflows/test.yml` | `npm run lint` is a required CI step. | **Done 2026-08-20** — `npm run lint` in GitHub Actions; 0 errors |
 | 5.4 | Migration hygiene. Next SQL is `035`. Do not `supabase db push` from `supabase/migrations/` (7-file stale subset). Optional: stop auto-`createGym` on login (explicit in onboarding). | `migrations/`, bootstrap if touching gym create | 034 already applied on prod. CLI folder still not treated as live history. | **Done 2026-08-20** — bootstrap no longer creates a gym; onboarding still does |
+
+### Slices 6–9 — Proposed 2026-09-23 (Joi code review; Matt locks order)
+
+Recommended order: **6 → 7 → 8 → 9**. 6 + 7 are ~1 day each and are the highest felt-value (instant + rewarding). 8 is the maintenance payoff and de-risks 9. Same rules: one slice at a time, small PRs, no new architecture doc.
+
+#### Slice 6 — Instant cold open (P1 perf)
+
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 6.1 | **Parallelize bootstrap.** `loadUserBundle` awaits profile → social → maxes → gyms → equipment → programs → logs → completions → missed → agent in series. Only the gymId-dependent reads need to wait. Wave 1: profile, social, maxes, gyms, agent. Wave 2 (needs gymId + currentWeek): equipment, programs, logs, completions, missed. | `src/hooks/useAppBootstrap.js`, `useAppBootstrap.test.js` | ≤2 network waves. Existing bootstrap tests green; add a test that wave-1 calls start before any resolve. | Proposed |
+| 6.2 | **Optional: `get_bootstrap()` RPC.** One `SECURITY DEFINER` fn on `auth.uid()` returning the wave-2 bundle as JSON. Only if 6.1 still measures slow on LTE. | `migrations/035-…sql`, `src/lib/repositories/` | One round trip for gym data; `_require_self` / `auth.uid()` only; IDOR test. | Proposed (conditional) |
+| 6.3 | **Route-level code splitting.** Only Admin is `lazy()`. Lazy-load Progress, Maxes, Buddies, Settings, AiGeneratorModal, ProfileArea. Today stays in the entry chunk. | `src/components/ScreenRouter*`, `AppModals.jsx`, `vite.config.js` | Entry JS well under current 672KB (target ≤350KB raw); Suspense fallback is a skeleton, not a flash. | Proposed |
+| 6.4 | **Select columns on hot paths.** 36 `select('*')` / bare `.select()` in `src/lib` + `mcp/src`. Start with bootstrap reads + `workout_logs`. | `src/lib/repositories/*`, `mcp/src/tools/queries.ts` | Bootstrap + Today queries list explicit columns; tests green. | Proposed |
+
+Measure before/after: cold open to first unlogged set on throttled "Fast 4G" in Chrome devtools; record numbers in the changelog.
+
+#### Slice 7 — PR moments from every set (product)
+
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 7.1 | **e1RM helper.** Epley `w × (1 + reps/30)`, only for loaded sets with 1–10 reps (skip bodyweight, AMRAP > 10, KB display quirks). Shared-ready (moves into slice 8 core). | `src/utils/e1rm.js` + tests | Unit tests for edge cases (reps=1 → weight, bodyweight → null, >10 → null). | Proposed |
+| 7.2 | **Live PR moment.** On set log, compare set e1RM vs best known (current 1RM + best e1RM in loaded logs). New best → toast "New estimated max: Bench 243 🔥" + small `canvas-confetti` burst. Never auto-overwrite `user_maxes`; offer "Save as new max" action. | `useWorkoutLogger.js`, `SetRow.jsx`, `Toast.jsx` | Fires once per exercise per session; no fire on offline-queued replays; one-tap save uses `reportWriteFailure`. | Proposed |
+| 7.3 | **Strength trend on Progress.** Per-lift best-e1RM-per-week line from loaded logs (8-week window; lazy-fetch older). | `ProgressScreen.jsx`, `insightsBuilders.js` | Top lifts show a trend + "+N lb this block". No new tables. | Proposed |
+| 7.4 | **MCP parity.** `generate_weekly_summary` + context bundle include e1RM PRs so the coach celebrates the same moments. | `mcp/src/tools/queries.ts`, contract tests | Weekly recap lists e1RM PRs; contract test covers it. | Proposed |
+
+#### Slice 8 — Shared domain core (P1 maintainability)
+
+Folds in the "Related later" items below (shared week/date module, dual-write validator).
+
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 8.1 | **`shared/` typed package** (TS, built for both Vite and MCP): week/date math (`parseCalendarDate`, `calculateCurrentWeek`), exercise normalizer + alias map, program/log/max Zod schemas, e1RM. | new `shared/`, `vite.config.js`, `mcp/tsconfig.json` | Web and MCP import the same functions; one alias map (retire `src/utils/workout.js` alias list or have it re-export). | Proposed |
+| 8.2 | **One Zod major.** Bump `mcp/` to Zod v4 to match root (or pin shared schemas to one). | `mcp/package.json`, `mcp/src/**` | `tsc` + contract tests green; single Zod major in lockfiles. | Proposed |
+| 8.3 | **Dual-write validator.** Web `logSet` / `saveWorkoutProgram` validate with the same shared schema MCP uses. | `src/lib/repositories/logs.js`, `programs.js`, `validation.js` | A payload MCP rejects is rejected on web too; tests. | Proposed |
+| 8.4 | **Parity tests.** Same fixtures run through web + MCP week math and normalizer. | `shared/__tests__/` | Guards the "fixed calendar-date bugs twice" class for good. | Proposed |
+
+#### Slice 9 — Coach that remembers + nudges (product / stickiness)
+
+| # | Ticket | Files | Done when | Status |
+|---|--------|-------|-----------|--------|
+| 9.1 | **Persist session notes.** Post-workout chips/free text + week session notes move from localStorage (`sessionNotes.js`) to a `session_notes` table (user_id, gym_id, week, day, label, text) next to `missed_days`. Keep localStorage as offline-queue fallback. | `migrations/035|036-…sql`, `src/lib/sessionNotes.js`, `PostWorkoutCoachPrompt.jsx`, `WeekEndReviewCard.jsx` | Notes survive device switch; RLS self-only; week-end prefill reads DB. | Proposed |
+| 9.2 | **MCP reads notes.** `get_training_history_summary` + context bundle include session notes ("left knee off Tue"). | `mcp/src/tools/queries.ts`, contract tests | Agent program gen sees notes without the user repeating them. | Proposed |
+| 9.3 | **Opt-in web push.** VAPID keys; `push_subscriptions` table; SW `push` handler; opt-in after the 2nd completed workout (not at first open). iOS requires installed PWA (16.4+). | `public/sw.js`, `src/main.jsx`, Settings toggle, `api/push.js` | User can enable/disable; test push delivers on installed iPhone PWA. | Proposed |
+| 9.4 | **Three nudges only.** (a) Scheduled-day reminder from `check_workout_reminder` logic ("Leg day's waiting — 4 exercises, ~50 min"), (b) squad: "Wren just finished — you're up" (max 1/day), (c) Sunday "Week N review ready". Quiet hours + per-type toggles. | Vercel cron or Supabase scheduled fn, `api/push.js` | Each nudge deep-links to the right route; no nudge on rest/skipped/completed days. | Proposed |
+
+**Housekeeping (not a slice, needs Matt OK):** 2026-03-11 data audit (PersonalVault historical note) flagged 475 placeholder `Exercise 1–5` rows and 15 orphaned completions inflating stats; unverified whether that cleanup ran. Check counts with service role before slice 7 (e1RM trends would read them).
+
+---
 
 **Related later (not a slice):** shared week/date module web↔MCP; dual-write validator so web `logSet`/`saveWorkoutProgram` match MCP Zod; screens reading contexts directly (kill prop bags) — do that when touching slice 3, not as its own project.
 
@@ -404,6 +456,7 @@ Slices 1–5 done. Production-readiness queue is complete. Product follow-ups ar
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-23 | Joi | **Proposed slices 6–9** from code review: 6 instant cold open (parallel bootstrap, code split, column selects), 7 PR moments (e1RM from every set), 8 shared domain core (web↔MCP week math/normalizer/Zod), 9 coach memory + opt-in web push. Recommended order 6→7→8→9; awaiting Matt lock. |
 | 2026-09-12 | Joi | **Bodyweight set rows:** dropped `+ Weight` and `Bodyweight / As prescribed` so the row is a log tap. Vacated space shows last-session reps, AMRAP “Max effort”, or rest. Overload copy for unloaded work is +2 reps, not +5 lbs. |
 | 2026-08-20 | Beck | **Slice 5 done.** Sentry wired env-gated (`SENTRY_DSN` / `VITE_SENTRY_DSN`, no-op until set). `/api/llm` logs usage server-side, 413 on oversized prompts, no raw provider errors. `npm run lint` is a CI gate. Bootstrap no longer auto-creates a gym. |
 | 2026-08-20 | Beck | **Slice 4 done.** Week-end card: 1-week generate with skip/overload/session notes prefilled; agent users get “Ask your coach” only (no second generate button). Squad strip on Today from existing completions/misses. |
