@@ -222,7 +222,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | Beck | **Done 2026-08-20** |
 | **6** | Instant cold open | Bootstrap is a ~10-call serial waterfall; 672KB single bundle; 36 `select('*')` | Joi | **Done 2026-09-23** — 6.1/6.3/6.4 shipped; 6.2 skipped |
 | **7** | PR moments (e1RM) | PRs only exist when a 1RM is typed by hand; no estimated-max math anywhere | Joi | **Done 2026-09-23** |
-| **8** | Shared domain core | Week math, exercise aliases, and program/log Zod duplicated across web JS + MCP TS (Zod v4 vs v3) | Joi | **Proposed 2026-09-23** |
+| **8** | Shared domain core | Week math, exercise aliases, and program/log Zod duplicated across web JS + MCP TS (Zod v4 vs v3) | Joi | **Done 2026-09-23 (core)**; 8.2/8.3 deferred (SDK pins zod v3) |
 | **9** | Coach that remembers + nudges | Session notes are localStorage-only (agent can't see them); reminders never reach the user | Joi | **Proposed 2026-09-23** |
 
 ---
@@ -318,10 +318,10 @@ Folds in the "Related later" items below (shared week/date module, dual-write va
 
 | # | Ticket | Files | Done when | Status |
 |---|--------|-------|-----------|--------|
-| 8.1 | **`shared/` typed package** (TS, built for both Vite and MCP): week/date math (`parseCalendarDate`, `calculateCurrentWeek`), exercise normalizer + alias map, program/log/max Zod schemas, e1RM. | new `shared/`, `vite.config.js`, `mcp/tsconfig.json` | Web and MCP import the same functions; one alias map (retire `src/utils/workout.js` alias list or have it re-export). | Proposed |
-| 8.2 | **One Zod major.** Bump `mcp/` to Zod v4 to match root (or pin shared schemas to one). | `mcp/package.json`, `mcp/src/**` | `tsc` + contract tests green; single Zod major in lockfiles. | Proposed |
-| 8.3 | **Dual-write validator.** Web `logSet` / `saveWorkoutProgram` validate with the same shared schema MCP uses. | `src/lib/repositories/logs.js`, `programs.js`, `validation.js` | A payload MCP rejects is rejected on web too; tests. | Proposed |
-| 8.4 | **Parity tests.** Same fixtures run through web + MCP week math and normalizer. | `shared/__tests__/` | Guards the "fixed calendar-date bugs twice" class for good. | Proposed |
+| 8.1 | **`shared/` typed package** (TS, built for both Vite and MCP): week/date math, exercise normalizer + alias map, e1RM. | new `shared/`, `mcp/tsconfig.json` | **Done (pure logic).** `shared/week-math.ts`, `shared/exercises.ts`, `shared/e1rm.ts`. Web re-exports via `src/utils/date.js` + `src/utils/e1rm.js` (no consumer churn); MCP re-exports via thin `week-calc.ts` / `exercise-normalizer.ts` / `e1rm.ts` shims. `mcp/tsconfig.json` rootDir → repo root so tsc emits `dist/shared/`. Shared Zod schemas deferred with 8.2/8.3. |
+| 8.2 | **One Zod major.** Bump `mcp/` to Zod v4 to match root. | `mcp/package.json`, `mcp/src/**` | **Deferred — blocked.** `@bot-native/sdk` (vendored) + `@modelcontextprotocol/sdk` pin zod `^3`; the MCP SDK validates tool schemas at the transport layer. Bumping MCP to v4 forces two zod copies and breaks schema validation. Web (v4) vs MCP (v3) serve different purposes, so the split is acceptable now. |
+| 8.3 | **Dual-write validator.** Web `logSet` / `saveWorkoutProgram` validate with the same shared schema MCP uses. | `src/lib/repositories/logs.js`, `programs.js`, `validation.js` | **Deferred** — needs a shared Zod schema, blocked by 8.2. Revisit if the SDK chain moves to v4. |
+| 8.4 | **Parity tests.** Same fixtures run through web + MCP week math, e1RM and normalizer. | `shared/__tests__/parity.test.ts` | **Done.** Identical fixtures through both surfaces; covers the 2026-03-30 calendar-date edge case, Monday→Sunday alignment, e1RM edge cases, alias resolution. |
 
 #### Slice 9 — Coach that remembers + nudges (product / stickiness)
 
@@ -456,6 +456,7 @@ Slices 1–5 done. Production-readiness queue is complete. Product follow-ups ar
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-23 | Joi | **Slice 8 (core).** `shared/` typed package (week-math, exercises, e1RM) as single source of truth. Web re-exports via existing modules; MCP via thin shims + `tsc` rootDir to repo root (output `dist/shared/` + `dist/mcp/src/`). Parity tests lock the week-math bug. 288 tests green; MCP `tsc` clean; compiled entry import smoke-tested. 8.2/8.3 (zod v4 + shared schemas) deferred — SDK chain pins zod v3. |
 | 2026-09-23 | Joi | **Slice 7 complete (7.3 + 7.4 + fixes).** PR save now writes under the existing max key (no split-max regression) and skips un-log taps. Progress gets per-lift e1RM sparklines. Coach weekly recap reports unsaved estimated PRs. Renamed `epelyE1RM`→`epleyE1RM`. 283 tests green, MCP `tsc` clean. |
 | 2026-09-23 | Joi | **Slice 7 (7.1 + 7.2).** `src/utils/e1rm.js` (Epley 1–10 reps, round-to-5, max lookup) + 13 tests. `AuthenticatedShell` now wraps `logSet` to detect a new estimated max vs the recorded 1RM + a per-session ceiling; fires confetti + `EstimatedPrBanner` with one-tap "Save as new max" (never auto-saves). Bodyweight/AMRAP/range sets are excluded. 273 tests green. 7.3 (Progress trend) + 7.4 (MCP parity) remain. |
 | 2026-09-23 | Joi | **Slice 6 done.** Bootstrap parallelized to 2 waves (11 serial awaits → 3 round trips); `getGroupMembers`/`getLeaderGymId` now fire for every user (self-scoped RPCs). Screens + all modals lazy-loaded on first open; `manualChunks` splits react + supabase/zod into cache-stable vendor chunks (app chunk 672KB→209KB, 61KB gzip). Narrowed `getWorkoutLogsInWeekRange`/`getWorkoutCompletions`/`getMissedDays` to explicit columns. 260 tests green, lint clean. 6.2 (`get_bootstrap` RPC) skipped — 6.1 already collapsed the waterfall. |
