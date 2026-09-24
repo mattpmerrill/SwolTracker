@@ -128,6 +128,16 @@ export default function WorkoutScreen({
 
   const overloadCount = Object.keys(overloadByExercise).length;
 
+  const [weekSessionNotes, setWeekSessionNotes] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    getWeekSessionNotes(actualCurrentWeek, user?.id).then((rows) => {
+      if (active) setWeekSessionNotes(rows);
+    });
+    return () => { active = false; };
+  }, [actualCurrentWeek, user?.id]);
+
   const weekEndNotes = useMemo(() => {
     if (!weekEndSummary) return '';
     return buildWeekEndNotes({
@@ -136,9 +146,9 @@ export default function WorkoutScreen({
       userId: user?.id,
       getMissedReason,
       overloadCount,
-      sessionNotes: getWeekSessionNotes(actualCurrentWeek),
+      sessionNotes: weekSessionNotes,
     });
-  }, [weekEndSummary, actualCurrentWeek, user?.id, getMissedReason, overloadCount, exerciseLogSize]);
+  }, [weekEndSummary, actualCurrentWeek, user?.id, getMissedReason, overloadCount, exerciseLogSize, weekSessionNotes]);
 
   const squad = useMemo(() => {
     if (!isViewingToday) return [];
@@ -270,6 +280,7 @@ export default function WorkoutScreen({
         <PostWorkoutCoachPrompt
           week={currentWeek}
           day={currentDay}
+          userId={user?.id}
           focusLabel={todayWorkout?.focus}
           sending={coachSending}
           onSend={onSendCoachNote}

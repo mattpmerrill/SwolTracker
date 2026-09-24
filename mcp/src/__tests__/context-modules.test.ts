@@ -81,16 +81,17 @@ function seedHappyPath(sb: ReturnType<typeof createMcpMockSupabase>) {
 }
 
 describe('context modules', () => {
-  it('exposes 7 modules with distinct priorities 4..10', () => {
+  it('exposes 8 modules with distinct priorities 3..10', () => {
     const modules = createContextModules();
     const priorities = modules.map((m) => m.priority).sort((a, b) => a - b);
-    expect(priorities).toEqual([4, 5, 6, 7, 8, 9, 10]);
+    expect(priorities).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
     const keys = modules.map((m) => m.key).sort();
     expect(keys).toEqual([
       'current_program',
       'gym_equipment',
       'maxes',
       'recent_logs',
+      'session_notes',
       'streak',
       'unread_coach_notes',
       'upcoming_deload',

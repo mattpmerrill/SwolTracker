@@ -236,6 +236,28 @@ const unreadCoachNotesModule: ContextModule<ContextDeps> = {
 
 // ── P5: Gym equipment ──────────────────────────────────────
 
+const sessionNotesModule: ContextModule<ContextDeps> = {
+  key: "session_notes",
+  priority: 3,
+  async load(deps) {
+    const week = await resolveCurrentWeek(deps);
+    const fromWeek = Math.max(1, week - 3);
+    const { data } = await deps.supabase
+      .from("session_notes")
+      .select("week_number, day_name, label, text")
+      .eq("user_id", deps.userId)
+      .gte("week_number", fromWeek)
+      .order("week_number", { ascending: false })
+      .limit(10);
+    return { notes: (data ?? []) as Array<{ week_number: number; day_name: string; label: string | null; text: string }> };
+  },
+  summarize(data) {
+    const notes = data.notes as Array<{ week_number: number; day_name: string; label: string | null; text: string }>;
+    if (notes.length === 0) return "No session notes on file.";
+    return notes.map((n) => `- W${n.week_number} ${n.day_name}: ${n.text}`).join("\n");
+  },
+};
+
 const gymEquipmentModule: ContextModule<ContextDeps> = {
   key: "gym_equipment",
   priority: 5,
@@ -347,6 +369,7 @@ export function createContextModules(): Array<ContextModule<ContextDeps>> {
     maxesModule,
     streakModule,
     unreadCoachNotesModule,
+    sessionNotesModule,
     gymEquipmentModule,
     upcomingDeloadModule,
   ];

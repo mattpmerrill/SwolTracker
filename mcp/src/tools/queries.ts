@@ -667,7 +667,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const safeLookbackWeeks = Math.max(1, lookbackWeeks || 4);
     const fromWeek = Math.max(1, currentWeek - safeLookbackWeeks + 1);
 
-    const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult] =
+    const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult, sessionNotesResult] =
       await Promise.all([
         get_profile(),
         get_maxes(),
@@ -698,6 +698,12 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           .eq("gym_id", resolvedGymId)
           .gte("week_number", fromWeek)
           .order("week_number", { ascending: false }),
+        supabase
+          .from("session_notes")
+          .select("week_number, day_name, label, text")
+          .eq("user_id", userId)
+          .gte("week_number", fromWeek)
+          .order("week_number", { ascending: false }),
       ]);
 
     const profile = profileResult.data as Record<string, unknown>;
@@ -711,6 +717,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const completions = (completionsResult.data ?? []) as Array<{ week_number: number; day_name: string }>;
     const missedDays = (missedDaysResult.data ?? []) as Array<{ week_number: number; day_name: string; reason: string | null }>;
     const programs = (programsResult.data ?? []) as Array<{ week_number: number; program_data: Record<string, any>; ai_notes: string | null }>;
+    const sessionNotes = (sessionNotesResult.data ?? []) as Array<{ week_number: number; day_name: string; label: string | null; text: string }>;
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
     const parseReps = (value: number | string | null | undefined) => {
@@ -855,6 +862,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       `Current 1RMs: ${Object.entries(maxes).map(([k, v]) => `${k}: ${v} lbs`).join(", ") || "None on file"}`,
       "",
       weekLines.join("\n\n"),
+      ...(sessionNotes.length > 0
+        ? ["", "Session notes:", ...sessionNotes.map((n) => `  - Week ${n.week_number} ${n.day_name}: ${n.text}`)]
+        : []),
       "",
       `Recommended next week: Week ${nextWeek}`,
     ].join("\n");
@@ -873,6 +883,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         maxes,
         profile_name: profile.name,
         missed_days: missedDays,
+        session_notes: sessionNotes,
         programs_context: programs.map((p) => ({ week_number: p.week_number, ai_notes: p.ai_notes })),
       },
     };

@@ -21,6 +21,7 @@ const QUICK_CHIPS = [
 export default function PostWorkoutCoachPrompt({
   week,
   day,
+  userId = null,
   focusLabel = null,
   sending = false,
   onSend,
@@ -52,7 +53,7 @@ export default function PostWorkoutCoachPrompt({
     const msg = buildMessage(chip.text);
     const ok = await onSend?.(msg);
     if (ok) {
-      recordWeekSessionNote(week, day, chip.text, chip.label);
+      await recordWeekSessionNote(week, day, chip.text, chip.label, userId);
       handleDismiss();
     }
     setActiveChip(null);
@@ -63,7 +64,7 @@ export default function PostWorkoutCoachPrompt({
     if (!msg) return;
     const ok = await onSend?.(msg);
     if (ok) {
-      recordWeekSessionNote(week, day, custom.trim());
+      await recordWeekSessionNote(week, day, custom.trim(), null, userId);
       setCustom('');
       handleDismiss();
     }
