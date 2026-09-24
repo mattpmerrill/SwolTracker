@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import { ProgressStats, StrengthLevels } from '../components/Progress';
+import { ProgressStats, StrengthLevels, StrengthTrends } from '../components/Progress';
 
 /**
  * Progress tab screen composition
@@ -8,6 +8,7 @@ export default function ProgressScreen({
   user,
   totalCompletedWorkouts,
   weeksProgrammed,
+  strengthTrends,
 }) {
   return (
     <>
@@ -22,6 +23,8 @@ export default function ProgressScreen({
       />
 
       <StrengthLevels maxes={user?.maxes} />
+
+      <StrengthTrends trends={strengthTrends} />
 
       <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
         <div className="flex items-center gap-2 text-green-400">

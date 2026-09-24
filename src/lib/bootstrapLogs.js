@@ -22,6 +22,7 @@ export function exerciseLogFromRows(logs) {
       completed: l.completed,
       actualWeight: l.actual_weight,
       actualReps: l.actual_reps,
+      exerciseName: l.exercise_name ?? null,
     }
   }
   return exerciseLog

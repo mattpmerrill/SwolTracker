@@ -18,7 +18,7 @@ import AppModals from './AppModals';
 import OfflineSyncBanner from './OfflineSyncBanner';
 import PwaInstallHint from './PwaInstallHint';
 import EstimatedPrBanner from './Workout/EstimatedPrBanner';
-import { epelyE1RM, roundToNearestFive, resolveCurrentMax } from '../utils/e1rm';
+import { epelyE1RM, roundToNearestFive, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
 
 /**
  * Authenticated app chrome. Tab + settings/admin overlays are URL-driven
@@ -82,14 +82,21 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   // the set's Epley estimate against the recorded max (and this session's
   // ceiling so a slightly-better set doesn't re-fire). Never auto-saves.
   const handleLogSet = (exerciseIndex, setIndex, data) => {
-    const est = epelyE1RM(data.actualWeight, data.actualReps);
+    // Tapping a logged set un-logs it — never celebrate that.
+    const unlogging = isSetLogged(exerciseIndex, setIndex);
+    const est = unlogging ? null : epelyE1RM(data.actualWeight, data.actualReps);
     if (est != null) {
-      const currentMax = resolveCurrentMax(data.exerciseName, profiles[currentUser]?.maxes);
-      const ceiling = Math.max(currentMax ?? 0, prCeilings.current[data.exerciseName] ?? 0);
+      const maxes = profiles[currentUser]?.maxes || {};
+      // Key the PR under the existing max's name so a save updates that lift
+      // instead of creating a split duplicate ("Bench" vs "Barbell Bench Press").
+      const liftKey = resolveMaxKey(data.exerciseName, maxes);
+      const currentMax = liftKey ? maxes[liftKey] : null;
+      const ceilingKey = liftKey || data.exerciseName;
+      const ceiling = Math.max(currentMax ?? 0, prCeilings.current[ceilingKey] ?? 0);
       const rounded = roundToNearestFive(est);
-      if (ceiling > 0 && rounded > ceiling) {
-        prCeilings.current[data.exerciseName] = rounded;
-        setEstimatedPr({ exerciseName: data.exerciseName, estMax: rounded });
+      if (liftKey && ceiling > 0 && rounded > ceiling) {
+        prCeilings.current[ceilingKey] = rounded;
+        setEstimatedPr({ exerciseName: liftKey, estMax: rounded });
         confetti({
           particleCount: 70,
           spread: 60,
@@ -299,6 +306,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
           }}
           progressProps={{
             user,
+            strengthTrends: buildStrengthTrends(exerciseLog, user?.id, user?.maxes),
             totalCompletedWorkouts: getTotalCompletedWorkouts(user?.id),
             weeksProgrammed: Object.keys(workoutProgram).length,
           }}

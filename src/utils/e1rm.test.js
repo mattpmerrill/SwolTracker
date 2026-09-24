@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { epelyE1RM, roundToNearestFive, resolveCurrentMax } from './e1rm';
+import { epelyE1RM, roundToNearestFive, resolveCurrentMax, resolveMaxKey, buildStrengthTrends } from './e1rm';
 
 describe('epelyE1RM', () => {
   it('estimates a standard strength set', () => {
@@ -63,5 +63,55 @@ describe('resolveCurrentMax', () => {
 
   it('returns null when there is no max at all', () => {
     expect(resolveCurrentMax('Plank', {})).toBeNull();
+  });
+});
+
+describe('resolveMaxKey', () => {
+  it('returns the stored key, not the program name', () => {
+    expect(resolveMaxKey('bench press', { 'Barbell Bench Press': 240 })).toBe('Barbell Bench Press');
+  });
+
+  it('returns null when nothing is recorded', () => {
+    expect(resolveMaxKey('Plank', {})).toBeNull();
+    expect(resolveMaxKey(null, { 'Barbell Bench Press': 240 })).toBeNull();
+  });
+});
+
+describe('buildStrengthTrends', () => {
+  const U = '1b2c3d4e-aaaa-bbbb-cccc-000000000001';
+  const other = '9f9f9f9f-aaaa-bbbb-cccc-000000000002';
+  const maxes = { 'Barbell Bench Press': 240, 'Barbell Back Squat': 260 };
+  const set = (week, idx, name, w, r, completed = true) => [
+    `${U}-${week}-Monday-${idx}-0`,
+    { completed, exerciseName: name, actualWeight: w, actualReps: r },
+  ];
+
+  it('builds best e1RM per week per lift and the change across the window', () => {
+    const log = Object.fromEntries([
+      set(3, 0, 'Bench Press', 200, 5),          // 233.3 -> 235
+      ['' + U + '-3-Monday-0-1', { completed: true, exerciseName: 'Bench Press', actualWeight: 205, actualReps: 5 }], // 239 -> 240 (best wk3)
+      set(5, 0, 'Barbell Bench Press', 215, 5),  // 250.8 -> 250
+    ]);
+    const [bench] = buildStrengthTrends(log, U, maxes);
+    expect(bench.lift).toBe('Barbell Bench Press');
+    expect(bench.points).toEqual([{ week: 3, e1rm: 240 }, { week: 5, e1rm: 250 }]);
+    expect(bench.change).toBe(10);
+  });
+
+  it('ignores other users, unlogged, unloaded, unmatched, and single-week lifts', () => {
+    const log = Object.fromEntries([
+      [`${other}-3-Monday-0-0`, { completed: true, exerciseName: 'Bench Press', actualWeight: 300, actualReps: 5 }],
+      set(3, 1, 'Bench Press', 300, 5, false),
+      set(3, 2, 'Pull-ups', null, 10),
+      set(4, 2, 'Pull-ups', null, 10),
+      set(3, 3, 'Plank', 45, 1),
+      set(4, 3, 'Plank', 45, 1),
+      set(3, 4, 'Back Squat', 225, 5),
+    ]);
+    expect(buildStrengthTrends(log, U, maxes)).toEqual([]);
+  });
+
+  it('returns nothing without maxes', () => {
+    expect(buildStrengthTrends({}, U, {})).toEqual([]);
   });
 });

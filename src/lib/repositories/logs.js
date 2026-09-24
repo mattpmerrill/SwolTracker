@@ -98,7 +98,7 @@ export function createLogsRepo(supabase) {
     if (!supabase) return []
     let query = supabase
       .from('workout_logs')
-      .select('user_id, week_number, day_name, exercise_index, set_index, completed, actual_weight, actual_reps')
+      .select('user_id, week_number, day_name, exercise_index, set_index, exercise_name, completed, actual_weight, actual_reps')
       .eq('gym_id', gymId)
 
     if (fromWeek != null && Number.isFinite(fromWeek)) {

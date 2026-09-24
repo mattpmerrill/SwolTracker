@@ -5,6 +5,7 @@ import type { EventEmitter } from "../bot-native-shim.js";
 import type { ToolResult, WeekProgram } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
 import { normalizeExerciseName } from "../exercise-normalizer.js";
+import { findEstimatedPrs } from "../e1rm.js";
 import type { createQueryTools } from "./queries.js";
 
 // ---------------------------------------------------------------------------
@@ -782,7 +783,7 @@ export function createActionTools(
     const programStartDate: string | null = profileData?.program_start_date ?? null;
 
     // Fetch everything in parallel
-    const [logsResult, completionsResult, programResult, maxHistoryResult] = await Promise.all([
+    const [logsResult, completionsResult, programResult, maxHistoryResult, currentMaxesResult] = await Promise.all([
       supabase
         .from("workout_logs")
         .select("day_name, exercise_name, actual_weight, actual_reps, completed")
@@ -810,6 +811,11 @@ export function createActionTools(
         .gte("recorded_at", getWeekStartISO(week, programStartDate))
         .lt("recorded_at", getWeekStartISO(week + 1, programStartDate))
         .order("recorded_at", { ascending: false }),
+      // Baseline for estimated-1RM PRs (same rule as the web PR moment)
+      supabase
+        .from("current_user_maxes")
+        .select("exercise_name, weight_lbs")
+        .eq("user_id", userId),
     ]);
 
     const logs = (logsResult.data ?? []) as Array<{
@@ -847,6 +853,17 @@ export function createActionTools(
       recorded_at: pr.recorded_at,
     }));
 
+    // Estimated-1RM PRs: best set this week vs the recorded max. Lifts already
+    // saved as a new max this week are covered by prsThisWeek, so skip them.
+    const currentMaxes: Record<string, number> = {};
+    for (const m of (currentMaxesResult.data ?? []) as Array<{ exercise_name: string; weight_lbs: number }>) {
+      currentMaxes[m.exercise_name] = m.weight_lbs;
+    }
+    const savedThisWeek = new Set(prsThisWeek.map((pr) => pr.exercise_name));
+    const estimatedPrs = findEstimatedPrs(logs, currentMaxes).filter(
+      (pr) => !savedThisWeek.has(pr.exercise_name)
+    );
+
     const completionRate = scheduledDays.length > 0
       ? Math.round((completedDays.length / scheduledDays.length) * 100)
       : null;
@@ -863,6 +880,11 @@ export function createActionTools(
       `  Total sets: ${totalSets}`,
       `  Total volume: ${totalVolume.toLocaleString()} lbs`,
       `  PRs: ${prLines}`,
+      estimatedPrs.length > 0
+        ? `  Estimated PRs (not saved yet): ${estimatedPrs
+            .map((pr) => `${pr.exercise_name} ~${pr.estimated_max_lbs} lbs (+${pr.gain_lbs}, from ${pr.from_set.weight_lbs}x${pr.from_set.reps})`)
+            .join(", ")}`
+        : null,
     ].filter(Boolean);
 
     const summary = lines.join("\n");
@@ -880,6 +902,7 @@ export function createActionTools(
         total_sets: totalSets,
         total_volume_lbs: totalVolume,
         prs_this_week: prsThisWeek,
+        estimated_prs: estimatedPrs,
       },
     };
   }

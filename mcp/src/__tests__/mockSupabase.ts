@@ -38,6 +38,7 @@ export function createMcpMockSupabase() {
       'neq',
       'gte',
       'lte',
+      'lt',
       'order',
       'limit',
       'range',

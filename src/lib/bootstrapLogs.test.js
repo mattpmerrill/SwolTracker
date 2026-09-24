@@ -35,6 +35,7 @@ describe('bootstrapLogs', () => {
       completed: true,
       actualWeight: 185,
       actualReps: 5,
+      exerciseName: null,
     });
   });
 

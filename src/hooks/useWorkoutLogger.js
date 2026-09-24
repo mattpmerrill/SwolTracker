@@ -61,7 +61,14 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     const actualReps = data.actualReps ?? data.reps ?? null;
     const prescribedReps = data.prescribedReps ?? data.reps ?? null;
     const completed = !wasCompleted;
-    const nextEntry = { actualWeight, prescribedWeight, actualReps, prescribedReps, completed };
+    const nextEntry = {
+      actualWeight,
+      prescribedWeight,
+      actualReps,
+      prescribedReps,
+      completed,
+      exerciseName: data.exerciseName ?? previous?.exerciseName ?? null,
+    };
 
     setExerciseLog(prev => ({
       ...prev,
