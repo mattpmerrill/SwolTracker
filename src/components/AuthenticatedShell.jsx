@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { useToast } from './Toast';
 import { useAdmin } from '../hooks/useAdmin';
@@ -17,6 +17,8 @@ import ScreenRouter from './ScreenRouter';
 import AppModals from './AppModals';
 import OfflineSyncBanner from './OfflineSyncBanner';
 import PwaInstallHint from './PwaInstallHint';
+import EstimatedPrBanner from './Workout/EstimatedPrBanner';
+import { epelyE1RM, roundToNearestFive, resolveCurrentMax } from '../utils/e1rm';
 
 /**
  * Authenticated app chrome. Tab + settings/admin overlays are URL-driven
@@ -72,6 +74,32 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   } = useWorkoutLog();
 
   const currentUser = authUser.id;
+
+  const [estimatedPr, setEstimatedPr] = useState(null);
+  const prCeilings = useRef({});
+
+  // Estimated-1RM PR detection, wrapped around the logSet write. We compare
+  // the set's Epley estimate against the recorded max (and this session's
+  // ceiling so a slightly-better set doesn't re-fire). Never auto-saves.
+  const handleLogSet = (exerciseIndex, setIndex, data) => {
+    const est = epelyE1RM(data.actualWeight, data.actualReps);
+    if (est != null) {
+      const currentMax = resolveCurrentMax(data.exerciseName, profiles[currentUser]?.maxes);
+      const ceiling = Math.max(currentMax ?? 0, prCeilings.current[data.exerciseName] ?? 0);
+      const rounded = roundToNearestFive(est);
+      if (ceiling > 0 && rounded > ceiling) {
+        prCeilings.current[data.exerciseName] = rounded;
+        setEstimatedPr({ exerciseName: data.exerciseName, estMax: rounded });
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#f97316', '#ef4444', '#a855f7', '#22c55e'],
+        });
+      }
+    }
+    return logSet(exerciseIndex, setIndex, data);
+  };
 
   const [profiles, setProfiles] = useState({});
   const [showProfile, setShowProfile] = useState(false);
@@ -141,6 +169,14 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     setShowAddLift,
     setActiveTab,
   });
+
+  const handleSaveEstimatedPr = () => {
+    if (!estimatedPr) return;
+    const { exerciseName, estMax } = estimatedPr;
+    setEstimatedPr(null);
+    maxesActions.updateMax(exerciseName, estMax);
+  };
+
   const { handleUpdateProfile, handleUploadAvatar } = useProfileActions({
     authUser,
     currentUser,
@@ -225,7 +261,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             onGoToCurrentWeek: goToCurrentWeek,
             onGenerateWorkout: aiGen.openAiGenerator,
             isSetLogged,
-            onLogSet: logSet,
+            onLogSet: handleLogSet,
             onAddMax: maxesActions.openQuickAddMax,
             getCompletionPercentage,
             isWorkoutComplete,
@@ -378,6 +414,12 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
           programStartDate,
           actualCurrentWeek,
         } : null}
+      />
+
+      <EstimatedPrBanner
+        pr={estimatedPr}
+        onSave={handleSaveEstimatedPr}
+        onDismiss={() => setEstimatedPr(null)}
       />
     </div>
   );
