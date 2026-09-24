@@ -223,7 +223,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | **6** | Instant cold open | Bootstrap is a ~10-call serial waterfall; 672KB single bundle; 36 `select('*')` | Joi | **Done 2026-09-23** — 6.1/6.3/6.4 shipped; 6.2 skipped |
 | **7** | PR moments (e1RM) | PRs only exist when a 1RM is typed by hand; no estimated-max math anywhere | Joi | **Done 2026-09-23** |
 | **8** | Shared domain core | Week math, exercise aliases, and program/log Zod duplicated across web JS + MCP TS (Zod v4 vs v3) | Joi | **Done 2026-09-23 (core)**; 8.2/8.3 deferred (SDK pins zod v3) |
-| **9** | Coach that remembers + nudges | Session notes are localStorage-only (agent can't see them); reminders never reach the user | Joi | **Proposed 2026-09-23** |
+| **9** | Coach that remembers + nudges | Session notes are localStorage-only (agent can't see them); reminders never reach the user | Joi | **Done 2026-09-24** |
 
 ---
 
@@ -327,10 +327,10 @@ Folds in the "Related later" items below (shared week/date module, dual-write va
 
 | # | Ticket | Files | Done when | Status |
 |---|--------|-------|-----------|--------|
-| 9.1 | **Persist session notes.** Post-workout chips/free text + week session notes move from localStorage (`sessionNotes.js`) to a `session_notes` table (user_id, gym_id, week, day, label, text) next to `missed_days`. Keep localStorage as offline-queue fallback. | `migrations/035|036-…sql`, `src/lib/sessionNotes.js`, `PostWorkoutCoachPrompt.jsx`, `WeekEndReviewCard.jsx` | Notes survive device switch; RLS self-only; week-end prefill reads DB. | Proposed |
-| 9.2 | **MCP reads notes.** `get_training_history_summary` + context bundle include session notes ("left knee off Tue"). | `mcp/src/tools/queries.ts`, contract tests | Agent program gen sees notes without the user repeating them. | Proposed |
-| 9.3 | **Opt-in web push.** VAPID keys; `push_subscriptions` table; SW `push` handler; opt-in after the 2nd completed workout (not at first open). iOS requires installed PWA (16.4+). | `public/sw.js`, `src/main.jsx`, Settings toggle, `api/push.js` | User can enable/disable; test push delivers on installed iPhone PWA. | Proposed |
-| 9.4 | **Three nudges only.** (a) Scheduled-day reminder from `check_workout_reminder` logic ("Leg day's waiting — 4 exercises, ~50 min"), (b) squad: "Wren just finished — you're up" (max 1/day), (c) Sunday "Week N review ready". Quiet hours + per-type toggles. | Vercel cron or Supabase scheduled fn, `api/push.js` | Each nudge deep-links to the right route; no nudge on rest/skipped/completed days. | Proposed |
+| 9.1 | **Persist session notes.** Post-workout chips/free text + week session notes move from localStorage (`sessionNotes.js`) to a `session_notes` table (user_id, week, day, label, text) next to `missed_days`. Keep localStorage as offline-queue fallback. | `migrations/035-session-notes.sql`, `src/lib/repositories/sessionNotes.js`, `src/lib/sessionNotes.js`, `PostWorkoutCoachPrompt.jsx`, `WorkoutScreen.jsx` | Notes survive device switch; RLS self-only; week-end prefill reads DB. | **Done** |
+| 9.2 | **MCP reads notes.** `get_training_history_summary` + context bundle include session notes ("left knee off Tue"). | `mcp/src/tools/queries.ts`, `mcp/src/context-modules.ts`, `mcp/src/__tests__/context-modules.test.ts` | Agent program gen sees notes without the user repeating them. | **Done** |
+| 9.3 | **Opt-in web push.** VAPID keys (private in `VAPID_PRIVATE_KEY` env); `push_subscriptions` table; SW `push` handler; opt-in after the 2nd completed workout (not at first open). iOS requires installed PWA (16.4+). | `public/sw.js`, `src/lib/push.js`, `api/push.js`, `api/_push.js`, Settings toggle, `PushOptInPrompt.jsx` | User can enable/disable; test push delivers on installed iPhone PWA. | **Done** |
+| 9.4 | **Scheduled-day reminder.** Daily 22:00 UTC Vercel cron → `api/cron/reminders.js` (guarded by `CRON_SECRET`). Skips rest day, already logged, completed, marked missed, already-reminded-today, and quiet hours (10pm–8am). Squad + Sunday-review nudges deferred. | `api/cron/reminders.js`, `api/_reminders.js`, `vercel.json`, `migrations/037-push-reminder-dedupe.sql` | Nudge deep-links home; never on rest/skipped/completed days; once/day. | **Done (reminder only)** |
 
 **Housekeeping — done 2026-09-23 (Matt OK'd):** stale-data cleanup ran on prod; backups in `~/work/SwolTracker-backups/cleanup-2026-09-23/` (outside repo). The `Exercise ${i+1}` fallbacks in `src/utils/workout.js` + `useWorkoutLogger.js` only fire when a program exercise has no name — post-cleanup no such programs exist, so left as defensive-only (reviewed in slice 7, no code change needed).
 
