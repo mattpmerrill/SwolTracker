@@ -91,11 +91,34 @@ async function loadUserBundle(authUser) {
     };
   }
 
-  const [buddies, receivedRequests, sentRequests, groupRoleData] = await Promise.all([
+  // Wave 1 — every read keyed only on userId, issued in parallel. The two
+  // formerly conditional calls (group members for leaders, leader gym for
+  // members) are safe to run for every user: both RPCs self-scope to
+  // auth.uid() and return []/null for the roles that don't need them.
+  const [
+    buddies,
+    receivedRequests,
+    sentRequests,
+    groupRoleData,
+    groupMembersResult,
+    leaderGymId,
+    maxes,
+    gyms,
+    unreadAgent,
+    coachNote,
+    agentKey,
+  ] = await Promise.all([
     db.getBuddies(userId),
     db.getReceivedRequests(userId),
     db.getSentRequests(userId),
     db.getGroupRole(userId),
+    db.getGroupMembers(userId),
+    db.getLeaderGymId(userId),
+    db.getUserMaxes(userId),
+    db.getMyGyms(userId),
+    db.hasUnreadAgentMessages(userId),
+    db.getLatestCoachNote(userId),
+    db.hasAgentKey(userId),
   ]);
 
   let groupLeader = null;
@@ -109,8 +132,7 @@ async function loadUserBundle(authUser) {
       group_name: groupRoleData.group_name,
     };
   } else if (groupRoleData.role === 'leader') {
-    // Always fetch members for leaders (do not gate on member_count alone).
-    groupMembers = await db.getGroupMembers(userId);
+    groupMembers = groupMembersResult;
     // Fallback: accepted buddies are the same relationship if the RPC fails/empty.
     if (groupMembers.length === 0 && (groupRoleData.member_count || 0) > 0 && buddies.length > 0) {
       groupMembers = buddies.map((b) => ({
@@ -124,13 +146,12 @@ async function loadUserBundle(authUser) {
     }
   }
 
-  const maxes = (await db.getUserMaxes(userId)) || {};
   const mergedProfile = {
     id: userId,
     name: authUser.user_metadata.full_name || authUser.email.split('@')[0],
     avatar: authUser.user_metadata.avatar_url || '💪',
     ...profile,
-    maxes,
+    maxes: maxes || {},
     buddies: buddies.map((b) => b.buddy_id),
     buddyProfiles: buddies.reduce((acc, b) => {
       acc[b.buddy_id] = { id: b.buddy_id, name: b.buddy_name, avatar: b.buddy_avatar, email: b.buddy_email };
@@ -149,53 +170,43 @@ async function loadUserBundle(authUser) {
     currentWeek = calculateCurrentWeek(startDate.toISOString());
   }
 
-  const gyms = await db.getMyGyms(userId);
   const gymId = gyms[0]?.id ?? null;
 
+  // Wave 2 — gym-scoped reads (need gymId + currentWeek).
   let equipment = null;
-  let leaderGymId = null;
   let workoutProgram = {};
   let exerciseLog = {};
   let completedWorkouts = {};
   let missedWorkouts = {};
-  // Phase 1.4: set logs are windowed; completions/missed stay full (small).
   let logFromWeek = 1;
+  let programGymId = gymId;
 
   if (gymId) {
-    const eq = await db.getGymEquipment(gymId);
-    if (eq.length > 0) equipment = eq;
-
-    let programGymId = gymId;
-    if (groupRoleData.role === 'member') {
-      const gym = await db.getLeaderGymId(userId);
-      if (gym) { programGymId = gym; leaderGymId = gym; }
+    if (groupRoleData.role === 'member' && leaderGymId) {
+      programGymId = leaderGymId;
     }
-
-    const programs = await db.getAllWorkoutPrograms(programGymId);
-    if (Object.keys(programs).length > 0) workoutProgram = programs;
-
     logFromWeek = getBootstrapLogFromWeek(currentWeek, BOOTSTRAP_LOG_LOOKBACK_WEEKS);
-    const logs = await db.getWorkoutLogsInWeekRange(gymId, logFromWeek);
-    exerciseLog = exerciseLogFromRows(logs);
 
-    const completions = await db.getWorkoutCompletions(gymId);
+    const [eq, programs, logs, completions, missedRows] = await Promise.all([
+      db.getGymEquipment(gymId),
+      db.getAllWorkoutPrograms(programGymId),
+      db.getWorkoutLogsInWeekRange(gymId, logFromWeek),
+      db.getWorkoutCompletions(gymId),
+      db.getMissedDays(gymId),
+    ]);
+
+    if (eq.length > 0) equipment = eq;
+    if (Object.keys(programs).length > 0) workoutProgram = programs;
+    exerciseLog = exerciseLogFromRows(logs);
     completions.forEach((c) => {
       completedWorkouts[`${c.user_id}-${c.week_number}-${c.day_name}`] = true;
     });
-
-    const missedRows = await db.getMissedDays(gymId);
     missedRows.forEach((m) => {
       missedWorkouts[`${m.user_id}-${m.week_number}-${m.day_name}`] = {
         reason: m.reason || null,
       };
     });
   }
-
-  const [unreadAgent, coachNote, agentKey] = await Promise.all([
-    db.hasUnreadAgentMessages(userId),
-    db.getLatestCoachNote(userId),
-    db.hasAgentKey(userId),
-  ]);
 
   return {
     kind: 'ready',

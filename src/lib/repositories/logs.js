@@ -98,7 +98,7 @@ export function createLogsRepo(supabase) {
     if (!supabase) return []
     let query = supabase
       .from('workout_logs')
-      .select('*')
+      .select('user_id, week_number, day_name, exercise_index, set_index, completed, actual_weight, actual_reps')
       .eq('gym_id', gymId)
 
     if (fromWeek != null && Number.isFinite(fromWeek)) {
@@ -198,7 +198,7 @@ export function createLogsRepo(supabase) {
     if (!supabase) return []
     const { data, error } = await supabase
       .from('workout_completions')
-      .select('*')
+      .select('user_id, week_number, day_name')
       .eq('gym_id', gymId)
 
     if (error) {
@@ -284,7 +284,7 @@ export function createLogsRepo(supabase) {
     if (!supabase) return []
     let query = supabase
       .from('missed_days')
-      .select('*')
+      .select('user_id, week_number, day_name, reason')
       .eq('gym_id', gymId)
       .order('week_number', { ascending: false })
 
