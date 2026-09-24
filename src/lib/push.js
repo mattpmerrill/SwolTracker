@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 export const VAPID_PUBLIC_KEY =
-  'BPTumv1BQ3UFYWo4muculTOVfUzdPguNNY2dSPn-1gzgk4vb1pTb1AtsrHeV622sB5hsQLoWaELvnB73bGpjkdM';
+  'BJ5OIQ2Y68gLAv5utqitxHjTWtydi7Gl0RF8bFn6q0R6u1sFp589ij9VUeXrh2dQU7UPysAk20VeKOq213rEdCM';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -10,6 +10,16 @@ function urlBase64ToUint8Array(base64String) {
   const output = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; i += 1) output[i] = rawData.charCodeAt(i);
   return output;
+}
+
+export function subscriptionMatchesKey(subscription, publicKey = VAPID_PUBLIC_KEY) {
+  const current = subscription?.options?.applicationServerKey;
+  if (!current) return true; // browser doesn't expose it; assume fine
+  const a = new Uint8Array(current);
+  const b = urlBase64ToUint8Array(publicKey);
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 export function isPushSupported() {
@@ -46,7 +56,7 @@ export async function getPushEnabled() {
   if (Notification.permission !== 'granted') return false;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  return !!subscription;
+  return !!subscription && subscriptionMatchesKey(subscription);
 }
 
 export async function subscribeToPush() {
@@ -56,6 +66,12 @@ export async function subscribeToPush() {
     if (permission !== 'granted') return { ok: false, error: 'denied' };
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
+    // After a VAPID key rotation the browser still holds a subscription tied
+    // to the old key; it can't be reused, so drop it and subscribe fresh.
+    if (subscription && !subscriptionMatchesKey(subscription)) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,

@@ -1,22 +1,9 @@
 // Web push subscription + test endpoints (slice 9.3).
-// Auth via the user's Supabase bearer token; VAPID private key is read from
-// app_settings (same secret store as the LLM keys) — never from the browser.
+// Auth via the user's Supabase bearer token; VAPID private key comes from the
+// VAPID_PRIVATE_KEY env var (api/_push.js) — never from the browser or the DB.
 import { createClient } from '@supabase/supabase-js';
-import webPush from 'web-push';
 import { setCorsHeaders } from './_mcp-shared.js';
-
-const VAPID_SUBJECT = 'mailto:joi@getlatest.ai';
-const VAPID_PUBLIC_KEY = 'BPTumv1BQ3UFYWo4muculTOVfUzdPguNNY2dSPn-1gzgk4vb1pTb1AtsrHeV622sB5hsQLoWaELvnB73bGpjkdM';
-
-async function getVapidPrivateKey(supabase) {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'vapid_private_key')
-    .single();
-  if (error || !data) return null;
-  return data.value;
-}
+import { configureWebPush, sendToSubscriptions } from './_push.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res, req);
@@ -39,12 +26,9 @@ export default async function handler(req, res) {
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
       return res.status(400).json({ error: 'Invalid subscription.' });
     }
-    const { error } = await supabase
-      .from('push_subscriptions')
-      .upsert(
-        { user_id: user.id, endpoint: subscription.endpoint, keys: subscription.keys, prefs },
-        { onConflict: 'user_id,endpoint' },
-      );
+    const row = { user_id: user.id, endpoint: subscription.endpoint, keys: subscription.keys };
+    if (prefs) row.prefs = prefs;
+    const { error } = await supabase.from('push_subscriptions').upsert(row, { onConflict: 'user_id,endpoint' });
     if (error) return res.status(500).json({ error: 'Failed to save subscription.' });
     return res.status(200).json({ ok: true });
   }
@@ -59,11 +43,12 @@ export default async function handler(req, res) {
   }
 
   if (action === 'unsubscribe') {
+    if (!subscription?.endpoint) return res.status(200).json({ ok: true });
     const { error } = await supabase
       .from('push_subscriptions')
       .delete()
       .eq('user_id', user.id)
-      .eq('endpoint', subscription?.endpoint);
+      .eq('endpoint', subscription.endpoint);
     if (error) return res.status(500).json({ error: 'Failed to remove subscription.' });
     return res.status(200).json({ ok: true });
   }
@@ -74,21 +59,12 @@ export default async function handler(req, res) {
       .select('endpoint, keys')
       .eq('user_id', user.id);
     if (error || !subs?.length) return res.status(200).json({ ok: true, sent: 0 });
-    const privateKey = await getVapidPrivateKey(supabase);
-    if (!privateKey) return res.status(500).json({ error: 'VAPID not configured.' });
-    webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, privateKey);
-    const payload = JSON.stringify({ title: 'SwolTracker', body: 'Notifications are working 💪', url: '/' });
-    let sent = 0;
-    for (const sub of subs) {
-      try {
-        await webPush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
-        sent += 1;
-      } catch (e) {
-        if (e?.statusCode === 404 || e?.statusCode === 410) {
-          await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
-        }
-      }
-    }
+    if (!configureWebPush()) return res.status(500).json({ error: 'VAPID not configured.' });
+    const sent = await sendToSubscriptions(supabase, subs, {
+      title: 'SwolTracker',
+      body: 'Notifications are working 💪',
+      url: '/',
+    });
     return res.status(200).json({ ok: true, sent });
   }
 
