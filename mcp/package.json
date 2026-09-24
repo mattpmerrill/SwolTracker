@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/server.js",
+  "main": "./dist/mcp/src/server.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/server.js"
+    "start": "node dist/mcp/src/server.js"
   },
   "dependencies": {
     "@bot-native/sdk": "file:../vendor/bot-native-sdk",

@@ -3,7 +3,7 @@
 // bundle in one call. Token budget enforced via SDK's buildContextBundleFromModules.
 
 import { buildContextBundleFromModules } from '@bot-native/sdk';
-import { createContextModules } from '../../mcp/dist/context-modules.js';
+import { createContextModules } from '../../mcp/dist/mcp/src/context-modules.js';
 import {
   CATEGORY_LIMITS,
   authenticateMcpRequest,

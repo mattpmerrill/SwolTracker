@@ -1,26 +1,7 @@
-import { normalizeExerciseName } from "./exercise-normalizer.js";
+import { normalizeExerciseName } from "../../shared/exercises.js";
+import { epleyE1RM, roundToNearestFive } from "../../shared/e1rm.js";
 
-/**
- * Epley estimated 1RM, weight × (1 + reps / 30). Mirrors src/utils/e1rm.js:
- * only loaded sets with clean 1–10 reps; everything else returns null.
- * (Both copies move into the slice 8 shared core.)
- */
-export function epleyE1RM(weight: unknown, reps: unknown): number | null {
-  const w = typeof weight === "number" ? weight : Number(weight);
-  if (!Number.isFinite(w) || w <= 0) return null;
-  const r =
-    typeof reps === "number"
-      ? reps
-      : typeof reps === "string" && /^\d+$/.test(reps.trim())
-        ? Number.parseInt(reps, 10)
-        : null;
-  if (r == null || !Number.isInteger(r) || r < 1 || r > 10) return null;
-  return w * (1 + r / 30);
-}
-
-export function roundToNearestFive(n: number): number {
-  return Math.round(n / 5) * 5;
-}
+export { epleyE1RM, roundToNearestFive };
 
 export interface EstimatedPr {
   exercise_name: string;

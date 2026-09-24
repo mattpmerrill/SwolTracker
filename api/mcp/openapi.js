@@ -6,7 +6,7 @@
 // so this stays in lockstep with whatever `sdk-adapter.ts` currently registers.
 
 import { buildOpenApiDocument } from '@bot-native/sdk';
-import { buildApp } from '../../mcp/dist/sdk-adapter.js';
+import { buildApp } from '../../mcp/dist/mcp/src/sdk-adapter.js';
 import { getSupabase, setCorsHeaders } from '../_mcp-shared.js';
 
 function resolveServerUrl(req) {

@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
 import { executeToolWithGuards } from '@bot-native/sdk';
-import { buildApp } from '../mcp/dist/sdk-adapter.js';
+import { buildApp } from '../mcp/dist/mcp/src/sdk-adapter.js';
 import { callLlmInternal } from './_llm-core.js';
 import {
   CATEGORY_LIMITS,
