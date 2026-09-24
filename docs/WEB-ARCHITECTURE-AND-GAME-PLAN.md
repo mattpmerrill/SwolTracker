@@ -221,7 +221,7 @@ Matt’s instruction (2026-08-20): **one slice at a time.** Beck executes; Joi p
 | **4** | One weekly loop + squad on Today | Close week-end generate; show gym completions that are already loaded | Beck | **Done 2026-08-20** |
 | **5** | Operable | Sentry, server LLM usage, eslint in CI, migration 034 hygiene | Beck | **Done 2026-08-20** |
 | **6** | Instant cold open | Bootstrap is a ~10-call serial waterfall; 672KB single bundle; 36 `select('*')` | Joi | **Done 2026-09-23** — 6.1/6.3/6.4 shipped; 6.2 skipped |
-| **7** | PR moments (e1RM) | PRs only exist when a 1RM is typed by hand; no estimated-max math anywhere | Joi | **Proposed 2026-09-23** |
+| **7** | PR moments (e1RM) | PRs only exist when a 1RM is typed by hand; no estimated-max math anywhere | Joi | **7.1/7.2 done 2026-09-23**; 7.3/7.4 next |
 | **8** | Shared domain core | Week math, exercise aliases, and program/log Zod duplicated across web JS + MCP TS (Zod v4 vs v3) | Joi | **Proposed 2026-09-23** |
 | **9** | Coach that remembers + nudges | Session notes are localStorage-only (agent can't see them); reminders never reach the user | Joi | **Proposed 2026-09-23** |
 
@@ -307,10 +307,10 @@ Measure before/after: cold open to first unlogged set on throttled "Fast 4G" in 
 
 | # | Ticket | Files | Done when | Status |
 |---|--------|-------|-----------|--------|
-| 7.1 | **e1RM helper.** Epley `w × (1 + reps/30)`, only for loaded sets with 1–10 reps (skip bodyweight, AMRAP > 10, KB display quirks). Shared-ready (moves into slice 8 core). | `src/utils/e1rm.js` + tests | Unit tests for edge cases (reps=1 → weight, bodyweight → null, >10 → null). | Proposed |
-| 7.2 | **Live PR moment.** On set log, compare set e1RM vs best known (current 1RM + best e1RM in loaded logs). New best → toast "New estimated max: Bench 243 🔥" + small `canvas-confetti` burst. Never auto-overwrite `user_maxes`; offer "Save as new max" action. | `useWorkoutLogger.js`, `SetRow.jsx`, `Toast.jsx` | Fires once per exercise per session; no fire on offline-queued replays; one-tap save uses `reportWriteFailure`. | Proposed |
-| 7.3 | **Strength trend on Progress.** Per-lift best-e1RM-per-week line from loaded logs (8-week window; lazy-fetch older). | `ProgressScreen.jsx`, `insightsBuilders.js` | Top lifts show a trend + "+N lb this block". No new tables. | Proposed |
-| 7.4 | **MCP parity.** `generate_weekly_summary` + context bundle include e1RM PRs so the coach celebrates the same moments. | `mcp/src/tools/queries.ts`, contract tests | Weekly recap lists e1RM PRs; contract test covers it. | Proposed |
+| 7.1 | **e1RM helper.** Epley `w × (1 + reps/30)`, only for loaded sets with 1–10 reps (skip bodyweight, AMRAP > 10, KB display quirks). Shared-ready (moves into slice 8 core). | `src/utils/e1rm.js` + `e1rm.test.js` | **Done.** `epelyE1RM`, `roundToNearestFive`, `resolveCurrentMax`; 13 tests cover single→weight, bodyweight/AMRAP/range→null, >10→null, fuzzy max lookup. |
+| 7.2 | **Live PR moment.** On set log, compare set e1RM vs best known (current 1RM + best e1RM in loaded logs). New best → toast "New estimated max: Bench 243 🔥" + small `canvas-confetti` burst. Never auto-overwrite `user_maxes`; offer "Save as new max" action. | `AuthenticatedShell.jsx`, `EstimatedPrBanner.jsx` | **Done.** Wrapped `logSet` in the shell (single place with live maxes + toast + confetti + `maxesActions`): fire confetti + `EstimatedPrBanner` on a new estimated max, one-tap "Save as new max" (calls `updateMax`), dismiss. Baseline = recorded 1RM + per-session ceiling (simplification: not "best e1RM in loaded logs", which isn't indexed by name in the client). |
+| 7.3 | **Strength trend on Progress.** Per-lift best-e1RM-per-week line from loaded logs (8-week window; lazy-fetch older). | `ProgressScreen.jsx`, `insightsBuilders.js` | Top lifts show a trend + "+N lb this block". No new tables. | Proposed — next in slice 7 |
+| 7.4 | **MCP parity.** `generate_weekly_summary` + context bundle include e1RM PRs so the coach celebrates the same moments. | `mcp/src/tools/queries.ts`, contract tests | Weekly recap lists e1RM PRs; contract test covers it. | Proposed — next in slice 7 |
 
 #### Slice 8 — Shared domain core (P1 maintainability)
 
@@ -332,7 +332,7 @@ Folds in the "Related later" items below (shared week/date module, dual-write va
 | 9.3 | **Opt-in web push.** VAPID keys; `push_subscriptions` table; SW `push` handler; opt-in after the 2nd completed workout (not at first open). iOS requires installed PWA (16.4+). | `public/sw.js`, `src/main.jsx`, Settings toggle, `api/push.js` | User can enable/disable; test push delivers on installed iPhone PWA. | Proposed |
 | 9.4 | **Three nudges only.** (a) Scheduled-day reminder from `check_workout_reminder` logic ("Leg day's waiting — 4 exercises, ~50 min"), (b) squad: "Wren just finished — you're up" (max 1/day), (c) Sunday "Week N review ready". Quiet hours + per-type toggles. | Vercel cron or Supabase scheduled fn, `api/push.js` | Each nudge deep-links to the right route; no nudge on rest/skipped/completed days. | Proposed |
 
-**Housekeeping — done 2026-09-23 (Matt OK'd):** stale-data cleanup ran on prod; backups in `~/work/SwolTracker-backups/cleanup-2026-09-23/` (outside repo). Remaining risk: `Exercise ${i+1}` name fallbacks in `src/utils/workout.js` + `useWorkoutLogger.js` can recreate placeholder rows — fix in slice 7.2.
+**Housekeeping — done 2026-09-23 (Matt OK'd):** stale-data cleanup ran on prod; backups in `~/work/SwolTracker-backups/cleanup-2026-09-23/` (outside repo). The `Exercise ${i+1}` fallbacks in `src/utils/workout.js` + `useWorkoutLogger.js` only fire when a program exercise has no name — post-cleanup no such programs exist, so left as defensive-only (reviewed in slice 7, no code change needed).
 
 ---
 
@@ -456,6 +456,7 @@ Slices 1–5 done. Production-readiness queue is complete. Product follow-ups ar
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-23 | Joi | **Slice 7 (7.1 + 7.2).** `src/utils/e1rm.js` (Epley 1–10 reps, round-to-5, max lookup) + 13 tests. `AuthenticatedShell` now wraps `logSet` to detect a new estimated max vs the recorded 1RM + a per-session ceiling; fires confetti + `EstimatedPrBanner` with one-tap "Save as new max" (never auto-saves). Bodyweight/AMRAP/range sets are excluded. 273 tests green. 7.3 (Progress trend) + 7.4 (MCP parity) remain. |
 | 2026-09-23 | Joi | **Slice 6 done.** Bootstrap parallelized to 2 waves (11 serial awaits → 3 round trips); `getGroupMembers`/`getLeaderGymId` now fire for every user (self-scoped RPCs). Screens + all modals lazy-loaded on first open; `manualChunks` splits react + supabase/zod into cache-stable vendor chunks (app chunk 672KB→209KB, 61KB gzip). Narrowed `getWorkoutLogsInWeekRange`/`getWorkoutCompletions`/`getMissedDays` to explicit columns. 260 tests green, lint clean. 6.2 (`get_bootstrap` RPC) skipped — 6.1 already collapsed the waterfall. |
 | 2026-09-23 | Joi | **Prod data cleanup.** 418 placeholder `Exercise N` logs: 214 renamed to real names from their week's program, 204 with no program deleted. `Back Squat` → `Barbell Back Squat` across maxes/logs/9 programs (Matt + Wren had split 1RMs). Deleted 2 junk Wren programs (wk17 placeholder, wk20 `{}`) + 8 empty duplicate `Personal Gym`s (each user keeps ≥1). Marked 311 unprocessed >30d `app_events` processed. Backups: `~/work/SwolTracker-backups/cleanup-2026-09-23/`. |
 | 2026-09-23 | Joi | **Proposed slices 6–9** from code review: 6 instant cold open (parallel bootstrap, code split, column selects), 7 PR moments (e1RM from every set), 8 shared domain core (web↔MCP week math/normalizer/Zod), 9 coach memory + opt-in web push. Recommended order 6→7→8→9; awaiting Matt lock. |
