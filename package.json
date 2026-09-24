@@ -13,15 +13,16 @@
   },
   "dependencies": {
     "@bot-native/sdk": "file:./vendor/bot-native-sdk",
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "@sentry/browser": "^10.22.0",
     "@sentry/node": "^10.22.0",
-    "@modelcontextprotocol/sdk": "^1.12.0",
     "@supabase/supabase-js": "^2.39.0",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.4",
+    "web-push": "^3.6.7",
     "zod": "^4.3.6",
     "zod-to-json-schema": "^3.25.1"
   },

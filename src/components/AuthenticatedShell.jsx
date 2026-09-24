@@ -18,6 +18,7 @@ import AppModals from './AppModals';
 import OfflineSyncBanner from './OfflineSyncBanner';
 import PwaInstallHint from './PwaInstallHint';
 import EstimatedPrBanner from './Workout/EstimatedPrBanner';
+import PushOptInPrompt from './PushOptInPrompt';
 import { epleyE1RM, roundToNearestFive, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
 
 /**
@@ -77,6 +78,16 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
 
   const [estimatedPr, setEstimatedPr] = useState(null);
   const prCeilings = useRef({});
+
+  const totalCompletedWorkouts = getTotalCompletedWorkouts();
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+
+  // Offer opt-in push reminders after the 2nd completed workout (once ever).
+  useEffect(() => {
+    if (totalCompletedWorkouts < 2) return;
+    if (localStorage.getItem('swoltracker-push-prompt-shown')) return;
+    setShowPushPrompt(true);
+  }, [totalCompletedWorkouts]);
 
   // Estimated-1RM PR detection, wrapped around the logSet write. We compare
   // the set's Epley estimate against the recorded max (and this session's
@@ -429,6 +440,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
         onSave={handleSaveEstimatedPr}
         onDismiss={() => setEstimatedPr(null)}
       />
+
+      {showPushPrompt && <PushOptInPrompt onClose={() => setShowPushPrompt(false)} />}
     </div>
   );
 }

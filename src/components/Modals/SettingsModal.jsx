@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle, FileText, ClipboardList } from 'lucide-react';
 import { db } from '../../lib/supabase';
+import PushSettings from '../PushSettings';
 import swoltrackerSkillGuide from '../../../SKILL.md?raw';
 
 /**
@@ -401,6 +402,8 @@ function AgentKeysSection({ supabase }) {
           )}
         </>
       )}
+
+      <PushSettings />
     </div>
   );
 }
@@ -629,6 +632,8 @@ function AgentActivitySection({ supabase }) {
           )}
         </>
       )}
+
+      <PushSettings />
     </div>
   );
 }
