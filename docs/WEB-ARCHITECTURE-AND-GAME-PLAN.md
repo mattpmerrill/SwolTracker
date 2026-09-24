@@ -332,7 +332,7 @@ Folds in the "Related later" items below (shared week/date module, dual-write va
 | 9.3 | **Opt-in web push.** VAPID keys; `push_subscriptions` table; SW `push` handler; opt-in after the 2nd completed workout (not at first open). iOS requires installed PWA (16.4+). | `public/sw.js`, `src/main.jsx`, Settings toggle, `api/push.js` | User can enable/disable; test push delivers on installed iPhone PWA. | Proposed |
 | 9.4 | **Three nudges only.** (a) Scheduled-day reminder from `check_workout_reminder` logic ("Leg day's waiting — 4 exercises, ~50 min"), (b) squad: "Wren just finished — you're up" (max 1/day), (c) Sunday "Week N review ready". Quiet hours + per-type toggles. | Vercel cron or Supabase scheduled fn, `api/push.js` | Each nudge deep-links to the right route; no nudge on rest/skipped/completed days. | Proposed |
 
-**Housekeeping (not a slice, needs Matt OK):** 2026-03-11 data audit (PersonalVault historical note) flagged 475 placeholder `Exercise 1–5` rows and 15 orphaned completions inflating stats; unverified whether that cleanup ran. Check counts with service role before slice 7 (e1RM trends would read them).
+**Housekeeping — done 2026-09-23 (Matt OK'd):** stale-data cleanup ran on prod; backups in `~/work/SwolTracker-backups/cleanup-2026-09-23/` (outside repo). Remaining risk: `Exercise ${i+1}` name fallbacks in `src/utils/workout.js` + `useWorkoutLogger.js` can recreate placeholder rows — fix in slice 7.2.
 
 ---
 
@@ -456,6 +456,7 @@ Slices 1–5 done. Production-readiness queue is complete. Product follow-ups ar
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-23 | Joi | **Prod data cleanup.** 418 placeholder `Exercise N` logs: 214 renamed to real names from their week's program, 204 with no program deleted. `Back Squat` → `Barbell Back Squat` across maxes/logs/9 programs (Matt + Wren had split 1RMs). Deleted 2 junk Wren programs (wk17 placeholder, wk20 `{}`) + 8 empty duplicate `Personal Gym`s (each user keeps ≥1). Marked 311 unprocessed >30d `app_events` processed. Backups: `~/work/SwolTracker-backups/cleanup-2026-09-23/`. |
 | 2026-09-23 | Joi | **Proposed slices 6–9** from code review: 6 instant cold open (parallel bootstrap, code split, column selects), 7 PR moments (e1RM from every set), 8 shared domain core (web↔MCP week math/normalizer/Zod), 9 coach memory + opt-in web push. Recommended order 6→7→8→9; awaiting Matt lock. |
 | 2026-09-12 | Joi | **Bodyweight set rows:** dropped `+ Weight` and `Bodyweight / As prescribed` so the row is a log tap. Vacated space shows last-session reps, AMRAP “Max effort”, or rest. Overload copy for unloaded work is +2 reps, not +5 lbs. |
 | 2026-08-20 | Beck | **Slice 5 done.** Sentry wired env-gated (`SENTRY_DSN` / `VITE_SENTRY_DSN`, no-op until set). `/api/llm` logs usage server-side, 413 on oversized prompts, no raw provider errors. `npm run lint` is a CI gate. Bootstrap no longer auto-creates a gym. |
