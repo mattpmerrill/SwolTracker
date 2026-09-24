@@ -7,7 +7,7 @@ import { findMaxKey } from './workout';
  * non-estimable). Bodyweight/unloaded rows have a null weight and come back
  * null here, so they never fire a PR.
  */
-export function epelyE1RM(weight, reps) {
+export function epleyE1RM(weight, reps) {
   if (!Number.isFinite(weight) || weight <= 0) return null;
   const r =
     typeof reps === 'number'
@@ -60,7 +60,7 @@ export function buildStrengthTrends(exerciseLog = {}, userId, maxes = {}, { minW
     if (!Number.isFinite(week)) continue;
     const liftKey = resolveMaxKey(entry.exerciseName, maxes);
     if (!liftKey) continue;
-    const est = epelyE1RM(Number(entry.actualWeight), entry.actualReps);
+    const est = epleyE1RM(Number(entry.actualWeight), entry.actualReps);
     if (est == null) continue;
     const weeks = (byLift[liftKey] ||= {});
     weeks[week] = Math.max(weeks[week] ?? 0, est);

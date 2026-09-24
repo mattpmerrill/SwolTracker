@@ -1,38 +1,38 @@
 import { describe, it, expect } from 'vitest';
-import { epelyE1RM, roundToNearestFive, resolveCurrentMax, resolveMaxKey, buildStrengthTrends } from './e1rm';
+import { epleyE1RM, roundToNearestFive, resolveCurrentMax, resolveMaxKey, buildStrengthTrends } from './e1rm';
 
-describe('epelyE1RM', () => {
+describe('epleyE1RM', () => {
   it('estimates a standard strength set', () => {
-    expect(epelyE1RM(225, 5)).toBeCloseTo(262.5, 1);
+    expect(epleyE1RM(225, 5)).toBeCloseTo(262.5, 1);
   });
 
   it('estimates a heavy single', () => {
-    expect(epelyE1RM(225, 1)).toBeCloseTo(232.5, 1);
+    expect(epleyE1RM(225, 1)).toBeCloseTo(232.5, 1);
   });
 
   it('parses a numeric string rep count', () => {
-    expect(epelyE1RM(225, '5')).toBeCloseTo(262.5, 1);
+    expect(epleyE1RM(225, '5')).toBeCloseTo(262.5, 1);
   });
 
   it('returns null for zero/null load', () => {
-    expect(epelyE1RM(0, 5)).toBeNull();
-    expect(epelyE1RM(null, 5)).toBeNull();
-    expect(epelyE1RM(undefined, 5)).toBeNull();
+    expect(epleyE1RM(0, 5)).toBeNull();
+    expect(epleyE1RM(null, 5)).toBeNull();
+    expect(epleyE1RM(undefined, 5)).toBeNull();
   });
 
   it('returns null for zero reps', () => {
-    expect(epelyE1RM(225, 0)).toBeNull();
+    expect(epleyE1RM(225, 0)).toBeNull();
   });
 
   it('returns null above 10 reps', () => {
-    expect(epelyE1RM(225, 11)).toBeNull();
-    expect(epelyE1RM(225, 15)).toBeNull();
+    expect(epleyE1RM(225, 11)).toBeNull();
+    expect(epleyE1RM(225, 15)).toBeNull();
   });
 
   it('returns null for ranges, AMRAP, and failure text', () => {
-    expect(epelyE1RM(225, '8-10')).toBeNull();
-    expect(epelyE1RM(225, 'AMRAP')).toBeNull();
-    expect(epelyE1RM(225, 'to failure')).toBeNull();
+    expect(epleyE1RM(225, '8-10')).toBeNull();
+    expect(epleyE1RM(225, 'AMRAP')).toBeNull();
+    expect(epleyE1RM(225, 'to failure')).toBeNull();
   });
 });
 

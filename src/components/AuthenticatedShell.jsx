@@ -18,7 +18,7 @@ import AppModals from './AppModals';
 import OfflineSyncBanner from './OfflineSyncBanner';
 import PwaInstallHint from './PwaInstallHint';
 import EstimatedPrBanner from './Workout/EstimatedPrBanner';
-import { epelyE1RM, roundToNearestFive, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
+import { epleyE1RM, roundToNearestFive, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
 
 /**
  * Authenticated app chrome. Tab + settings/admin overlays are URL-driven
@@ -84,7 +84,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   const handleLogSet = (exerciseIndex, setIndex, data) => {
     // Tapping a logged set un-logs it — never celebrate that.
     const unlogging = isSetLogged(exerciseIndex, setIndex);
-    const est = unlogging ? null : epelyE1RM(data.actualWeight, data.actualReps);
+    const est = unlogging ? null : epleyE1RM(data.actualWeight, data.actualReps);
     if (est != null) {
       const maxes = profiles[currentUser]?.maxes || {};
       // Key the PR under the existing max's name so a save updates that lift
