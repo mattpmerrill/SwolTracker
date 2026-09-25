@@ -16,7 +16,7 @@ const AdminArea = ({ onClose, db }) => {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col text-white">
+    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col text-white safe-pad-top safe-pad-bottom">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-purple-500/5 pointer-events-none" />
 

@@ -113,6 +113,9 @@ export default function SettingsModal({
           </div>
         </div>
 
+        {/* Workout reminders — standalone, not nested in agent sections */}
+        <PushSettings />
+
         {/* Connect Agent Section */}
         {supabase && <AgentKeysSection supabase={supabase} />}
 
@@ -403,7 +406,6 @@ function AgentKeysSection({ supabase }) {
         </>
       )}
 
-      <PushSettings />
     </div>
   );
 }
@@ -633,7 +635,6 @@ function AgentActivitySection({ supabase }) {
         </>
       )}
 
-      <PushSettings />
     </div>
   );
 }
