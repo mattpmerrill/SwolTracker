@@ -46,6 +46,9 @@ export async function executeQueuedWrite(item) {
       payload.gymId,
       payload.week,
       payload.day,
+      payload.completionType,
+      payload.loggedSets,
+      payload.plannedSets,
     );
   }
 

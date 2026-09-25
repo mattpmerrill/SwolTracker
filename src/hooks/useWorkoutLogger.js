@@ -155,7 +155,15 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
   }, [completedWorkouts, currentUser]);
 
   const isWorkoutComplete = useCallback((week, day, targetUserId = currentUser) => {
-    return completedWorkouts[`${targetUserId}-${week}-${day}`] || false;
+    return !!completedWorkouts[`${targetUserId}-${week}-${day}`];
+  }, [completedWorkouts, currentUser]);
+
+  const getWorkoutCompletion = useCallback((week, day, targetUserId = currentUser) => {
+    return completedWorkouts[`${targetUserId}-${week}-${day}`] || null;
+  }, [completedWorkouts, currentUser]);
+
+  const isWorkoutPartial = useCallback((week, day, targetUserId = currentUser) => {
+    return completedWorkouts[`${targetUserId}-${week}-${day}`]?.type === 'partial';
   }, [completedWorkouts, currentUser]);
 
   const isWorkoutMissed = useCallback((week, day, targetUserId = currentUser) => {
@@ -166,7 +174,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     return missedWorkouts[`${targetUserId}-${week}-${day}`]?.reason ?? null;
   }, [missedWorkouts, currentUser]);
 
-  const toggleWorkoutComplete = useCallback(async (week, day) => {
+  const toggleWorkoutComplete = useCallback(async (week, day, fillMissing = true) => {
     const key = `${currentUser}-${week}-${day}`;
     const wasComplete = completedWorkouts[key] || false;
     const completionPct = getCompletionPercentage(week, day, currentUser);
@@ -178,13 +186,26 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
       day,
     );
 
+    const totalSets = workoutProgram[week]?.[day]?.exercises?.reduce((acc, ex) => acc + (ex.sets || 0), 0) || 0;
+    const loggedSets = totalSets - missingSetLogs.length;
+    const completionType = !wasComplete && fillMissing === false && missingSetLogs.length > 0
+      ? 'partial'
+      : 'full';
+    const plannedSets = totalSets;
+    const nextCompletion = wasComplete ? undefined : { type: completionType, loggedSets, plannedSets };
+
     const previousCompletion = completedWorkouts[key];
     const previousMissed = missedWorkouts[key];
     const previousLogSnapshot = missingSetLogs.length > 0
       ? Object.fromEntries(missingSetLogs.map(({ key: logKey }) => [logKey, exerciseLog[logKey]]))
       : null;
 
-    setCompletedWorkouts(prev => ({ ...prev, [key]: !wasComplete }));
+    setCompletedWorkouts(prev => {
+      const next = { ...prev };
+      if (wasComplete) delete next[key];
+      else next[key] = nextCompletion;
+      return next;
+    });
     if (!wasComplete && previousMissed) {
       setMissedWorkouts((prev) => {
         const next = { ...prev };
@@ -219,7 +240,8 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
       await failWrite(operation, message, 'Could not update workout completion. Try again.', { week, day });
     };
 
-    if (missingSetLogs.length > 0 && !wasComplete) {
+    // Fill missing sets only on a full completion. A partial day keeps its un-done sets blank.
+    if (missingSetLogs.length > 0 && !wasComplete && fillMissing !== false) {
       setExerciseLog(prev => {
         const next = { ...prev };
         missingSetLogs.forEach(({ key: logKey, logData }) => {
@@ -236,7 +258,10 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
         gymId,
         week,
         day,
-        missingSetLogs: wasComplete ? [] : missingSetLogs,
+        missingSetLogs: wasComplete ? [] : (fillMissing === false ? [] : missingSetLogs),
+        completionType,
+        loggedSets,
+        plannedSets,
         clearMissed: Boolean(!wasComplete && previousMissed),
       },
     });
@@ -269,7 +294,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
           return;
         }
       } else {
-        if (missingSetLogs.length > 0) {
+        if (missingSetLogs.length > 0 && fillMissing !== false) {
           const results = await Promise.all(missingSetLogs.map(({ exerciseIndex, setIndex, exerciseName, logData }) => (
             db.logSet(
               currentUser,
@@ -320,7 +345,7 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
             return;
           }
         }
-        const result = await db.markWorkoutComplete(currentUser, gymId, week, day);
+        const result = await db.markWorkoutComplete(currentUser, gymId, week, day, completionType, loggedSets, plannedSets);
         const outcome = persistOrQueue({ result, enqueue: enqueueComplete, toast });
         if (outcome === 'fail') {
           await rollback('markWorkoutComplete', 'markWorkoutComplete returned null');
@@ -484,6 +509,8 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     getTotalCompletedSets,
     getTotalCompletedWorkouts,
     isWorkoutComplete,
+    getWorkoutCompletion,
+    isWorkoutPartial,
     toggleWorkoutComplete,
     isWorkoutMissed,
     getMissedReason,

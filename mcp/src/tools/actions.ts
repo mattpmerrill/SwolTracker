@@ -341,7 +341,10 @@ export function createActionTools(
   async function mark_workout_complete(
     gymId?: string,
     weekNumber?: number,
-    dayName?: string
+    dayName?: string,
+    completionType: "full" | "partial" = "full",
+    loggedSets?: number,
+    plannedSets?: number
   ): Promise<ToolResult> {
     const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
     if (!slot) {
@@ -356,6 +359,9 @@ export function createActionTools(
           gym_id: slot.gymId,
           week_number: slot.weekNumber,
           day_name: slot.dayName,
+          completion_type: completionType,
+          logged_sets: loggedSets ?? null,
+          planned_sets: plannedSets ?? null,
         },
         { onConflict: "user_id,gym_id,week_number,day_name" }
       )
@@ -384,14 +390,16 @@ export function createActionTools(
         day_name: slot.dayName,
         week_number: slot.weekNumber,
         total_sets: logs?.length ?? 0,
+        completion_type: completionType,
       });
     } catch {
       // Event emission is best-effort; don't fail the action
     }
 
+    const label = completionType === "partial" ? "marked partial" : "marked complete";
     return {
       success: true,
-      message: `${slot.dayName} (Week ${slot.weekNumber}) marked complete!`,
+      message: `${slot.dayName} (Week ${slot.weekNumber}) ${label}!`,
       data: { completion: data },
     };
   }

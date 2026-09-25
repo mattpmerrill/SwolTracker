@@ -12,6 +12,7 @@ export default function DaySelector({
   weekDates,
   onDayChange,
   isWorkoutComplete,
+  isWorkoutPartial,
   isWorkoutMissed,
   workoutProgram,
   userId,
@@ -27,6 +28,7 @@ export default function DaySelector({
         const isSelected = currentDay === day;
         const hasWorkout = workoutProgram?.[currentWeek]?.[day]?.exercises?.length > 0;
         const isDone = hasWorkout && isWorkoutComplete?.(currentWeek, day, userId);
+        const isPartial = hasWorkout && isWorkoutPartial?.(currentWeek, day, userId);
         const isMissed = hasWorkout && isWorkoutMissed?.(currentWeek, day, userId);
 
         return (
@@ -45,10 +47,17 @@ export default function DaySelector({
           >
             <div>{day.slice(0, 3)}</div>
             <div className="text-xs opacity-70">{dayDate.getDate()}</div>
-            {isDone && (
+            {isDone && !isPartial && (
               <span
                 className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
                   isSelected ? 'bg-white/80' : 'bg-green-400'
+                }`}
+              />
+            )}
+            {isDone && isPartial && (
+              <span
+                className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                  isSelected ? 'bg-white/80' : 'bg-gradient-to-r from-green-400 to-amber-400'
                 }`}
               />
             )}

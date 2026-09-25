@@ -50,6 +50,7 @@ export default function WorkoutScreen({
   onAddMax,
   getCompletionPercentage,
   isWorkoutComplete,
+  isWorkoutPartial,
   onToggleWorkoutComplete,
   isWorkoutMissed,
   getMissedReason,
@@ -217,6 +218,7 @@ export default function WorkoutScreen({
         weekDates={weekDates}
         onDayChange={onDayChange}
         isWorkoutComplete={isWorkoutComplete}
+        isWorkoutPartial={isWorkoutPartial}
         isWorkoutMissed={isWorkoutMissed}
         workoutProgram={workoutProgram}
         userId={user?.id}
@@ -264,9 +266,10 @@ export default function WorkoutScreen({
           workout={todayWorkout}
           completionPercentage={getCompletionPercentage(currentWeek, currentDay, user.id)}
           isWorkoutComplete={dayComplete}
+          isWorkoutPartial={isWorkoutPartial?.(currentWeek, currentDay, user.id)}
           isWorkoutMissed={isWorkoutMissed?.(currentWeek, currentDay, user.id)}
           missedReason={getMissedReason?.(currentWeek, currentDay, user.id)}
-          onToggleComplete={() => onToggleWorkoutComplete(currentWeek, currentDay)}
+          onToggleComplete={(fillMissing) => onToggleWorkoutComplete(currentWeek, currentDay, fillMissing)}
           onMarkMissed={onMarkMissed}
           onClearMissed={onClearMissed}
         />

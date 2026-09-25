@@ -257,7 +257,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         .order("set_index", { ascending: true }),
       supabase
         .from("workout_completions")
-        .select("id, completed_at")
+        .select("id, completed_at, completion_type, logged_sets, planned_sets")
         .eq("user_id", userId)
         .eq("gym_id", resolvedGymId)
         .eq("week_number", week)
@@ -298,6 +298,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const totalLoggedSets = enrichedExercises.reduce((sum, ex) => sum + ex.sets_logged, 0);
     const totalPrescribedSets = enrichedExercises.reduce((sum, ex) => sum + ex.sets, 0);
     const dayCompleted = Boolean(completionResult.data);
+    const dayCompletionType = completionResult.data?.completion_type ?? null;
+    const dayLoggedSets = completionResult.data?.logged_sets ?? totalLoggedSets;
+    const dayPlannedSets = completionResult.data?.planned_sets ?? totalPrescribedSets;
 
     const exerciseLines = enrichedExercises.map((ex) => {
       const weightStr = ex.weight_lbs
@@ -312,7 +315,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     });
 
     const statusLine = dayCompleted
-      ? `\nStatus: complete (${totalLoggedSets}/${totalPrescribedSets} programmed sets logged)`
+      ? (dayCompletionType === "partial"
+        ? `\nStatus: partial (${dayLoggedSets}/${dayPlannedSets} programmed sets logged)`
+        : `\nStatus: complete (${totalLoggedSets}/${totalPrescribedSets} programmed sets logged)`)
       : totalLoggedSets > 0
         ? `\nStatus: in progress (${totalLoggedSets}/${totalPrescribedSets} programmed sets logged)`
         : "";
@@ -328,6 +333,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         gym_id: resolvedGymId,
         day_completed: dayCompleted,
         day_completed_at: completionResult.data?.completed_at ?? null,
+        completion_type: dayCompletionType,
+        logged_sets: dayLoggedSets,
+        planned_sets: dayPlannedSets,
         completed_exercises: completedExercises,
         total_exercises: enrichedExercises.length,
         total_logged_sets: totalLoggedSets,

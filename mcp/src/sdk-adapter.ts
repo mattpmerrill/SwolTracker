@@ -290,16 +290,19 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "mark_workout_complete",
-      description: "Mark an entire workout day as done",
+      description: "Mark an entire workout day as done. Use completion_type='partial' with logged_sets/planned_sets when only part of the workout was finished.",
       category: "action",
       scopes: ["write:logs"],
       schema: {
         gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
         week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
         day_name: z.string().optional().describe("Day name (defaults to today)"),
+        completion_type: z.enum(["full", "partial"]).optional().describe("'full' (default) or 'partial' if only part of the workout was done"),
+        logged_sets: z.number().int().min(0).optional().describe("Sets actually logged (for partial days)"),
+        planned_sets: z.number().int().min(0).optional().describe("Sets planned in the program (for partial days)"),
       },
-      execute: withKit(async (kit, p: { gym_id?: string; week_number?: number; day_name?: string }) =>
-        kit.actions.mark_workout_complete(p.gym_id, p.week_number, p.day_name)),
+      execute: withKit(async (kit, p: { gym_id?: string; week_number?: number; day_name?: string; completion_type?: "full" | "partial"; logged_sets?: number; planned_sets?: number }) =>
+        kit.actions.mark_workout_complete(p.gym_id, p.week_number, p.day_name, p.completion_type, p.logged_sets, p.planned_sets)),
     }),
     defineTool({
       name: "log_workout_summary",

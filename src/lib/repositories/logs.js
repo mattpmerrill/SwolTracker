@@ -156,7 +156,7 @@ export function createLogsRepo(supabase) {
       .slice(0, limit)
   }
 
-  const markWorkoutComplete = async (userId, gymId, weekNumber, dayName) => {
+  const markWorkoutComplete = async (userId, gymId, weekNumber, dayName, completionType = 'full', loggedSets = null, plannedSets = null) => {
     if (!supabase) return null
     const { data, error } = await supabase
       .from('workout_completions')
@@ -164,7 +164,10 @@ export function createLogsRepo(supabase) {
         user_id: userId,
         gym_id: gymId,
         week_number: weekNumber,
-        day_name: dayName
+        day_name: dayName,
+        completion_type: completionType,
+        logged_sets: loggedSets,
+        planned_sets: plannedSets,
       }, {
         onConflict: 'user_id,gym_id,week_number,day_name'
       })
@@ -198,7 +201,7 @@ export function createLogsRepo(supabase) {
     if (!supabase) return []
     const { data, error } = await supabase
       .from('workout_completions')
-      .select('user_id, week_number, day_name')
+      .select('user_id, week_number, day_name, completion_type, logged_sets, planned_sets')
       .eq('gym_id', gymId)
 
     if (error) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, RotateCcw, CalendarOff, Undo2 } from 'lucide-react';
+import { Check, RotateCcw, CalendarOff, Undo2, Minus } from 'lucide-react';
 
 const SKIP_REASONS = [
   { id: 'life', label: 'Life' },
@@ -18,6 +18,7 @@ export default function WorkoutFocus({
   workout,
   completionPercentage,
   isWorkoutComplete,
+  isWorkoutPartial = false,
   isWorkoutMissed = false,
   missedReason = null,
   onToggleComplete,
@@ -25,6 +26,7 @@ export default function WorkoutFocus({
   onClearMissed,
 }) {
   const [showSkipPicker, setShowSkipPicker] = useState(false);
+  const [showPartialConfirm, setShowPartialConfirm] = useState(false);
 
   if (!workout) return null;
 
@@ -41,6 +43,19 @@ export default function WorkoutFocus({
   const handleSkip = async (reason) => {
     const ok = await onMarkMissed?.(reason);
     if (ok !== false) setShowSkipPicker(false);
+  };
+
+  const handleCompleteClick = () => {
+    if (!isWorkoutComplete && completionPercentage > 0 && completionPercentage < 100) {
+      setShowPartialConfirm(true);
+      return;
+    }
+    onToggleComplete(true);
+  };
+
+  const handlePartialChoice = (fillMissing) => {
+    setShowPartialConfirm(false);
+    onToggleComplete(fillMissing);
   };
 
   return (
@@ -121,7 +136,7 @@ export default function WorkoutFocus({
                 {completionPercentage > 0 && (
                   <button
                     type="button"
-                    onClick={onToggleComplete}
+                    onClick={handleCompleteClick}
                     className={`w-full py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
                       isWorkoutComplete
                         ? 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
@@ -131,7 +146,7 @@ export default function WorkoutFocus({
                     {isWorkoutComplete ? (
                       <>
                         <RotateCcw className="w-5 h-5" />
-                        Workout Complete - Tap to Edit
+                        {isWorkoutPartial ? 'Partial Workout - Tap to Edit' : 'Workout Complete - Tap to Edit'}
                       </>
                     ) : (
                       <>
@@ -140,6 +155,30 @@ export default function WorkoutFocus({
                       </>
                     )}
                   </button>
+                )}
+
+                {showPartialConfirm && (
+                  <div className="rounded-xl border border-amber-500/40 bg-zinc-950/70 p-3 space-y-2">
+                    <p className="text-sm text-zinc-300 text-center font-medium">
+                      You logged {completionPercentage}% of this workout.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handlePartialChoice(false)}
+                      className="w-full py-2.5 px-3 rounded-xl font-semibold flex items-center justify-center gap-2 bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30"
+                    >
+                      <Minus className="w-4 h-4" />
+                      Finish with what I did
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePartialChoice(true)}
+                      className="w-full py-2.5 px-3 rounded-xl font-semibold flex items-center justify-center gap-2 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700"
+                    >
+                      <Check className="w-4 h-4" />
+                      I did it all — fill the rest
+                    </button>
+                  </div>
                 )}
 
                 {!isWorkoutComplete && (

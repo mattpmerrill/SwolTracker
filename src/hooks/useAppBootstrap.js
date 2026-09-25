@@ -199,7 +199,11 @@ async function loadUserBundle(authUser) {
     if (Object.keys(programs).length > 0) workoutProgram = programs;
     exerciseLog = exerciseLogFromRows(logs);
     completions.forEach((c) => {
-      completedWorkouts[`${c.user_id}-${c.week_number}-${c.day_name}`] = true;
+      completedWorkouts[`${c.user_id}-${c.week_number}-${c.day_name}`] = {
+        type: c.completion_type || 'full',
+        loggedSets: c.logged_sets ?? null,
+        plannedSets: c.planned_sets ?? null,
+      };
     });
     missedRows.forEach((m) => {
       missedWorkouts[`${m.user_id}-${m.week_number}-${m.day_name}`] = {

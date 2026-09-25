@@ -189,14 +189,17 @@ export function registerTools(
 
   server.tool(
     "mark_workout_complete",
-    "Mark an entire workout day as done",
+    "Mark an entire workout day as done. Use completion_type='partial' with logged_sets/planned_sets when only part of the workout was finished.",
     {
       gym_id: z.string().uuid().optional().describe("Gym ID (defaults to first gym)"),
       week_number: z.number().int().min(1).optional().describe("Week number (defaults to current)"),
       day_name: z.string().optional().describe("Day name (defaults to today)"),
+      completion_type: z.enum(["full", "partial"]).optional().describe("'full' (default) or 'partial' if only part of the workout was done"),
+      logged_sets: z.number().int().min(0).optional().describe("Sets actually logged (for partial days)"),
+      planned_sets: z.number().int().min(0).optional().describe("Sets planned in the program (for partial days)"),
     },
-    async ({ gym_id, week_number, day_name }) => {
-      const result = await actions.mark_workout_complete(gym_id, week_number, day_name);
+    async ({ gym_id, week_number, day_name, completion_type, logged_sets, planned_sets }) => {
+      const result = await actions.mark_workout_complete(gym_id, week_number, day_name, completion_type, logged_sets, planned_sets);
       return { content: [{ type: "text", text: result.message }] };
     }
   );
