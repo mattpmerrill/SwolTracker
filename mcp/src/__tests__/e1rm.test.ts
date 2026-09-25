@@ -20,8 +20,8 @@ describe('findEstimatedPrs', () => {
   it('keys PRs by the recorded max name and keeps the best set', () => {
     const prs = findEstimatedPrs(
       [
-        { exercise_name: 'Bench Press', actual_weight: 215, actual_reps: 5 },
-        { exercise_name: 'Bench Press', actual_weight: 225, actual_reps: 5 },
+        { exercise_name: 'Bench Press', actual_weight: 235, actual_reps: 5 },
+        { exercise_name: 'Bench Press', actual_weight: 240, actual_reps: 5 },
         { exercise_name: 'Plank', actual_weight: 45, actual_reps: 1 },
       ],
       { 'Barbell Bench Press': 240 },
@@ -29,15 +29,19 @@ describe('findEstimatedPrs', () => {
     expect(prs).toEqual([
       {
         exercise_name: 'Barbell Bench Press',
-        estimated_max_lbs: 265,
+        estimated_max_lbs: 280,
         recorded_max_lbs: 240,
-        gain_lbs: 25,
-        from_set: { weight_lbs: 225, reps: 5 },
+        gain_lbs: 40,
+        from_set: { weight_lbs: 240, reps: 5 },
       },
     ]);
   });
   it('returns nothing when no set beats the max', () => {
     expect(findEstimatedPrs([{ exercise_name: 'Bench Press', actual_weight: 185, actual_reps: 5 }], { 'Barbell Bench Press': 240 })).toEqual([]);
+  });
+  it('ignores routine submaximal work that Epley slightly overestimates', () => {
+    // 8 reps @ 85% of a 240 max = 205×8 → ~257, only ~7% over: not a PR.
+    expect(findEstimatedPrs([{ exercise_name: 'Bench Press', actual_weight: 205, actual_reps: 8 }], { 'Barbell Bench Press': 240 })).toEqual([]);
   });
 });
 
@@ -47,7 +51,7 @@ describe('generate_weekly_summary estimated PRs', () => {
     sb.respond('profiles.single', { data: { program_start_date: '2026-01-05' }, error: null });
     sb.respond('workout_logs.list', {
       data: [
-        { day_name: 'Monday', exercise_name: 'Bench Press', actual_weight: 225, actual_reps: 5, completed: true },
+        { day_name: 'Monday', exercise_name: 'Bench Press', actual_weight: 250, actual_reps: 5, completed: true },
         { day_name: 'Monday', exercise_name: 'Back Squat', actual_weight: 250, actual_reps: 5, completed: true },
       ],
       error: null,
@@ -70,7 +74,7 @@ describe('generate_weekly_summary estimated PRs', () => {
     const result = await tools.generate_weekly_summary(1);
     const data = result.data as any;
     expect(data.estimated_prs.map((p: any) => p.exercise_name)).toEqual(['Barbell Bench Press']);
-    expect(data.estimated_prs[0].estimated_max_lbs).toBe(265);
-    expect(result.message).toContain('Estimated PRs (not saved yet): Barbell Bench Press ~265 lbs (+25, from 225x5)');
+    expect(data.estimated_prs[0].estimated_max_lbs).toBe(290);
+    expect(result.message).toContain('Estimated PRs (not saved yet): Barbell Bench Press ~290 lbs (+50, from 250x5)');
   });
 });

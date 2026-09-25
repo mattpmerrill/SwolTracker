@@ -1,7 +1,7 @@
 import { normalizeExerciseName } from "../../shared/exercises.js";
-import { epleyE1RM, roundToNearestFive } from "../../shared/e1rm.js";
+import { epleyE1RM, roundToNearestFive, isEstimatedPr } from "../../shared/e1rm.js";
 
-export { epleyE1RM, roundToNearestFive };
+export { epleyE1RM, roundToNearestFive, isEstimatedPr };
 
 export interface EstimatedPr {
   exercise_name: string;
@@ -44,7 +44,7 @@ export function findEstimatedPrs(
   for (const [name, b] of best) {
     const recorded = maxes[name];
     const rounded = roundToNearestFive(b.est);
-    if (rounded > recorded) {
+    if (isEstimatedPr(b.est, recorded)) {
       prs.push({
         exercise_name: name,
         estimated_max_lbs: rounded,

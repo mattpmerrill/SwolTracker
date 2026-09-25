@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { epleyE1RM, roundToNearestFive, resolveCurrentMax, resolveMaxKey, buildStrengthTrends } from './e1rm';
+import { epleyE1RM, roundToNearestFive, isEstimatedPr, PR_MIN_MARGIN, resolveCurrentMax, resolveMaxKey, buildStrengthTrends } from './e1rm';
 
 describe('epleyE1RM', () => {
   it('estimates a standard strength set', () => {
@@ -45,6 +45,46 @@ describe('roundToNearestFive', () => {
     expect(roundToNearestFive(263)).toBe(265);
     expect(roundToNearestFive(262)).toBe(260);
     expect(roundToNearestFive(260)).toBe(260);
+  });
+});
+
+describe('isEstimatedPr', () => {
+  // The reported bug: routine prescribed work (8 reps @ 85% → ~1.077×) looked like
+  // a new max every set, which raised the recorded max, which re-prescribed heavier
+  // weights, which produced another "PR" — an endless loop. The margin + ceiling
+  // guard must reject that noise.
+  it('rejects routine submaximal work (8 reps @ 85% of max)', () => {
+    const est = epleyE1RM(55, 8); // 69.67 vs a 65 max → ~7.7% over
+    expect(est).toBeCloseTo(69.67, 1);
+    expect(isEstimatedPr(est, 65)).toBe(false);
+  });
+
+  it('rejects an estimate below the margin', () => {
+    // 65 max; estimate 71 is only ~9% over — still noise, not a PR.
+    expect(isEstimatedPr(71, 65)).toBe(false);
+  });
+
+  it('accepts a meaningful PR (clears the margin)', () => {
+    // 3 reps at your old 1RM → ~10% over → a real PR.
+    expect(isEstimatedPr(epleyE1RM(65, 3), 65)).toBe(true);
+  });
+
+  it('does not re-fire against a raised ceiling', () => {
+    const est = epleyE1RM(55, 8); // 69.67 → rounds 70
+    // First fire: ceiling 65, est 69.67 < 71.5 margin → false (noise anyway).
+    expect(isEstimatedPr(est, 65, 0)).toBe(false);
+    // Even a genuine PR is suppressed once the ceiling is at/above it.
+    expect(isEstimatedPr(epleyE1RM(65, 3), 65, 75)).toBe(false);
+  });
+
+  it('returns false without a recorded max or estimate', () => {
+    expect(isEstimatedPr(null, 65)).toBe(false);
+    expect(isEstimatedPr(epleyE1RM(100, 5), 0)).toBe(false);
+    expect(isEstimatedPr(epleyE1RM(100, 5), null)).toBe(false);
+  });
+
+  it('exposes a 1.10 margin constant', () => {
+    expect(PR_MIN_MARGIN).toBeCloseTo(1.1, 5);
   });
 });
 

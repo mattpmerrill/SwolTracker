@@ -22,3 +22,29 @@ export function epleyE1RM(weight: unknown, reps: unknown): number | null {
 export function roundToNearestFive(n: number): number {
   return Math.round(n / 5) * 5;
 }
+
+/**
+ * Minimum ratio an Epley estimate must clear over the recorded 1RM to count as a
+ * PR. Epley overestimates by ~8% on routine 8–10 rep submaximal sets (e.g. 8 reps
+ * @ 85% → 1.077×), so without this margin every prescribed working set looks like
+ * a "new max" and quietly ratchets the recorded 1RM upward each session.
+ */
+export const PR_MIN_MARGIN = 1.10;
+
+/**
+ * True when a set's estimated 1RM is a meaningful PR over the recorded max:
+ * it must be a finite estimate, clear the margin above `currentMax`, and round
+ * above the highest value seen so far (`ceiling` = recorded max and any prior
+ * PR this session, so a slightly-better follow-up set doesn't re-fire).
+ */
+export function isEstimatedPr(
+  est: number | null,
+  currentMax: number | null | undefined,
+  ceiling = 0,
+): boolean {
+  if (est == null || !Number.isFinite(est)) return false;
+  if (!currentMax || !Number.isFinite(currentMax) || currentMax <= 0) return false;
+  if (est < currentMax * PR_MIN_MARGIN) return false;
+  return roundToNearestFive(est) > Math.max(currentMax, ceiling);
+}
+

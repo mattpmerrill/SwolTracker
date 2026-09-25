@@ -36,6 +36,16 @@ export default function ExerciseCard({
   const [weightOverrides, setWeightOverrides] = useState(() => getItem(storageKey) || {});
   const [repsOverrides, setRepsOverrides] = useState(() => getItem(repsStorageKey) || {});
 
+  // Snapshot the maxes used to resolve this day's percentage weights. A mid-workout
+  // max change (e.g. accepting an estimated PR) must NOT re-prescribe heavier
+  // weights for the sets you haven't done yet — that was the PR/weight feedback loop.
+  const [sessionMaxes, setSessionMaxes] = useState(() => userMaxes || {});
+  useEffect(() => {
+    if (Object.keys(sessionMaxes).length === 0 && userMaxes && Object.keys(userMaxes).length > 0) {
+      setSessionMaxes(userMaxes);
+    }
+  }, [userMaxes, sessionMaxes]);
+
   useEffect(() => {
     setItem(storageKey, weightOverrides);
   }, [weightOverrides, storageKey]);
@@ -228,10 +238,10 @@ export default function ExerciseCard({
           {Array.from({ length: exercise.sets }).map((_, setIdx) => {
             const percentage = exercise.percentages?.[setIdx];
             const prescribedWeight = percentage
-              ? calculateWeight(percentage, userMaxes || {}, exercise.name)
+              ? calculateWeight(percentage, sessionMaxes || {}, exercise.name)
               : (() => {
-                  const key = findMaxKey(exercise.name, userMaxes || {});
-                  return key ? (userMaxes[key] ?? null) : (userMaxes?.[exercise.name] ?? null);
+                  const key = findMaxKey(exercise.name, sessionMaxes || {});
+                  return key ? (sessionMaxes[key] ?? null) : (sessionMaxes?.[exercise.name] ?? null);
                 })();
             const override = weightOverrides[setIdx] ?? null;
             const repsOverride = repsOverrides[setIdx] ?? null;

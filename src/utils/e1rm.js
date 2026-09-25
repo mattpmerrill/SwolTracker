@@ -1,7 +1,7 @@
 import { findMaxKey } from './workout';
-import { epleyE1RM, roundToNearestFive } from '../../shared/e1rm';
+import { epleyE1RM, roundToNearestFive, isEstimatedPr, PR_MIN_MARGIN } from '../../shared/e1rm';
 
-export { epleyE1RM, roundToNearestFive };
+export { epleyE1RM, roundToNearestFive, isEstimatedPr, PR_MIN_MARGIN };
 
 /** Key under which this exercise's 1RM is stored in the maxes map, or null. */
 export function resolveMaxKey(exerciseName, maxes = {}) {

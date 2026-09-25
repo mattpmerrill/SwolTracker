@@ -19,7 +19,7 @@ import OfflineSyncBanner from './OfflineSyncBanner';
 import PwaInstallHint from './PwaInstallHint';
 import EstimatedPrBanner from './Workout/EstimatedPrBanner';
 import PushOptInPrompt from './PushOptInPrompt';
-import { epleyE1RM, roundToNearestFive, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
+import { epleyE1RM, roundToNearestFive, isEstimatedPr, resolveMaxKey, buildStrengthTrends } from '../utils/e1rm';
 
 /**
  * Authenticated app chrome. Tab + settings/admin overlays are URL-driven
@@ -105,9 +105,13 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
       const liftKey = resolveMaxKey(data.exerciseName, maxes);
       const currentMax = liftKey ? maxes[liftKey] : null;
       const ceilingKey = liftKey || data.exerciseName;
-      const ceiling = Math.max(currentMax ?? 0, prCeilings.current[ceilingKey] ?? 0);
       const rounded = roundToNearestFive(est);
-      if (liftKey && ceiling > 0 && rounded > ceiling) {
+      // Only celebrate a *meaningful* PR: the estimate must clear the recorded
+      // max by the margin and beat this session's ceiling. This keeps routine
+      // prescribed work (e.g. 8 @ 85%) from firing every set and ratcheting the
+      // recorded max upward — the bug where accepting a PR raised the next set's
+      // percentage weight, which produced another "PR", and so on.
+      if (isEstimatedPr(est, currentMax, prCeilings.current[ceilingKey])) {
         prCeilings.current[ceilingKey] = rounded;
         setEstimatedPr({ exerciseName: liftKey, estMax: rounded });
         confetti({
