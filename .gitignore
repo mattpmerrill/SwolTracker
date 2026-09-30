@@ -17,3 +17,7 @@ mobile/web-build/
 mcp/.env
 .env.production
 personalvault
+
+# Local tool config can hold credentials
+.claude/mcp.json
+.mcp.json
