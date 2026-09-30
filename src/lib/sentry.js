@@ -21,5 +21,3 @@ if (dsn) {
     },
   });
 }
-
-export { Sentry };

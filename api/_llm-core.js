@@ -54,7 +54,7 @@ export function resolveProviderWithFallback(preferredProvider) {
   return null;
 }
 
-export async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
+async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -70,7 +70,7 @@ export async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
   }
 }
 
-export async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS) {
+async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DELAY_MS) {
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -92,7 +92,7 @@ export async function withRetry(fn, maxRetries = MAX_RETRIES, delayMs = RETRY_DE
   throw lastError;
 }
 
-export async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+async function callOpenAI(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
   const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -118,7 +118,7 @@ export async function callOpenAI(apiKey, systemPrompt, userPrompt, model, reques
   };
 }
 
-export async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+async function callClaude(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
   const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -151,7 +151,7 @@ export async function callClaude(apiKey, systemPrompt, userPrompt, model, reques
   };
 }
 
-export async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+async function callGemini(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
   const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const response = await fetchWithTimeout(endpoint, {
@@ -177,7 +177,7 @@ export async function callGemini(apiKey, systemPrompt, userPrompt, model, reques
   };
 }
 
-export async function callOpenRouter(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
+async function callOpenRouter(apiKey, systemPrompt, userPrompt, model, requestType = 'onboarding') {
   const maxTokens = requestType === 'weekly' ? 8000 : 4000;
   const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',

@@ -74,54 +74,13 @@ export function getUserFriendlyMessage(category, errorType = 'default') {
  * @param {Object} additionalInfo - Additional context to include
  * @returns {Object} Context object with metadata
  */
-export function createErrorContext(additionalInfo = {}) {
+function createErrorContext(additionalInfo = {}) {
   return {
     url: typeof window !== 'undefined' ? window.location?.href : null,
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
     timestamp: new Date().toISOString(),
     ...additionalInfo
   };
-}
-
-/**
- * Categorize an error based on its message/properties
- * @param {Error} error - The error object
- * @param {string} defaultCategory - Default category if unable to determine
- * @returns {Object} { type: string, severity: string }
- */
-export function categorizeError(error, _defaultCategory = ErrorCategory.UNKNOWN) {
-  const message = error?.message?.toLowerCase() || '';
-
-  // Network/timeout errors
-  if (message.includes('timeout') || message.includes('abort') || error?.name === 'AbortError') {
-    return { type: 'timeout', severity: ErrorSeverity.WARNING };
-  }
-  if (message.includes('network') || message.includes('fetch') || message.includes('failed to fetch')) {
-    return { type: 'offline', severity: ErrorSeverity.ERROR };
-  }
-
-  // LLM-specific errors
-  if (message.includes('rate limit') || message.includes('429')) {
-    return { type: 'rate_limit', severity: ErrorSeverity.WARNING };
-  }
-  if (message.includes('api key') || message.includes('unauthorized') || message.includes('401')) {
-    return { type: 'invalid_key', severity: ErrorSeverity.CRITICAL };
-  }
-  if (message.includes('500') || message.includes('503') || message.includes('service')) {
-    return { type: 'server_error', severity: ErrorSeverity.ERROR };
-  }
-
-  // Parsing errors
-  if (message.includes('json') || message.includes('parse') || message.includes('unexpected token')) {
-    return { type: 'json_invalid', severity: ErrorSeverity.ERROR };
-  }
-
-  // Auth errors
-  if (message.includes('session') || message.includes('expired')) {
-    return { type: 'session_expired', severity: ErrorSeverity.WARNING };
-  }
-
-  return { type: 'default', severity: ErrorSeverity.ERROR };
 }
 
 /**
@@ -230,54 +189,4 @@ export async function reportWriteFailure({
   }
 
   return friendly;
-}
-
-/**
- * Create an enhanced error with user-friendly message and metadata
- * @param {Error} originalError - The original error
- * @param {string} category - Error category
- * @param {string} errorType - Specific error type
- * @returns {Error} Enhanced error object
- */
-export function createUserFriendlyError(originalError, category, errorType = 'default') {
-  const userMessage = getUserFriendlyMessage(category, errorType);
-  const enhancedError = new Error(userMessage);
-  enhancedError.originalError = originalError;
-  enhancedError.category = category;
-  enhancedError.errorType = errorType;
-  return enhancedError;
-}
-
-/**
- * Wrapper for async operations with automatic error logging
- * @param {Object} db - Database helper object
- * @param {Object} options - Configuration options
- * @returns {Function} Async function wrapper
- */
-export function withErrorLogging(db, options = {}) {
-  const { category, component, operation, userId, rethrow = true } = options;
-
-  return async (asyncFn) => {
-    try {
-      return await asyncFn();
-    } catch (error) {
-      const { type, severity } = categorizeError(error, category);
-
-      await logError(db, {
-        category: category || ErrorCategory.UNKNOWN,
-        message: error.message,
-        severity,
-        userId,
-        component,
-        operation,
-        originalError: error
-      });
-
-      if (rethrow) {
-        throw createUserFriendlyError(error, category, type);
-      }
-
-      return null;
-    }
-  };
 }

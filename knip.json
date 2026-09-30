@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "api/**/*.js",
+    "!api/_*.js",
+    "public/sw.js",
+    "mcp/src/server.ts",
+    "mcp/src/sdk-adapter.ts"
+  ],
+  "project": [
+    "src/**/*.{js,jsx}",
+    "api/**/*.js",
+    "mcp/src/**/*.ts",
+    "shared/**/*.ts",
+    "src/**/*.css"
+  ],
+  "ignoreDependencies": ["dotenv"]
+}

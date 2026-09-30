@@ -1,7 +1,7 @@
 /** Prompt size + public error mapping for /api/llm (slice 5.2). */
 
 export const MAX_PROMPT_BYTES = 80_000;
-export const MAX_COMBINED_PROMPT_BYTES = 120_000;
+const MAX_COMBINED_PROMPT_BYTES = 120_000;
 
 export function utf8Bytes(value) {
   return new TextEncoder().encode(String(value ?? '')).length;

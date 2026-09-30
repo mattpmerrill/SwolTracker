@@ -1,7 +1,7 @@
 import { normalizeExerciseName } from "../../shared/exercises.js";
 import { epleyE1RM, roundToNearestFive, isEstimatedPr } from "../../shared/e1rm.js";
 
-export { epleyE1RM, roundToNearestFive, isEstimatedPr };
+export { epleyE1RM };
 
 export interface EstimatedPr {
   exercise_name: string;

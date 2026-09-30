@@ -1,5 +1,7 @@
 import sys
+
 from PIL import Image
+
 
 def create_gif(input_path, output_path, num_frames=5):
     try:

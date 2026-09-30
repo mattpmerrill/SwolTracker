@@ -32,20 +32,6 @@ export const equipmentNameSchema = z.string().min(1).max(100).trim()
 
 export const searchQuerySchema = z.string().min(2).max(50).trim()
 
-// Onboarding schema
-export const onboardingSchema = z.object({
-  displayName: z.string().min(1).max(100).trim(),
-  gender: z.enum(['male', 'female', 'other']),
-  age: z.union([z.number().int().min(13).max(99), z.string().min(1).max(3)]),
-  weightLbs: z.union([z.number().min(50).max(500), z.string().min(1).max(4)]),
-  workoutLocation: z.string().min(1).max(100),
-  fitnessGoals: z.array(z.string().max(100)).min(1).max(10),
-  workoutDays: z.array(z.string().max(20)).min(1).max(7),
-  workoutDuration: z.string().min(1).max(50),
-  equipment: z.array(z.string().max(100)).max(50),
-  programStartDate: z.string().optional(),
-})
-
 // Agent chat schemas
 export const agentChatMessageSchema = z.string().trim().min(1, 'Message cannot be empty').max(5000, 'Message too long (max 5000 characters)')
 

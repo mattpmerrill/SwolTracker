@@ -35,28 +35,3 @@ export function createEventEmitter(supabase: SupabaseClient, appName: string) {
 }
 
 export type EventEmitter = ReturnType<typeof createEventEmitter>;
-
-// ── Context bundle ───────────────────────────────────────
-
-export interface ContextBundle {
-  app_name: string;
-  user_id: string;
-  generated_at: string;
-  summary: string;
-  data: Record<string, unknown>;
-}
-
-export function buildContextBundle(
-  appName: string,
-  userId: string,
-  summary: string,
-  data: Record<string, unknown>
-): ContextBundle {
-  return {
-    app_name: appName,
-    user_id: userId,
-    generated_at: new Date().toISOString(),
-    summary,
-    data,
-  };
-}

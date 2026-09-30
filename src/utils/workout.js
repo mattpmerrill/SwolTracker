@@ -71,61 +71,6 @@ export const calculateWeight = (percentage, maxes, exerciseName) => {
 };
 
 /**
- * Calculate the completion percentage for a workout day
- * @param {Object} workoutProgram - The full workout program object
- * @param {Object} exerciseLog - The exercise log object
- * @param {number} week - The week number
- * @param {string} day - The day name
- * @param {string} targetUserId - The user ID to calculate completion for
- * @returns {number} The completion percentage (0-100)
- */
-export const getCompletionPercentage = (workoutProgram, exerciseLog, week, day, targetUserId) => {
-  if (!workoutProgram[week] || !workoutProgram[week][day] || !workoutProgram[week][day].exercises) {
-    return 0;
-  }
-
-  const totalSets = workoutProgram[week][day].exercises.reduce((acc, exercise) => acc + exercise.sets, 0);
-  if (totalSets === 0) return 0;
-
-  let completedSets = 0;
-  workoutProgram[week][day].exercises.forEach((exercise, exerciseIndex) => {
-    for (let setIndex = 0; setIndex < exercise.sets; setIndex++) {
-      const key = `${targetUserId}-${week}-${day}-${exerciseIndex}-${setIndex}`;
-      if (exerciseLog[key]?.completed) {
-        completedSets++;
-      }
-    }
-  });
-
-  return Math.round((completedSets / totalSets) * 100);
-};
-
-/**
- * Check if a specific set is logged as completed
- * @param {Object} exerciseLog - The exercise log object
- * @param {string} userId - The user ID
- * @param {number} week - The week number
- * @param {string} day - The day name
- * @param {number} exerciseIndex - The exercise index
- * @param {number} setIndex - The set index
- * @returns {boolean} Whether the set is completed
- */
-export const isSetLogged = (exerciseLog, userId, week, day, exerciseIndex, setIndex) => {
-  const key = `${userId}-${week}-${day}-${exerciseIndex}-${setIndex}`;
-  return exerciseLog[key]?.completed || false;
-};
-
-/**
- * Get the total number of completed sets for a user
- * @param {Object} exerciseLog - The exercise log object
- * @param {string} userId - The user ID
- * @returns {number} Total completed sets
- */
-export const getTotalCompletedSets = (exerciseLog, userId) => {
-  return Object.keys(exerciseLog).filter(k => k.startsWith(userId) && exerciseLog[k]?.completed).length;
-};
-
-/**
  * Generate the exercise log key
  * @param {string} userId - The user ID
  * @param {number} week - The week number

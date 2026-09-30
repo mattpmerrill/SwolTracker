@@ -14,7 +14,7 @@ const REQUIRED_DAYS = [
   "Sunday",
 ];
 
-export interface LlmCallResult {
+interface LlmCallResult {
   content: string;
   usage: { prompt_tokens: number; completion_tokens: number };
   model: string;

@@ -7,7 +7,7 @@
  */
 import { getItem, setItem } from '../utils/storage';
 
-export const QUEUE_STORAGE_KEY = 'swoltracker-offline-queue';
+const QUEUE_STORAGE_KEY = 'swoltracker-offline-queue';
 
 export const WRITE_TYPES = {
   LOG_SET: 'logSet',

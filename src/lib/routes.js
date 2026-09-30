@@ -3,8 +3,6 @@
  * deep links, and tests share one source of truth.
  */
 
-export const TAB_IDS = ['workout', 'maxes', 'progress', 'buddies'];
-
 export const ROUTES = {
   root: '/',
   workout: '/workout',
@@ -16,7 +14,7 @@ export const ROUTES = {
   onboarding: '/onboarding',
 };
 
-export const TAB_ROUTES = {
+const TAB_ROUTES = {
   workout: ROUTES.workout,
   maxes: ROUTES.maxes,
   progress: ROUTES.progress,

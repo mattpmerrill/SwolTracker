@@ -37,17 +37,6 @@ export const signInWithGoogle = async () => {
   })
 }
 
-export const signOut = async () => {
-  if (!supabase) return
-  return await supabase.auth.signOut({ scope: 'local' })
-}
-
-export const getCurrentUser = async () => {
-  if (!supabase) return null
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
-}
-
 // Compose domain repositories into unified db object
 const profilesRepo = createProfilesRepo(supabase)
 const gymsRepo = createGymsRepo(supabase)
