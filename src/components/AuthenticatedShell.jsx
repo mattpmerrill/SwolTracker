@@ -67,7 +67,6 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     getCompletionPercentage,
     getTotalCompletedWorkouts,
     isWorkoutComplete,
-    getWorkoutCompletion,
     isWorkoutPartial,
     toggleWorkoutComplete,
     isWorkoutMissed,
