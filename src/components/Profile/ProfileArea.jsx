@@ -4,6 +4,7 @@ import {
   Dumbbell, Heart, Flame, Scale, Wind, Home, Building2, Clock
 } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay';
+import { parseCalendarDate } from '../../utils/date';
 
 const FITNESS_GOALS = [
   { id: 'strength', label: 'Strength', icon: Dumbbell, color: 'orange' },
@@ -409,7 +410,7 @@ const ProfileArea = ({
   );
 
   const renderProgramInfo = () => {
-    const startDate = programStartDate ? new Date(programStartDate) : null;
+    const startDate = programStartDate ? parseCalendarDate(programStartDate) : null;
 
     return (
       <div className="space-y-6">

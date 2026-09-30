@@ -23,6 +23,16 @@ export function isBootstrapLoadError(loadError, bundle) {
  * effect; we do not own the state here.
  */
 
+/**
+ * Keep the stored calendar date ("2026-09-07") as-is. Converting it with
+ * `new Date(...).toISOString()` makes it UTC midnight, which is Sunday evening
+ * west of UTC, so a Monday start counted one week ahead in the Americas.
+ */
+export function resolveProgramStart(storedStartDate) {
+  if (!storedStartDate) return { programStartDate: new Date().toISOString(), currentWeek: 1 };
+  return { programStartDate: storedStartDate, currentWeek: calculateCurrentWeek(storedStartDate) };
+}
+
 export function useAppBootstrap(authUser) {
   const [isLoading, setIsLoading] = useState(true);
   const [bundle, setBundle] = useState(null);
@@ -162,13 +172,7 @@ async function loadUserBundle(authUser) {
     acceptedNotifications: [],
   };
 
-  let programStartDate = new Date().toISOString();
-  let currentWeek = 1;
-  if (profile.program_start_date) {
-    const startDate = new Date(profile.program_start_date);
-    programStartDate = startDate.toISOString();
-    currentWeek = calculateCurrentWeek(startDate.toISOString());
-  }
+  const { programStartDate, currentWeek } = resolveProgramStart(profile.program_start_date);
 
   const gymId = gyms[0]?.id ?? null;
 
