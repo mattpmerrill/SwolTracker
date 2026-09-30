@@ -4,8 +4,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-export const MCP_RATE_LIMIT = 500;
-export const MCP_RATE_WINDOW_MINUTES = 60;
+const MCP_RATE_LIMIT = 500;
+const MCP_RATE_WINDOW_MINUTES = 60;
 
 export const CATEGORY_LIMITS = {
   query: { max: 500, window: 60 },

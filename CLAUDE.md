@@ -62,7 +62,7 @@ SwolTracker/
 │   │   ├── AgentChat/           # Coach Board — async notes between user and AI agent
 │   │   │   ├── AgentChatPanel.jsx    # Slide-up panel with message history + input
 │   │   │   ├── CoachNoteCard.jsx     # Compact preview card for workout screen
-│   │   │   └── AgentChatFAB.jsx      # Floating action button with unread badge
+│   │   │   └── CoachBoardEntry.jsx   # Always-on Coach Board entry on the workout screen
 │   │   ├── admin/               # Admin panel components
 │   │   │   ├── AdminArea.jsx            # Route wrapper with tab navigation
 │   │   │   ├── AdminDashboard.jsx        # Usage stats
@@ -305,7 +305,7 @@ SwolTracker is designed to be **AI agent-native** — users can connect their ow
 | `natural-language.ts` | `log_exercise`, `log_workout_summary` | NL parsing with fuzzy matching |
 
 ### Coach Board
-Async messaging between user and their AI agent, displayed in a slide-up panel (AgentChatPanel) accessible via floating action button (AgentChatFAB). Coach note preview card (CoachNoteCard) shows on the workout screen.
+Async messaging between user and their AI agent, displayed in a slide-up panel (AgentChatPanel) opened from the header Bot button (with unread badge) or the workout screen's CoachBoardEntry. Coach note preview card (CoachNoteCard) shows on the workout screen.
 
 **Message types:**
 - `chat` — general notes between user and agent

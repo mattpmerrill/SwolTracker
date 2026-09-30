@@ -152,5 +152,3 @@ function ToastItem({ toast, onDismiss }) {
     </div>
   );
 }
-
-export default ToastProvider;

@@ -14,13 +14,3 @@ import { parseCalendarDate } from '../../shared/week-math'
 export const formatDate = (date) => {
   return parseCalendarDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
-
-/** Format a date for display in program info */
-export const formatProgramDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  });
-};

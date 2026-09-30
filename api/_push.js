@@ -2,8 +2,8 @@
 // VAPID private key lives ONLY in the Vercel env var VAPID_PRIVATE_KEY.
 import webPush from 'web-push';
 
-export const VAPID_SUBJECT = 'mailto:joi@getlatest.ai';
-export const VAPID_PUBLIC_KEY = 'BJ5OIQ2Y68gLAv5utqitxHjTWtydi7Gl0RF8bFn6q0R6u1sFp589ij9VUeXrh2dQU7UPysAk20VeKOq213rEdCM';
+const VAPID_SUBJECT = 'mailto:joi@getlatest.ai';
+const VAPID_PUBLIC_KEY = 'BJ5OIQ2Y68gLAv5utqitxHjTWtydi7Gl0RF8bFn6q0R6u1sFp589ij9VUeXrh2dQU7UPysAk20VeKOq213rEdCM';
 
 let configured = false;
 

@@ -4,17 +4,6 @@
  * that can be adapted for web (localStorage) or mobile (AsyncStorage)
  */
 
-const STORAGE_KEYS = {
-  PROFILES: 'swoltracker-profiles',
-  EQUIPMENT: 'swoltracker-equipment',
-  EXERCISE_LOG: 'swoltracker-log',
-  WORKOUT_PROGRAM: 'swoltracker-program',
-  PROGRAM_START_DATE: 'swoltracker-startdate',
-  CURRENT_USER: 'swoltracker-currentuser',
-  COMPLETED_WORKOUTS: 'swoltracker-completed-workouts',
-  WEIGHT_OVERRIDES: 'swoltracker-weight-overrides',
-};
-
 /**
  * Check if localStorage is available
  * @returns {boolean}
@@ -64,22 +53,6 @@ export const setItem = (key, value) => {
 };
 
 /**
- * Remove an item from storage
- * @param {string} key - Storage key
- * @returns {boolean} Success status
- */
-export const removeItem = (key) => {
-  if (!isLocalStorageAvailable()) return false;
-  try {
-    localStorage.removeItem(key);
-    return true;
-  } catch (error) {
-    console.error(`Error removing ${key} from storage:`, error);
-    return false;
-  }
-};
-
-/**
  * Get a string item from storage (no JSON parsing)
  * @param {string} key - Storage key
  * @returns {string|null}
@@ -110,46 +83,3 @@ export const setString = (key, value) => {
     return false;
   }
 };
-
-// App-specific storage functions
-
-/**
- * Load all SwolTracker data from storage
- * @returns {Object} Object containing all stored data
- */
-export const loadAllData = () => {
-  return {
-    profiles: getItem(STORAGE_KEYS.PROFILES),
-    equipment: getItem(STORAGE_KEYS.EQUIPMENT),
-    exerciseLog: getItem(STORAGE_KEYS.EXERCISE_LOG),
-    workoutProgram: getItem(STORAGE_KEYS.WORKOUT_PROGRAM),
-    programStartDate: getString(STORAGE_KEYS.PROGRAM_START_DATE),
-    currentUser: getString(STORAGE_KEYS.CURRENT_USER),
-    completedWorkouts: getItem(STORAGE_KEYS.COMPLETED_WORKOUTS),
-    weightOverrides: getItem(STORAGE_KEYS.WEIGHT_OVERRIDES),
-  };
-};
-
-/**
- * Save all SwolTracker data to storage
- * @param {Object} data - Object containing all data to save
- */
-export const saveAllData = (data) => {
-  if (data.profiles !== undefined) setItem(STORAGE_KEYS.PROFILES, data.profiles);
-  if (data.equipment !== undefined) setItem(STORAGE_KEYS.EQUIPMENT, data.equipment);
-  if (data.exerciseLog !== undefined) setItem(STORAGE_KEYS.EXERCISE_LOG, data.exerciseLog);
-  if (data.workoutProgram !== undefined) setItem(STORAGE_KEYS.WORKOUT_PROGRAM, data.workoutProgram);
-  if (data.programStartDate !== undefined) setString(STORAGE_KEYS.PROGRAM_START_DATE, data.programStartDate);
-  if (data.currentUser !== undefined) setString(STORAGE_KEYS.CURRENT_USER, data.currentUser);
-  if (data.completedWorkouts !== undefined) setItem(STORAGE_KEYS.COMPLETED_WORKOUTS, data.completedWorkouts);
-  if (data.weightOverrides !== undefined) setItem(STORAGE_KEYS.WEIGHT_OVERRIDES, data.weightOverrides);
-};
-
-/**
- * Clear all SwolTracker data from storage
- */
-export const clearAllData = () => {
-  Object.values(STORAGE_KEYS).forEach(key => removeItem(key));
-};
-
-export { STORAGE_KEYS };

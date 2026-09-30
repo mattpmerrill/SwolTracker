@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export const VAPID_PUBLIC_KEY =
+const VAPID_PUBLIC_KEY =
   'BJ5OIQ2Y68gLAv5utqitxHjTWtydi7Gl0RF8bFn6q0R6u1sFp589ij9VUeXrh2dQU7UPysAk20VeKOq213rEdCM';
 
 function urlBase64ToUint8Array(base64String) {
@@ -12,7 +12,7 @@ function urlBase64ToUint8Array(base64String) {
   return output;
 }
 
-export function subscriptionMatchesKey(subscription, publicKey = VAPID_PUBLIC_KEY) {
+function subscriptionMatchesKey(subscription, publicKey = VAPID_PUBLIC_KEY) {
   const current = subscription?.options?.applicationServerKey;
   if (!current) return true; // browser doesn't expose it; assume fine
   const a = new Uint8Array(current);

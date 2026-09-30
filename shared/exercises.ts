@@ -5,7 +5,7 @@
  */
 
 /** Canonical name → list of accepted aliases (all lowercase) */
-export const EXERCISE_ALIASES: Record<string, string[]> = {
+const EXERCISE_ALIASES: Record<string, string[]> = {
   // ── Chest ──────────────────────────────────────────────────────────────
   "Barbell Bench Press": [
     "bench press", "bench", "flat bench", "bb bench", "barbell bench",
@@ -203,11 +203,6 @@ export function normalizeExerciseName(input: string): string {
     .split(/\s+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" ");
-}
-
-/** Returns the full alias list for a canonical name (for debugging/UI) */
-export function getAliases(canonical: string): string[] {
-  return EXERCISE_ALIASES[canonical] ?? [];
 }
 
 /** Returns all canonical exercise names */
