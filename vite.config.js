@@ -11,7 +11,7 @@ export default defineConfig({
         // re-fetch the (small, frequently-changing) app chunk.
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
-          data: ['@supabase/supabase-js', 'zod', 'zod-to-json-schema'],
+          data: ['@supabase/supabase-js', 'zod'],
         },
       },
     },
