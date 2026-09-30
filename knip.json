@@ -14,5 +14,5 @@
     "shared/**/*.ts",
     "src/**/*.css"
   ],
-  "ignoreDependencies": ["dotenv"]
+  "ignoreDependencies": ["dotenv", "zod-to-json-schema"]
 }

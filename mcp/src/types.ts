@@ -83,7 +83,9 @@ export interface WorkoutLog {
   completed_at: string;
 }
 
-/** Row from `workout_completions` table */
+/** Row from `workout_completions` table
+ * @public Kept to mirror the DB schema even though nothing imports it yet.
+ */
 export interface WorkoutCompletion {
   id: string;
   user_id: string;
