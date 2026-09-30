@@ -46,4 +46,11 @@ export default defineConfig([
       globals: globals.node,
     },
   },
+  {
+    // Vitest runs these in Node.
+    files: ['src/**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
 ])

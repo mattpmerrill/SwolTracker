@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle, FileText, ClipboardList } from 'lucide-react';
 import { db } from '../../lib/supabase';
 import PushSettings from '../PushSettings';
+import { parseCalendarDate } from '../../utils/date';
 import swoltrackerSkillGuide from '../../../SKILL.md?raw';
 
 /**
@@ -180,7 +181,7 @@ export default function SettingsModal({
         <div className="p-4 bg-zinc-800/50 rounded-xl">
           <h3 className="font-semibold mb-2">Program Started</h3>
           <p className="text-zinc-400 text-sm">
-            {new Date(programStartDate).toLocaleDateString('en-US', {
+            {parseCalendarDate(programStartDate).toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
