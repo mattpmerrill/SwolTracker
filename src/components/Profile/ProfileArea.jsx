@@ -416,55 +416,19 @@ const ProfileArea = ({
       <div className="space-y-6">
         {/* Program Start Date */}
         <div className="bg-zinc-800/50 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Program Start Date</p>
-              {editingField === 'program_start_date' ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    className="bg-zinc-700 px-3 py-2 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 [color-scheme:dark]"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => saveField('program_start_date')}
-                    className="p-2 bg-green-500/20 text-green-400 rounded-lg"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setEditingField(null)}
-                    className="p-2 bg-zinc-700 text-zinc-400 rounded-lg"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <p className="text-lg font-semibold text-white">
-                  {startDate
-                    ? startDate.toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })
-                    : 'Not set'}
-                </p>
-              )}
-            </div>
-            {editingField !== 'program_start_date' && (
-              <button
-                onClick={() => startEditing('program_start_date', programStartDate?.split('T')[0])}
-                className="text-xs text-orange-400"
-              >
-                Edit
-              </button>
-            )}
-          </div>
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Program Start Date</p>
+          <p className="text-lg font-semibold text-white">
+            {startDate
+              ? startDate.toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })
+              : 'Not set'}
+          </p>
           <p className="text-xs text-zinc-500 mt-1">
-            Changing this will recalculate your current week
+            Your program start date is set when you join and can't be changed.
           </p>
         </div>
 

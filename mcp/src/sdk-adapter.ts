@@ -369,16 +369,6 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
       execute: withKit(async (kit, p: { from_exercise: string; to_exercise: string; reason?: string; gym_id?: string }) =>
         kit.actions.substitute_equipment_globally(p.from_exercise, p.to_exercise, p.reason, p.gym_id)),
     }),
-    defineTool({
-      name: "shift_program",
-      description: "Shift the program start date by N weeks. Positive weeks_forward postpones (today ends up on an earlier week number); negative weeks_forward advances (today ends up on a later week number). Use when the user skipped a week due to illness/travel, or wants to redo the current block.",
-      category: "action",
-      scopes: ["write:program"],
-      schema: {
-        weeks_forward: z.number().int().min(-52).max(52).describe("Weeks to shift the start date. Positive = postpone, negative = advance. Bounded to ±52."),
-      },
-      execute: withKit(async (kit, p: { weeks_forward: number }) => kit.actions.shift_program(p.weeks_forward)),
-    }),
 
     // ── Context bundle ───────────────────────────────────────
     defineTool({
@@ -684,7 +674,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "update_profile",
-      description: "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses, or later to update preferences. All fields optional; provide whatever the user just told you. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
+      description: "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses, or later to update preferences. All fields optional; provide whatever the user just told you. The program start date cannot be changed after onboarding, so it is not accepted here. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
       category: "action",
       scopes: ["write:logs"],
       schema: {
@@ -696,13 +686,20 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
         workout_days: z.array(z.string()).min(1).optional().describe("Day names the user wants to train (e.g. ['Monday','Wednesday','Friday'])"),
         workout_duration: z.string().min(1).optional().describe("Preferred session length (e.g. '45 min', '1 hour')"),
         workout_location: z.string().min(1).optional().describe("Primary location (e.g. 'home', 'gym', 'outdoor')"),
-        program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Program start date in YYYY-MM-DD"),
+        // Declared only so the SDK's non-strict z.object does not silently strip it: any value fails validation
+        // with a message the agent can read.
+        program_start_date: z.unknown()
+          .refine((v) => v === undefined, {
+            message: "program_start_date can't be changed after onboarding. It is set once when onboarding completes.",
+          })
+          .optional()
+          .describe("Not accepted. The program start date is write-once (set by complete_onboarding)."),
       },
       execute: withKit(async (kit, p: any) => kit.onboarding.update_profile(p)),
     }),
     defineTool({
       name: "complete_onboarding",
-      description: "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment to the user's gym, and flips onboarding_completed to true. Throws invalid_args if any required field is still missing. Pass `equipment` on the final call if you haven't populated gym_equipment another way.",
+      description: "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment to the user's gym, and flips onboarding_completed to true. Throws invalid_args if any required field is still missing. `program_start_date` is write-once: it is only applied if the profile has none yet. Pass `equipment` on the final call if you haven't populated gym_equipment another way.",
       category: "action",
       scopes: ["write:logs"],
       schema: {

@@ -61,7 +61,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 
 ## Tools
 
-Forty tools across four categories. Call names match exactly.
+43 tools across three categories. Call names match exactly.
 
 ### Query (read-only state)
 
@@ -90,6 +90,7 @@ Forty tools across four categories. Call names match exactly.
 | `get_user_messages` | Unread messages the user left for the agent | — |
 | `get_conversation_history` | Full Coach Board conversation | — |
 | `get_onboarding_status` | Whether onboarding is done + which profile fields are missing | — |
+| `get_missed_days` | Days the user logged as intentionally missed, optionally for one week | — |
 
 ### Action (writes)
 
@@ -108,10 +109,9 @@ Forty tools across four categories. Call names match exactly.
 | `save_workout_program` | Save a single week's program | `week_number`, `program_data` |
 | `generate_workout_program` | Save a multi-week program | `start_week`, `week_count`, `program` |
 | `rebuild_week_for_constraints` | Rebuild one week in place via the server-side LLM to satisfy new constraints | `week`, `constraints` |
-| `shift_program` | Postpone or advance the program start date by N weeks | `weeks_forward` |
 | `substitute_equipment_globally` | Swap an exercise for an alternate across every week | `from_exercise`, `to_exercise` |
-| `update_profile` | Write any subset of profile fields (partial update) | — (any of the profile fields) |
-| `complete_onboarding` | Finalize onboarding: merges any passed fields, writes equipment, flips completed flag | — (any missing fields must be provided) |
+| `update_profile` | Write any subset of profile fields (partial update). The program start date cannot be changed. | — (any of the profile fields) |
+| `complete_onboarding` | Finalize onboarding: merges any passed fields, writes equipment, flips completed flag; sets the program start date only if none exists | — (any missing fields must be provided) |
 | `send_coach_message` | Post to the Coach Board | `content` |
 
 ### Meta
@@ -229,7 +229,7 @@ When the user hits a one-off constraint for a specific week ("traveling next wee
 ### Driving onboarding
 The agent can run the full onboarding interview:
 1. `get_onboarding_status` — on connect, to decide whether to start an interview. Returns `missing_fields` and `ready_to_complete`.
-2. Interview the user conversationally. As each answer comes in, call `update_profile({field: value})` — fields are: `display_name`, `gender`, `age`, `weight_lbs`, `fitness_goals[]`, `workout_days[]`, `workout_duration`, `workout_location`, `program_start_date` (YYYY-MM-DD).
+2. Interview the user conversationally. As each answer comes in, call `update_profile({field: value})` — fields are: `display_name`, `gender`, `age`, `weight_lbs`, `fitness_goals[]`, `workout_days[]`, `workout_duration`, `workout_location`. The program start date is set once when onboarding completes (you may pass `program_start_date` (YYYY-MM-DD) to `complete_onboarding` if none exists yet). It cannot be changed afterward, so never try to shift or re-date the program.
 3. When all required fields are set, call `complete_onboarding({equipment: [...]})`. Equipment must be passed if the gym has none yet. This flips the `onboarding_completed` flag and writes gym equipment.
 4. Optionally follow with `generate_workout_program` to save the first weeks of training.
 

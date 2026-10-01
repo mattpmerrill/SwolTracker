@@ -108,7 +108,7 @@ GitHub Actions, npm. `mobile/` (Expo) is paused and out of scope.
 | `src/utils/` | Pure helpers; `date.js` and `e1rm.js` re-export `shared/` |
 | `api/` | Vercel functions: `llm.js`, `mcp.js`, `mcp/*`, `push.js`, `cron/reminders.js`; `_*.js` are helpers |
 | `mcp/src/tools/` | MCP tool bodies by family: queries, actions, context, generation, coaching, natural-language, onboarding |
-| `mcp/src/sdk-adapter.ts` | Registers the 44 tools with names, schemas, categories and scopes |
+| `mcp/src/sdk-adapter.ts` | Registers the 43 tools with names, schemas, categories and scopes |
 | `mcp/src/__tests__/` | MCP contract, scope, IDOR, OpenAPI and skill tests |
 | `shared/` | Pure logic used by web and MCP: week math, exercises, estimated 1RM |
 | `vendor/bot-native-sdk/` | Vendored SDK build; see the rule above |

@@ -1,4 +1,5 @@
 import { db } from '../lib/supabase';
+import { findOrCreatePersonalGym } from '../lib/ensureGym';
 import { generateWithLlm } from '../lib/llm';
 import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 
@@ -9,7 +10,7 @@ import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 export function useOnboardingActions({ authUser, gymId, setGymId }) {
   const ensureOnboardingGym = async () => {
     if (gymId) return gymId;
-    const gym = await db.createGym('Personal Gym', authUser.id);
+    const gym = await findOrCreatePersonalGym(db, authUser.id);
     if (!gym?.id) {
       await logError(db, {
         category: ErrorCategory.DATABASE,

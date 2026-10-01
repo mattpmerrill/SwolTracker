@@ -6,7 +6,23 @@ Where the project stands and how to pick it up. Update this at the end of each w
 on every push. The Test and Knip workflows passed on the last `main` push (after merged PRs #3 to
 #7: Knip added and dead code removed, a lint fix, a Vite chunking cleanup, and a fix for the web
 app showing one program week ahead west of UTC, with a Denver-time regression test). Locally, `npm test`
-runs 304 tests in 52 files and `npm run lint` reports 0 errors and 17 warnings.
+runs 316 tests in 54 files and `npm run lint` reports 0 errors and 17 warnings (count after the
+Phase 0.3 hotfix below, which is on branch `fix/phase0-db-hardening` and not yet merged).
+
+**Phase 0.3 hotfix (2026-10-01, on `fix/phase0-db-hardening`, uncommitted at the time of writing).**
+Done while Snappy Coach is built, so the old app cannot undo a data repair:
+- The `shift_program` MCP tool is removed; the server now has 43 tools in three categories.
+- `profiles.program_start_date` is write-once in app code. MCP `update_profile` rejects it with a
+  clear message (declared in the tool schema as always-invalid, because the SDK strips unknown
+  keys), MCP `complete_onboarding` keeps an existing date, and the web Profile screen shows it
+  read-only. `scripts/demo-seed.mjs` is the one sanctioned re-dating path (demo user only).
+- Every "first gym" lookup is ordered by `joined_at, gym_id`. Onboarding reuses an existing gym
+  (preferring one the user owns) instead of creating a duplicate personal gym.
+- `migrations/040-start-date-write-once.sql` (the `complete_onboarding` RPC keeps an existing
+  start date, and two functions pick a gym deterministically) is written but NOT yet applied to
+  production. `migrations/039` was applied by hand on 2026-10-01.
+- Not done: a database-level guard (trigger or column privilege) for the start date. RLS still lets
+  a signed-in user update their own `program_start_date` directly.
 
 The code is feature-complete for its current scope and is resting while a refactor is planned as a
 separate project. This docs pass (README, AGENTS.md, architecture, ADRs, this file, screenshots)
@@ -25,7 +41,7 @@ was written on the branch `docs/readme-and-agents` and changes no app code.
   week-end review card that pre-fills the next week's generation from skips, notes and overload.
 - Coach Board with Realtime updates, weekly reviews and program updates from the user's agent,
   post-workout notes, and an agent activity log in Settings.
-- The MCP server: 44 tools, four scopes, `SKILL.md`, a context bundle endpoint and a public OpenAPI
+- The MCP server: 43 tools, four scopes, `SKILL.md`, a context bundle endpoint and a public OpenAPI
   document. See the README section "Bring your own AI agent".
 - Offline set logging through a write queue, an installable PWA, and opt-in push reminders sent by a
   daily cron.
@@ -33,7 +49,7 @@ was written on the branch `docs/readme-and-agents` and changes no app code.
 - An admin panel: usage stats, LLM provider selection, prompt templates, error logs.
 - Env-gated Sentry on web and functions (inert until a DSN is set).
 
-Migrations `001` to `038` are in `migrations/`. They are applied to production by hand, and the
+Migrations `001` to `040` are in `migrations/` (`040` is written but not yet applied). They are applied to production by hand, and the
 Supabase CLI history is incomplete, so check the live database rather than assuming a given
 migration is applied.
 
@@ -106,7 +122,7 @@ it is where the code falls short of AGENTS.md.
 - `shared/` is re-exported through thin shims (`mcp/src/week-calc.ts`,
   `mcp/src/exercise-normalizer.ts`, `src/utils/date.js`, `src/utils/e1rm.js`). They work, but the
   names differ from the originals, so the indirection is easy to trip over.
-- `mcp/src/register-tools.ts` registers the same 44 tools a second time for the local stdio server,
+- `mcp/src/register-tools.ts` registers the same 43 tools a second time for the local stdio server,
   without scopes. The production path is `sdk-adapter.ts` only.
 
 **Data access and validation**
@@ -154,8 +170,7 @@ it is where the code falls short of AGENTS.md.
 - Reminders use one fixed time zone (`America/Denver` in `api/_reminders.js`) and run once a day,
   and the push preference switches exist in the API and database but have no UI. The VAPID public
   key is duplicated in `src/lib/push.js` and `api/_push.js`.
-- `SKILL.md` says "Forty tools" and does not list `get_missed_days`; 44 tools are registered.
-  The root `app.json` names `mcp/dist/server.js` as the entrypoint, but the build writes
+- The root `app.json` names `mcp/dist/server.js` as the entrypoint, but the build writes
   `mcp/dist/mcp/src/server.js`.
 - The `api/` functions import compiled output from `mcp/dist/`, so a fresh clone needs
   `cd mcp && npm run build` before they can run (the Vercel build does this first).

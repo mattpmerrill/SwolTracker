@@ -669,62 +669,6 @@ export function createActionTools(
     };
   }
 
-  async function shift_program(weeksForward: number): Promise<ToolResult> {
-    if (!Number.isInteger(weeksForward)) {
-      throw AppError.invalidArgs("weeks_forward must be an integer.");
-    }
-    if (weeksForward === 0) {
-      return {
-        success: true,
-        message: "No shift applied (weeks_forward = 0).",
-        data: { weeks_forward: 0 },
-      };
-    }
-    if (weeksForward < -52 || weeksForward > 52) {
-      throw AppError.invalidArgs("weeks_forward must be between -52 and 52.");
-    }
-
-    const { data: profile, error: readErr } = await supabase
-      .from("profiles")
-      .select("program_start_date")
-      .eq("id", userId)
-      .single();
-
-    if (readErr) {
-      return { success: false, message: `Failed to read profile: ${readErr.message}`, data: {} };
-    }
-
-    const anchor = profile?.program_start_date
-      ? new Date(profile.program_start_date + "T00:00:00.000Z")
-      : new Date();
-    const shifted = new Date(anchor.getTime() + weeksForward * 7 * 24 * 60 * 60 * 1000);
-    const newDate = shifted.toISOString().slice(0, 10);
-
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update({ program_start_date: newDate })
-      .eq("id", userId);
-
-    if (updateErr) {
-      return { success: false, message: `Failed to shift program: ${updateErr.message}`, data: {} };
-    }
-
-    const nextCurrentWeek = getCurrentWeek(newDate);
-    const direction = weeksForward > 0 ? "forward" : "back";
-    const magnitude = Math.abs(weeksForward);
-
-    return {
-      success: true,
-      message: `Program shifted ${direction} ${magnitude} week${magnitude === 1 ? "" : "s"}. New start date: ${newDate}. Today is now Week ${nextCurrentWeek}.`,
-      data: {
-        weeks_forward: weeksForward,
-        previous_start_date: profile?.program_start_date ?? null,
-        new_start_date: newDate,
-        current_week: nextCurrentWeek,
-      },
-    };
-  }
-
   async function get_pending_events(limit: number = 10): Promise<ToolResult> {
     const { data, error } = await supabase
       .from("app_events")
@@ -1174,7 +1118,6 @@ export function createActionTools(
     update_max,
     delete_max,
     save_workout_program,
-    shift_program,
     substitute_equipment_globally,
     get_pending_events,
     generate_weekly_summary,

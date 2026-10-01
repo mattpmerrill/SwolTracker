@@ -1,18 +1,14 @@
 import { z } from 'zod'
 
-const programStartDateSchema = z.string().refine(
-  (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isNaN(Date.parse(value)),
-  { message: 'program_start_date must be a calendar date (YYYY-MM-DD) or ISO datetime' },
-)
-
 // Profile schemas — must accept every field ProfileArea writes.
+// program_start_date is deliberately absent: it is write-once (set at onboarding), and this
+// schema is strict, so a profile update that includes it fails validation.
 export const profileUpdateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   display_name: z.string().min(1).max(100).optional(),
   avatar: z.string().max(10).optional().nullable(),
   avatar_url: z.string().url().max(500).optional().nullable(),
   group_name: z.string().max(100).optional(),
-  program_start_date: programStartDateSchema.optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
   age: z.number().int().min(13).max(99).optional(),
   weight_lbs: z.number().min(50).max(500).optional(),

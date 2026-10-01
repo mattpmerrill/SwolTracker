@@ -12,6 +12,10 @@ export interface UpdateProfileParams {
   workout_days?: string[];
   workout_duration?: string;
   workout_location?: string;
+  /**
+   * Write-once. Only complete_onboarding may set it, and only while the profile
+   * has none. update_profile rejects it (the MCP schema declares it as always-invalid so it is not stripped).
+   */
   program_start_date?: string;
 }
 
@@ -111,6 +115,12 @@ export function createOnboardingTools(
   }
 
   async function update_profile(params: UpdateProfileParams): Promise<ToolResult> {
+    // Re-dating the program silently renumbers every logged week, so the start date is write-once.
+    if (params.program_start_date !== undefined) {
+      throw AppError.invalidArgs(
+        "program_start_date can't be changed after onboarding. It is set once when onboarding completes."
+      );
+    }
     validatePartial(params);
 
     const updates: Record<string, unknown> = {};
@@ -122,7 +132,6 @@ export function createOnboardingTools(
     if (params.workout_days !== undefined) updates.workout_days = params.workout_days;
     if (params.workout_duration !== undefined) updates.workout_duration = params.workout_duration.trim();
     if (params.workout_location !== undefined) updates.workout_location = params.workout_location.trim();
-    if (params.program_start_date !== undefined) updates.program_start_date = params.program_start_date;
 
     if (Object.keys(updates).length === 0) {
       throw AppError.invalidArgs("Provide at least one field to update");
@@ -181,9 +190,10 @@ export function createOnboardingTools(
       workout_days: params.workout_days ?? current?.workout_days,
       workout_duration: params.workout_duration ?? current?.workout_duration,
       workout_location: params.workout_location ?? current?.workout_location,
+      // Write-once: an existing start date always wins over anything the caller passes.
       program_start_date:
-        params.program_start_date ??
         current?.program_start_date ??
+        params.program_start_date ??
         new Date().toISOString().split("T")[0],
     };
 

@@ -118,7 +118,6 @@ export function ProgramProvider({ children, bundle }) {
     workoutProgram,
     setWorkoutProgram,
     programStartDate,
-    setProgramStartDate,
     currentWeek,
     setCurrentWeek,
     currentDay,

@@ -37,14 +37,10 @@ describe('profileUpdateSchema', () => {
     }
   });
 
-  it('accepts YYYY-MM-DD program start dates from the date input', () => {
-    const result = validate(profileUpdateSchema, { program_start_date: '2026-03-30' });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts ISO datetimes for program_start_date', () => {
-    const result = validate(profileUpdateSchema, { program_start_date: '2026-03-30T00:00:00.000Z' });
-    expect(result.success).toBe(true);
+  it('rejects program_start_date: the start date is write-once and not editable from the web', () => {
+    expect(validate(profileUpdateSchema, { program_start_date: '2026-03-30' }).success).toBe(false);
+    expect(validate(profileUpdateSchema, { program_start_date: '2026-03-30T00:00:00.000Z' }).success).toBe(false);
+    expect(validate(profileUpdateSchema, { display_name: 'Matt', program_start_date: '2026-03-30' }).success).toBe(false);
   });
 
   it('rejects unknown keys (strict) and out-of-range age', () => {

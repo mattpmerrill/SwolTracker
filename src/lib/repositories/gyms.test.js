@@ -14,6 +14,18 @@ describe('gymsRepo', () => {
     expect(gyms).toEqual([{ id: 'g1', name: 'Main', role: 'leader' }]);
   });
 
+  it('getMyGyms orders by joined_at then gym_id so "first gym" is deterministic', async () => {
+    const sb = createMockSupabase();
+    sb.respond('gym_members', 'list', { data: [], error: null });
+    const repo = createGymsRepo(sb);
+    await repo.getMyGyms('u1');
+    const orders = sb.calls.filter(([table, op]) => table === 'gym_members' && op === 'order');
+    expect(orders.map(([, , args]) => args)).toEqual([
+      ['joined_at', { ascending: true }],
+      ['gym_id', { ascending: true }],
+    ]);
+  });
+
   it('createGym returns id from rpc', async () => {
     const sb = createMockSupabase();
     sb.respond('rpc.create_user_gym', { data: 'gym-123', error: null });

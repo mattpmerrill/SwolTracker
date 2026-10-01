@@ -2,6 +2,8 @@
  * Gyms, memberships, and equipment repository
  */
 export function createGymsRepo(supabase) {
+  // Callers treat the first gym as "my gym", so the order must be deterministic:
+  // oldest membership first, gym_id as the tie-breaker (equal joined_at is common).
   const getMyGyms = async (userId) => {
     if (!supabase) return []
     const { data } = await supabase
@@ -17,6 +19,8 @@ export function createGymsRepo(supabase) {
         )
       `)
       .eq('user_id', userId)
+      .order('joined_at', { ascending: true })
+      .order('gym_id', { ascending: true })
     return data?.map(m => ({ ...m.gyms, role: m.role })) || []
   }
 

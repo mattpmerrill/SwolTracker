@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { db } from '../lib/supabase';
+import { findOrCreatePersonalGym } from '../lib/ensureGym';
 import { logError, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 import { computeMissingFields, isOnboardingDone } from '../components/AgentOnboarding/status';
 
@@ -28,7 +29,7 @@ export function useAgentOnboarding({ user, onComplete, supabase }) {
 
   const ensureGym = async () => {
     if (gymId) return gymId;
-    const gym = await db.createGym('Personal Gym', user.id);
+    const gym = await findOrCreatePersonalGym(db, user.id);
     if (!gym?.id) throw new Error('Failed to create gym' + (gym?.error?.message ? ': ' + gym.error.message : ''));
     setGymId(gym.id);
     return gym.id;

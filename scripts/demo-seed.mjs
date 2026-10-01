@@ -247,7 +247,8 @@ async function main() {
   try {
     // 1. Gym
     let { data: memberships, error: gymErr } = await supabase
-      .from('gym_members').select('gym_id').eq('user_id', userId);
+      .from('gym_members').select('gym_id').eq('user_id', userId)
+      .order('joined_at', { ascending: true }).order('gym_id', { ascending: true });
     if (gymErr) throw new Error(`gym lookup failed: ${gymErr.message}`);
     if (!memberships?.length) {
       const { data: gymId, error } = await supabase.rpc('create_user_gym', { user_id: userId, gym_name: 'Home Gym' });
@@ -290,7 +291,13 @@ async function main() {
       });
       console.log('Completed onboarding');
     } else if (profile.program_start_date !== startDate) {
-      await mcp('update_profile', { program_start_date: startDate });
+      // The one sanctioned re-dating path, for the demo account only. The start date is write-once for
+      // users and agents (update_profile rejects it), so this script writes it directly as the demo user.
+      // If a DB-level write-once guard is added later, this branch must switch to a service-role client.
+      const { data: moved, error: dateErr } = await supabase
+        .from('profiles').update({ program_start_date: startDate }).eq('id', userId)
+        .select('program_start_date').single();
+      if (dateErr || !moved) throw new Error(`moving program start date failed: ${dateErr?.message ?? 'no row updated'}`);
       console.log(`Moved program start date to ${startDate}`);
     }
 

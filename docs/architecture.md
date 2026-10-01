@@ -11,10 +11,10 @@ falls short of the rules in [AGENTS.md](../AGENTS.md), [status.md](status.md) li
 | ---- | ---- | ---------- |
 | Web app | `src/` | React 18 + Vite single-page app in JavaScript, Tailwind v4, installable as a PWA (`public/sw.js`, `public/manifest.webmanifest`). Talks to Supabase with the public anon key and the signed-in user's JWT, so RLS applies. |
 | Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
-| MCP package | `mcp/` | TypeScript package with the agent tool kit: 44 tools in `mcp/src/tools/*`, wrapped as SDK tools in `mcp/src/sdk-adapter.ts`, plus context modules. Compiled to `mcp/dist/`, which the functions import. Also has a local stdio server (`mcp/src/server.ts`) for development. |
+| MCP package | `mcp/` | TypeScript package with the agent tool kit: 43 tools in `mcp/src/tools/*`, wrapped as SDK tools in `mcp/src/sdk-adapter.ts`, plus context modules. Compiled to `mcp/dist/`, which the functions import. Also has a local stdio server (`mcp/src/server.ts`) for development. |
 | Shared core | `shared/` | Pure TypeScript with no I/O: week math, exercise aliases and name normalizer, estimated 1RM. Imported by the web app (through `src/utils/*` re-exports) and by `mcp/` (through thin re-export shims). `mcp`'s `tsc` compiles it to `mcp/dist/shared/`. |
 | Vendored SDK | `vendor/bot-native-sdk/` | Built `dist/` of `@bot-native/sdk`, committed on purpose. It owns MCP protocol dispatch, scope checks, the skill loader, the OpenAPI export and the context-bundle builder. |
-| Database | `migrations/` | Numbered SQL files, `001` to `038`. This folder is the source of truth for schema intent. `supabase/migrations/` is a stale 7-file CLI subset; do not `supabase db push` from it. The root `*.sql` files are historical dumps. |
+| Database | `migrations/` | Numbered SQL files, `001` to `040`. This folder is the source of truth for schema intent. `supabase/migrations/` is a stale 7-file CLI subset; do not `supabase db push` from it. The root `*.sql` files are historical dumps. |
 
 `mobile/` (an Expo iOS app) is paused and out of scope. See [ADR-004](decisions/ADR-004-web-first-ios-paused.md).
 
@@ -128,7 +128,7 @@ check) or `resolveWritableGymId` (membership plus an `owner` or `leader` role in
 `scope-enforcement`, contract tests per tool family).
 
 Scopes are `read`, `write:logs`, `write:program` and `coach`, declared per tool in
-`sdk-adapter.ts`. Of the 44 tools, 24 need `read`, 12 need `write:logs`, 5 need `write:program`,
+`sdk-adapter.ts`. Of the 43 tools, 24 need `read`, 12 need `write:logs`, 4 need `write:program`,
 1 needs `coach` (`send_coach_message`), and 2 meta tools (`normalize_exercise_name`,
 `list_canonical_exercises`) need none. Keys are created by the `create_api_key` RPC: the raw key
 is shown once, only its hash is stored, a user can hold at most 5 active keys, and new keys carry
