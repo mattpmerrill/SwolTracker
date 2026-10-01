@@ -38,7 +38,7 @@ export default async function handler(req, res) {
 
       const [{ data: profile }, { data: membership }] = await Promise.all([
         supabase.from('profiles').select('program_start_date').eq('id', userId).single(),
-        supabase.from('gym_members').select('gym_id').eq('user_id', userId).order('joined_at', { ascending: true }).limit(1),
+        supabase.from('gym_members').select('gym_id').eq('user_id', userId).order('joined_at', { ascending: true }).order('gym_id', { ascending: true }).limit(1),
       ]);
       const gymId = membership?.[0]?.gym_id;
       if (!gymId || !profile?.program_start_date) {

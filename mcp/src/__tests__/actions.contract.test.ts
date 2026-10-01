@@ -41,41 +41,6 @@ describe('MCP actions contract', () => {
     expect(result.message).toContain('constraint violation');
   });
 
-  it('shift_program updates profile.program_start_date by N weeks and reports new week', async () => {
-    const sb = createMcpMockSupabase();
-    sb.respond('profiles.single', {
-      data: { program_start_date: '2026-01-05' },
-      error: null,
-    });
-    sb.respond('profiles.list', { data: null, error: null });
-    const tools = createActionTools(sb, 'u1', stubEvents, stubQueries);
-    const result = await tools.shift_program(2);
-    expect(result.success).toBe(true);
-    expect((result.data as any).previous_start_date).toBe('2026-01-05');
-    expect((result.data as any).new_start_date).toBe('2026-01-19');
-    expect((result.data as any).weeks_forward).toBe(2);
-    expect(result.message).toContain('forward 2 weeks');
-  });
-
-  it('shift_program with 0 weeks is a no-op', async () => {
-    const sb = createMcpMockSupabase();
-    const tools = createActionTools(sb, 'u1', stubEvents, stubQueries);
-    const result = await tools.shift_program(0);
-    expect(result.success).toBe(true);
-    expect((result.data as any).weeks_forward).toBe(0);
-    // Should not touch the DB at all
-    const touchedProfiles = sb.calls.some(([table]) => table === 'profiles');
-    expect(touchedProfiles).toBe(false);
-  });
-
-  it('shift_program rejects non-integer or out-of-range input', async () => {
-    const sb = createMcpMockSupabase();
-    const tools = createActionTools(sb, 'u1', stubEvents, stubQueries);
-    await expect(tools.shift_program(1.5)).rejects.toThrow(/integer/);
-    await expect(tools.shift_program(53)).rejects.toThrow(/between -52 and 52/);
-    await expect(tools.shift_program(-53)).rejects.toThrow(/between -52 and 52/);
-  });
-
   it('substitute_equipment_globally replaces exercise across all weeks and emits program.saved', async () => {
     const sb = createMcpMockSupabase();
     const events = { emit: vi.fn(async () => undefined) } as any;
@@ -165,20 +130,6 @@ describe('MCP actions contract', () => {
     await expect(
       tools.substitute_equipment_globally('bench press', 'Barbell Bench Press')
     ).rejects.toThrow(/same canonical exercise/);
-  });
-
-  it('shift_program backward moves the anchor earlier', async () => {
-    const sb = createMcpMockSupabase();
-    sb.respond('profiles.single', {
-      data: { program_start_date: '2026-04-20' },
-      error: null,
-    });
-    sb.respond('profiles.list', { data: null, error: null });
-    const tools = createActionTools(sb, 'u1', stubEvents, stubQueries);
-    const result = await tools.shift_program(-1);
-    expect(result.success).toBe(true);
-    expect((result.data as any).new_start_date).toBe('2026-04-13');
-    expect(result.message).toContain('back 1 week');
   });
 
   it('save_workout_program forbids a gym member from overwriting the shared program', async () => {

@@ -180,4 +180,23 @@ describe('MCP queries contract', () => {
       return e.code === 'invalid_args';
     });
   });
+
+  it('getMyGyms orders by joined_at then gym_id so "first gym" is deterministic', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [
+        { gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'First' } },
+        { gym_id: 'g2', role: 'member', gyms: { id: 'g2', name: 'Second' } },
+      ],
+      error: null,
+    });
+    const tools = createQueryTools(sb, 'u1');
+    const gyms = await tools.getMyGyms();
+    expect(gyms.map((g: any) => g.id)).toEqual(['g1', 'g2']);
+    const orders = sb.calls.filter(([table, op]) => table === 'gym_members' && op === 'order');
+    expect(orders.map(([, , args]) => args)).toEqual([
+      ['joined_at', { ascending: true }],
+      ['gym_id', { ascending: true }],
+    ]);
+  });
 });

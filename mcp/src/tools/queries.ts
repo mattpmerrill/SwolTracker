@@ -19,13 +19,16 @@ import { getCurrentWeek, getTodayName } from "../week-calc.js";
 export function createQueryTools(supabase: SupabaseClient, userId: string) {
   // ── Helpers ──────────────────────────────────────────────
 
+  // "First gym" must be deterministic: oldest membership first, gym_id as the tie-breaker.
   async function getMyGyms(): Promise<Gym[]> {
     const { data } = await supabase
       .from("gym_members")
       .select(
         `gym_id, role, gyms (id, name, invite_code, created_by)`
       )
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("joined_at", { ascending: true })
+      .order("gym_id", { ascending: true });
 
     return (
       data?.map((m: any) => ({ ...m.gyms, role: m.role })) ?? []

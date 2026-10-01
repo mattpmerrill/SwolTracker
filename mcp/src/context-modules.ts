@@ -20,6 +20,8 @@ async function resolveGymId(deps: ContextDeps): Promise<string | null> {
     .from("gym_members")
     .select("gym_id")
     .eq("user_id", deps.userId)
+    .order("joined_at", { ascending: true })
+    .order("gym_id", { ascending: true })
     .limit(1);
   return data?.[0]?.gym_id ?? null;
 }

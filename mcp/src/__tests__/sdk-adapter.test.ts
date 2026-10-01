@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isAppError } from '@bot-native/sdk';
+import { z } from 'zod';
 import { inferLegacyErrorCode, legacyErrorEnvelope, buildApp } from '../sdk-adapter.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
 
@@ -86,5 +87,36 @@ describe('buildApp end-to-end envelope shape', () => {
     );
     expect(result.ok).toBe(true);
     expect(result.error).toBeUndefined();
+  });
+});
+
+describe('tool list: program start date is write-once', () => {
+  const app = buildApp(createMcpMockSupabase() as any);
+
+  it('does not register shift_program', () => {
+    expect(app.tools.map((t) => t.name)).not.toContain('shift_program');
+  });
+
+  it('registers 43 tools with unique names', () => {
+    const names = app.tools.map((t) => t.name);
+    expect(names).toHaveLength(43);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('update_profile declares program_start_date as always-invalid (so the SDK cannot strip it); complete_onboarding accepts it', () => {
+    const updateProfile = app.tools.find((t) => t.name === 'update_profile')!;
+    const completeOnboarding = app.tools.find((t) => t.name === 'complete_onboarding')!;
+    const updateSchema = z.object(updateProfile.schema);
+    expect(Object.keys(updateProfile.schema)).toContain('program_start_date');
+    expect(updateSchema.safeParse({ age: 36 }).success).toBe(true);
+    for (const input of [
+      { program_start_date: '2026-05-04' },
+      { age: 36, program_start_date: '2026-05-04' },
+    ]) {
+      const parsed = updateSchema.safeParse(input);
+      expect(parsed.success).toBe(false);
+      expect(JSON.stringify(parsed.error?.issues)).toContain("program_start_date can't be changed after onboarding");
+    }
+    expect(z.object(completeOnboarding.schema).safeParse({ program_start_date: '2026-05-04' }).success).toBe(true);
   });
 });

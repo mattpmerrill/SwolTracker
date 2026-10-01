@@ -105,10 +105,21 @@ describe('MCP onboarding contract', () => {
       await expect(tools.update_profile({ workout_days: [] })).rejects.toThrow(/workout_days/);
     });
 
-    it('rejects malformed program_start_date', async () => {
+    it('rejects program_start_date: the start date is write-once and never applied here', async () => {
       const sb = createMcpMockSupabase();
+      sb.respond('profiles.single', { data: fullProfile, error: null });
       const tools = createOnboardingTools(sb, 'u1');
-      await expect(tools.update_profile({ program_start_date: 'tomorrow' })).rejects.toThrow(/YYYY-MM-DD/);
+      await expect(tools.update_profile({ program_start_date: '2026-05-04' })).rejects.toThrow(
+        /program_start_date can't be changed/
+      );
+      await expect(tools.update_profile({ program_start_date: 'tomorrow' })).rejects.toThrow(
+        /program_start_date can't be changed/
+      );
+      // Even alongside valid fields, nothing is written.
+      await expect(
+        tools.update_profile({ age: 36, program_start_date: '2026-05-04' })
+      ).rejects.toThrow(/program_start_date can't be changed/);
+      expect(sb.calls.some(([, op]) => op === 'update')).toBe(false);
     });
 
     it('rejects a call with no fields at all', async () => {
@@ -199,6 +210,33 @@ describe('MCP onboarding contract', () => {
 
       const rpcCall = sb.calls.find(([t, op]) => t === 'rpc' && op === 'complete_onboarding');
       expect(rpcCall?.[2]?.[0].p_program_start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('does not overwrite an existing program_start_date, even if the caller passes one', async () => {
+      const sb = createMcpMockSupabase();
+      sb.respond('profiles.single', { data: fullProfile, error: null });
+      sb.respond('rpc.complete_onboarding', { data: true, error: null });
+
+      const tools = createOnboardingTools(sb, 'u1');
+      await tools.complete_onboarding({ equipment: ['Barbell'], program_start_date: '2026-06-01' });
+
+      const rpcCall = sb.calls.find(([t, op]) => t === 'rpc' && op === 'complete_onboarding');
+      expect(rpcCall?.[2]?.[0].p_program_start_date).toBe('2026-04-21');
+    });
+
+    it('sets program_start_date from the caller only when the profile has none', async () => {
+      const sb = createMcpMockSupabase();
+      sb.respond('profiles.single', {
+        data: { ...fullProfile, program_start_date: null },
+        error: null,
+      });
+      sb.respond('rpc.complete_onboarding', { data: true, error: null });
+
+      const tools = createOnboardingTools(sb, 'u1');
+      await tools.complete_onboarding({ equipment: ['Barbell'], program_start_date: '2026-06-01' });
+
+      const rpcCall = sb.calls.find(([t, op]) => t === 'rpc' && op === 'complete_onboarding');
+      expect(rpcCall?.[2]?.[0].p_program_start_date).toBe('2026-06-01');
     });
 
     it('rejects invalid equipment array', async () => {

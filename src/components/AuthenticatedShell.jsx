@@ -47,7 +47,6 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     workoutProgram,
     setWorkoutProgram,
     programStartDate,
-    setProgramStartDate,
     currentWeek,
     setCurrentWeek,
     currentDay,
@@ -204,7 +203,6 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     authUser,
     currentUser,
     setProfiles,
-    setProgramStartDate,
     toast,
   });
 

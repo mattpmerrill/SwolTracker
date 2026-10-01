@@ -122,6 +122,20 @@ describe('context modules', () => {
     expect(summary).toMatch(/Week \d+/);
   });
 
+  it('resolves the gym with a deterministic order (joined_at, then gym_id) before limit(1)', async () => {
+    const sb = createMcpMockSupabase();
+    seedHappyPath(sb);
+    const mod = createContextModules().find((m) => m.key === 'current_program')!;
+    await mod.load({ supabase: sb as any, userId: 'u1' });
+    const gymCalls = sb.calls
+      .filter(([table]) => table === 'gym_members')
+      .map(([, op, args]) => [op, ...args]);
+    expect(gymCalls).toContainEqual(['order', 'joined_at', { ascending: true }]);
+    expect(gymCalls).toContainEqual(['order', 'gym_id', { ascending: true }]);
+    const ops = gymCalls.map(([op]) => op);
+    expect(ops.lastIndexOf('order')).toBeLessThan(ops.indexOf('limit'));
+  });
+
   it('maxes summary includes top lifts with weights', async () => {
     const sb = createMcpMockSupabase();
     seedHappyPath(sb);

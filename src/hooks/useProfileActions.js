@@ -3,10 +3,9 @@ import { reportWriteFailure, ErrorCategory } from '../lib/errorService';
 import { validate, profileUpdateSchema } from '../lib/validation';
 
 /**
- * Profile-update + avatar-upload side-effects. Mutates setProfiles and
- * bubbles program_start_date changes to the caller when present.
+ * Profile-update + avatar-upload side-effects. Mutates setProfiles.
  */
-export function useProfileActions({ authUser, currentUser, setProfiles, setProgramStartDate, toast }) {
+export function useProfileActions({ authUser, currentUser, setProfiles, toast }) {
   const handleUpdateProfile = async (updates) => {
     if (!authUser) return false;
     const { success, data: validUpdates, error } = validate(profileUpdateSchema, updates);
@@ -14,7 +13,6 @@ export function useProfileActions({ authUser, currentUser, setProfiles, setProgr
     const updated = await db.updateProfile(authUser.id, validUpdates);
     if (updated) {
       setProfiles((prev) => ({ ...prev, [currentUser]: { ...prev[currentUser], ...updated } }));
-      if (validUpdates.program_start_date) setProgramStartDate(validUpdates.program_start_date);
       toast.success?.('Profile updated');
       return true;
     }

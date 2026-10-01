@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildApp } from '../sdk-adapter.js';
+import { createMcpMockSupabase } from './mockSupabase.js';
 
 // Vitest projects have their own cwd — compute SKILL.md path relative to this file.
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -101,5 +103,17 @@ describe('SKILL.md', () => {
     expect(body).toMatch(/### Query/);
     expect(body).toMatch(/### Action/);
     expect(body).toMatch(/### Meta/);
+  });
+
+  it('lists exactly the registered tools, and states the real count', () => {
+    const { body } = parseFrontmatter(readSkill());
+    const toolsSection = body.slice(body.indexOf('## Tools'), body.indexOf('## Events'));
+    const documented = [...toolsSection.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]).sort();
+    const registered = buildApp(createMcpMockSupabase() as any)
+      .tools.map((t) => t.name)
+      .sort();
+    expect(documented).toEqual(registered);
+    expect(documented).not.toContain('shift_program');
+    expect(toolsSection).toContain(`${registered.length} tools across three categories`);
   });
 });

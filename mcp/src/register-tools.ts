@@ -287,18 +287,6 @@ export function registerTools(
     }
   );
 
-  server.tool(
-    "shift_program",
-    "Shift the program start date by N weeks. Positive weeks_forward postpones (today ends up on an earlier week number); negative weeks_forward advances (today ends up on a later week number). Use when the user skipped a week due to illness/travel, or wants to redo the current block.",
-    {
-      weeks_forward: z.number().int().min(-52).max(52).describe("Weeks to shift the start date. Positive = postpone, negative = advance. Bounded to ±52."),
-    },
-    async ({ weeks_forward }) => {
-      const result = await actions.shift_program(weeks_forward);
-      return { content: [{ type: "text", text: result.message }] };
-    }
-  );
-
   // ── Context bundle ───────────────────────────────────────
 
   server.tool(
@@ -647,7 +635,7 @@ export function registerTools(
 
   server.tool(
     "update_profile",
-    "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
+    "Write any subset of profile fields. Use during onboarding to save answers as the conversation progresses. The program start date cannot be changed after onboarding, so it is not accepted here. Does NOT mark onboarding complete — call complete_onboarding when all required fields are set.",
     {
       display_name: z.string().min(1).max(100).optional(),
       gender: z.string().min(1).max(50).optional(),
@@ -657,7 +645,13 @@ export function registerTools(
       workout_days: z.array(z.string()).min(1).optional(),
       workout_duration: z.string().min(1).optional(),
       workout_location: z.string().min(1).optional(),
-      program_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      // Declared only so the non-strict z.object does not silently strip it: any value fails validation.
+      program_start_date: z.unknown()
+        .refine((v) => v === undefined, {
+          message: "program_start_date can't be changed after onboarding. It is set once when onboarding completes.",
+        })
+        .optional()
+        .describe("Not accepted. The program start date is write-once (set by complete_onboarding)."),
     },
     async (params) => {
       const result = await onboarding.update_profile(params);
@@ -667,7 +661,7 @@ export function registerTools(
 
   server.tool(
     "complete_onboarding",
-    "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment, and flips onboarding_completed. Throws invalid_args if any required field is still missing.",
+    "Finalize onboarding: merges any fields passed here with what's already on the profile, writes equipment, and flips onboarding_completed. program_start_date is write-once: it is only applied if the profile has none yet. Throws invalid_args if any required field is still missing.",
     {
       display_name: z.string().min(1).max(100).optional(),
       gender: z.string().min(1).max(50).optional(),

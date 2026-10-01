@@ -57,7 +57,7 @@ be the coach. The agent talks to a Model Context Protocol server built into the 
   api/mcp.js   hash the key, find the user, check scopes,
                apply rate limits, write an audit row
         v
-  @bot-native/sdk   dispatches to 44 tools in mcp/src/tools
+  @bot-native/sdk   dispatches to 43 tools in mcp/src/tools
         v
   Supabase (service role, every query scoped to your user id)
 ```
@@ -67,9 +67,9 @@ be the coach. The agent talks to a Model Context Protocol server built into the 
   also shows an activity log of recent tool calls (arguments are hashed, never stored).
 - **Scopes.** `read`, `write:logs`, `write:program` and `coach`. Each tool declares the scope it
   needs, and a key without it gets a `forbidden` error.
-- **Tools.** 44 in total: 24 read tools (today's workout, program, maxes, history, overload
+- **Tools.** 43 in total: 24 read tools (today's workout, program, maxes, history, overload
   recommendations, weekly summary, Coach Board messages), 12 that write logs, maxes and profile
-  fields (including natural-language logging such as "bench 3x8 at 185" and onboarding), 5 that
+  fields (including natural-language logging such as "bench 3x8 at 185" and onboarding), 4 that
   write programs, 1 that posts a Coach Board note, and 2 exercise-name utilities.
 - **Rate limits.** 500 requests per hour per user overall, with tighter limits on writes (100 an
   hour per category) and on program generation and saves (20 an hour each).
