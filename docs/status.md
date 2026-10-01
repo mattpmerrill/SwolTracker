@@ -19,8 +19,12 @@ Done while Snappy Coach is built, so the old app cannot undo a data repair:
 - Every "first gym" lookup is ordered by `joined_at, gym_id`. Onboarding reuses an existing gym
   (preferring one the user owns) instead of creating a duplicate personal gym.
 - `migrations/040-start-date-write-once.sql` (the `complete_onboarding` RPC keeps an existing
-  start date, and two functions pick a gym deterministically) is written but NOT yet applied to
-  production. `migrations/039` was applied by hand on 2026-10-01.
+  start date, and two functions pick a gym deterministically) was applied to production on
+  2026-10-01 after PR #9 deployed. `migrations/039` was applied by hand earlier the same day.
+- `migrations/041-one-gym-per-creator.sql` (unique index `gyms_one_per_creator` on `gyms(created_by)`, and
+  `create_user_gym` made idempotent so a repeat or racing call returns the existing gym) was tested on a scratch
+  Postgres (including 160 concurrent calls) and applied to production on 2026-10-01; a repeat call
+  as the demo user returned the existing gym and created nothing.
 - Not done: a database-level guard (trigger or column privilege) for the start date. RLS still lets
   a signed-in user update their own `program_start_date` directly.
 
