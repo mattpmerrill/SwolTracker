@@ -199,4 +199,121 @@ describe('MCP queries contract', () => {
       ['gym_id', { ascending: true }],
     ]);
   });
+
+  // Unmeasured mobility/timed work must not look like missed reps. These rows
+  // match sets Aleesha actually saved: completed, actual_reps NULL.
+  function unmeasuredCoachingFixture() {
+    const row = (
+      day: string,
+      exercise: string,
+      prescribed: number | string,
+      actual: number | string | null,
+      weight: number | null = null,
+    ) => ({
+      week_number: 1,
+      day_name: day,
+      exercise_name: exercise,
+      actual_weight: weight,
+      actual_reps: actual,
+      prescribed_weight: weight,
+      prescribed_reps: prescribed,
+      completed: true,
+      completed_at: '2026-10-01T18:00:00.000Z',
+    });
+    return [
+      row('Monday', 'Jaw Release', '20s', null),
+      row('Wednesday', 'Jaw Release', '20s', null),
+      row('Monday', 'Face Yoga', '10x', null),
+      row('Wednesday', 'Face Yoga', '10x', null),
+      row('Monday', 'Goblet Squat', 10, 8, 25),
+      row('Wednesday', 'Goblet Squat', 10, 8, 25),
+      row('Monday', 'Bench Press', 10, 10, 95),
+      row('Tuesday', 'Bench Press', '30–40 sec', null),
+      row('Wednesday', 'Bench Press', 10, 10, 95),
+      row('Friday', 'Bench Press', 10, 10, 95),
+    ];
+  }
+
+  function seedCoachingReads(sb: ReturnType<typeof createMcpMockSupabase>, logs: unknown[]) {
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    sb.respond('profiles.single', {
+      data: { id: 'u1', name: 'Aleesha', program_start_date: null },
+      error: null,
+    });
+    sb.respond('current_user_maxes.list', { data: [], error: null });
+    sb.respond('workout_logs.list', { data: logs, error: null });
+    sb.respond('workout_completions.list', { data: [], error: null });
+    sb.respond('missed_days.list', { data: [], error: null });
+    sb.respond('workout_programs.list', { data: [], error: null });
+    sb.respond('session_notes.list', { data: [], error: null });
+  }
+
+  it('does not deload unmeasured timed or per-side sets, and still flags real misses and hits', async () => {
+    const sb = createMcpMockSupabase();
+    seedCoachingReads(sb, unmeasuredCoachingFixture());
+    const tools = createQueryTools(sb, 'u1');
+    const result = await tools.get_overload_recommendations('g1', 4);
+    const recs = (result.data as any).recommendations as Array<{ exercise_name: string; type: string; status_label: string }>;
+    const byName = Object.fromEntries(recs.map((rec) => [rec.exercise_name, rec]));
+
+    expect(byName['Jaw Release']).toBeUndefined();
+    expect(byName['Face Yoga']).toBeUndefined();
+    expect(result.message).not.toContain('Jaw Release');
+    expect(result.message).not.toContain('Face Yoga');
+
+    expect(byName['Goblet Squat']?.type).toBe('deload');
+    expect(byName['Goblet Squat']?.status_label).toBe('Check load');
+
+    // The timed Tuesday session is skipped, so the three measured hits still level up.
+    expect(byName['Bench Press']?.type).toBe('increase');
+    expect(byName['Bench Press']?.status_label).toBe('Ready to level up');
+  });
+
+  it('prints done (no rep count) for unmeasured sessions, not missed reps', async () => {
+    const sb = createMcpMockSupabase();
+    seedCoachingReads(sb, [
+      {
+        week_number: 1,
+        day_name: 'Monday',
+        exercise_name: 'Jaw Release',
+        actual_weight: null,
+        actual_reps: null,
+        prescribed_weight: null,
+        prescribed_reps: '20s',
+        completed: true,
+        completed_at: '2026-10-01T18:00:00.000Z',
+      },
+      {
+        week_number: 1,
+        day_name: 'Monday',
+        exercise_name: 'Goblet Squat',
+        actual_weight: 25,
+        actual_reps: 8,
+        prescribed_weight: 25,
+        prescribed_reps: 10,
+        completed: true,
+        completed_at: '2026-10-01T18:00:00.000Z',
+      },
+    ]);
+    const tools = createQueryTools(sb, 'u1');
+    const result = await tools.get_training_history_summary('g1', 4);
+    const sessions = (result.data as any).week_summaries[1].exercise_sessions as Array<{
+      exercise_name: string;
+      hit_all_reps: boolean;
+      outcome: string;
+    }>;
+    const jaw = sessions.find((session) => session.exercise_name === 'Jaw Release');
+    const squat = sessions.find((session) => session.exercise_name === 'Goblet Squat');
+
+    expect(jaw?.outcome).toBe('done_unmeasured');
+    expect(jaw?.hit_all_reps).toBe(false);
+    expect(squat?.outcome).toBe('missed');
+    expect(result.message).toContain('Jaw Release');
+    expect(result.message).toContain('done (no rep count)');
+    expect(result.message).not.toMatch(/Jaw Release:.*missed/);
+    expect(result.message).toContain('missed reps');
+  });
 });

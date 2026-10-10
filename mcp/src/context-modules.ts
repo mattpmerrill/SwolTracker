@@ -6,6 +6,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContextModule } from "@bot-native/sdk";
 import { getCurrentWeek, getTodayName } from "./week-calc.js";
+import { classifySet, consecutiveOutcomeStreak, sessionOutcome } from "../../shared/set-outcome.js";
+import type { LoggedSetOutcome } from "../../shared/set-outcome.js";
 import type { CurrentMax, ProgramDay, WorkoutProgramRow } from "./types.js";
 
 export interface ContextDeps {
@@ -309,32 +311,30 @@ const upcomingDeloadModule: ContextModule<ContextDeps> = {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      actual_reps: number | string;
+      actual_reps: number | string | null;
       prescribed_reps: number | string | null;
     }>;
 
-    const parseReps = (v: number | string | null | undefined) => {
-      if (typeof v === "number") return v;
-      const match = String(v ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    };
-
-    // Aggregate per (exercise, session) whether all prescribed reps were hit.
-    const sessionMap = new Map<string, { week: number; day: string; hit: boolean }>();
+    // Same session rule as get_overload_recommendations: unmeasured sets are not misses.
+    const sessionMap = new Map<string, { week: number; day: string; set_outcomes: LoggedSetOutcome[] }>();
     for (const log of logs) {
       const key = `${log.exercise_name}::${log.week_number}::${log.day_name}`;
-      const prev = sessionMap.get(key) ?? { week: log.week_number, day: log.day_name, hit: true };
-      const actual = parseReps(log.actual_reps);
-      const prescribed = log.prescribed_reps == null ? null : parseReps(log.prescribed_reps);
-      if (prescribed !== null && actual < prescribed) prev.hit = false;
+      const prev = sessionMap.get(key) ?? { week: log.week_number, day: log.day_name, set_outcomes: [] };
+      prev.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: true,
+      }));
       sessionMap.set(key, prev);
     }
 
-    const byExercise = new Map<string, Array<{ week: number; day: string; hit: boolean }>>();
+    const byExercise = new Map<string, Array<{ week: number; day: string; outcome: LoggedSetOutcome }>>();
     for (const [key, session] of sessionMap) {
+      const outcome = sessionOutcome(session.set_outcomes);
+      if (outcome === "not_logged") continue;
       const [exName] = key.split("::");
       const arr = byExercise.get(exName) ?? [];
-      arr.push(session);
+      arr.push({ week: session.week, day: session.day, outcome });
       byExercise.set(exName, arr);
     }
 
@@ -345,12 +345,8 @@ const upcomingDeloadModule: ContextModule<ContextDeps> = {
         if (a.week !== b.week) return b.week - a.week;
         return dayOrder.indexOf(b.day) - dayOrder.indexOf(a.day);
       });
-      let misses = 0;
-      for (const s of sorted) {
-        if (s.hit) break;
-        misses += 1;
-      }
-      if (misses >= 2) candidates.push(ex);
+      const { consecutiveMisses } = consecutiveOutcomeStreak(sorted);
+      if (consecutiveMisses >= 2) candidates.push(ex);
     }
 
     return { candidates };

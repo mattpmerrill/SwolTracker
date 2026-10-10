@@ -15,6 +15,14 @@ import type {
   ProgramExercise,
 } from "../types.js";
 import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import {
+  classifySet,
+  consecutiveOutcomeStreak,
+  parsePrescription,
+  sessionOutcome,
+  sessionRepsLabel,
+  type LoggedSetOutcome,
+} from "../../../shared/set-outcome.js";
 
 export function createQueryTools(supabase: SupabaseClient, userId: string) {
   // ── Helpers ──────────────────────────────────────────────
@@ -684,7 +692,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         get_maxes(),
         supabase
           .from("workout_logs")
-          .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
+          .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed, completed_at")
           .eq("user_id", userId)
           .eq("gym_id", resolvedGymId)
           .eq("completed", true)
@@ -721,8 +729,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const maxes = (maxesResult.data as any)?.maxes ?? {};
     const logs = (logsResult.data ?? []) as Array<{
       week_number: number; day_name: string; exercise_name: string;
-      actual_weight: number; actual_reps: number | string;
+      actual_weight: number | null; actual_reps: number | string | null;
       prescribed_weight: number | null; prescribed_reps: number | string | null;
+      completed?: boolean | null;
       completed_at: string | null;
     }>;
     const completions = (completionsResult.data ?? []) as Array<{ week_number: number; day_name: string }>;
@@ -731,10 +740,10 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const sessionNotes = (sessionNotesResult.data ?? []) as Array<{ week_number: number; day_name: string; label: string | null; text: string }>;
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-    const parseReps = (value: number | string | null | undefined) => {
-      if (typeof value === "number") return value;
-      const match = String(value ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
+    const measuredRepCount = (value: unknown): number | null => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number.parseInt(value.trim(), 10);
+      return null;
     };
     const average = (values: number[]) =>
       values.length > 0
@@ -754,6 +763,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         avg_actual_reps: number;
         prescribed_reps: number | null;
         hit_all_reps: boolean;
+        outcome: LoggedSetOutcome;
       }>;
     }> = {};
 
@@ -781,7 +791,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       prescribed_weights: number[];
       actual_reps: number[];
       prescribed_reps: number[];
-      hit_all_reps: boolean;
+      set_outcomes: LoggedSetOutcome[];
+      sets_logged: number;
       completed_at: string | null;
     }>();
     for (const log of logs) {
@@ -795,21 +806,25 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           prescribed_weights: [],
           actual_reps: [],
           prescribed_reps: [],
-          hit_all_reps: true,
+          set_outcomes: [],
+          sets_logged: 0,
           completed_at: log.completed_at,
         });
       }
 
       const session = sessionMap.get(sessionKey)!;
-      const actualReps = parseReps(log.actual_reps);
-      const prescribedReps = log.prescribed_reps === null ? null : parseReps(log.prescribed_reps);
+      const prescription = parsePrescription(log.prescribed_reps);
+      const measuredActual = measuredRepCount(log.actual_reps);
       if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
       if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
-      session.actual_reps.push(actualReps);
-      if (prescribedReps !== null) session.prescribed_reps.push(prescribedReps);
-      if (prescribedReps !== null && actualReps < prescribedReps) {
-        session.hit_all_reps = false;
-      }
+      if (measuredActual != null) session.actual_reps.push(measuredActual);
+      if (prescription.kind === "reps") session.prescribed_reps.push(prescription.count);
+      session.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: log.completed,
+      }));
+      session.sets_logged += 1;
     }
 
     Array.from(sessionMap.values())
@@ -820,16 +835,19 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       .forEach((session) => {
         const summary = weekSummaries[session.week_number];
         if (!summary) return;
+        const outcome = sessionOutcome(session.set_outcomes);
+        if (outcome === "not_logged") return;
 
         summary.exercise_sessions.push({
           day_name: session.day_name,
           exercise_name: session.exercise_name,
-          sets_logged: session.actual_reps.length,
+          sets_logged: session.sets_logged,
           avg_actual_weight: average(session.actual_weights),
           avg_prescribed_weight: average(session.prescribed_weights),
           avg_actual_reps: average(session.actual_reps),
           prescribed_reps: session.prescribed_reps[0] ?? null,
-          hit_all_reps: session.hit_all_reps,
+          hit_all_reps: outcome === "hit",
+          outcome,
         });
       });
 
@@ -852,8 +870,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         .slice(0, 4)
         .map((session) => {
           const targetWeight = session.avg_actual_weight || session.avg_prescribed_weight || 0;
-          const hitStr = session.hit_all_reps ? "hit reps" : "missed reps";
-          return `    - ${session.day_name} ${session.exercise_name}: ${session.sets_logged} sets @ ~${targetWeight} lbs, ${hitStr}`;
+          return `    - ${session.day_name} ${session.exercise_name}: ${session.sets_logged} sets @ ~${targetWeight} lbs, ${sessionRepsLabel(session.outcome)}`;
         });
 
       const missedStr = ws.missed_days.length > 0
@@ -912,7 +929,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     const { data: logsRaw } = await supabase
       .from("workout_logs")
-      .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
+      .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed, completed_at")
       .eq("user_id", userId)
       .eq("gym_id", resolvedGymId)
       .eq("completed", true)
@@ -923,10 +940,11 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      actual_weight: number;
-      actual_reps: number | string;
+      actual_weight: number | null;
+      actual_reps: number | string | null;
       prescribed_weight: number | null;
       prescribed_reps: number | string | null;
+      completed?: boolean | null;
       completed_at: string | null;
     }>;
 
@@ -935,16 +953,11 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-    const parseReps = (value: number | string | null | undefined) => {
-      if (typeof value === "number") return value;
-      const match = String(value ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    };
     const sessionMap = new Map<string, {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      hit_all_reps: boolean;
+      set_outcomes: LoggedSetOutcome[];
       actual_weights: number[];
       prescribed_weights: number[];
     }>();
@@ -955,20 +968,20 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           week_number: log.week_number,
           day_name: log.day_name,
           exercise_name: log.exercise_name,
-          hit_all_reps: true,
+          set_outcomes: [],
           actual_weights: [],
           prescribed_weights: [],
         });
       }
 
       const session = sessionMap.get(sessionKey)!;
-      const actualReps = parseReps(log.actual_reps);
-      const prescribedReps = log.prescribed_reps == null ? null : parseReps(log.prescribed_reps);
       if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
       if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
-      if (prescribedReps !== null && actualReps < prescribedReps) {
-        session.hit_all_reps = false;
-      }
+      session.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: log.completed,
+      }));
     }
 
     interface Recommendation {
@@ -983,13 +996,15 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const recommendations: Recommendation[] = [];
-    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; hit_all_reps: boolean; hasWeight: boolean }>>();
+    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; outcome: LoggedSetOutcome; hasWeight: boolean }>>();
     Array.from(sessionMap.values()).forEach((session) => {
+      const outcome = sessionOutcome(session.set_outcomes);
+      if (outcome === "not_logged") return;
       const sessions = byExercise.get(session.exercise_name) ?? [];
       sessions.push({
         week_number: session.week_number,
         day_name: session.day_name,
-        hit_all_reps: session.hit_all_reps,
+        outcome,
         hasWeight: session.actual_weights.some((w) => w > 0) || session.prescribed_weights.some((w) => w > 0),
       });
       byExercise.set(session.exercise_name, sessions);
@@ -1018,17 +1033,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         continue;
       }
 
-      let consecutiveHits = 0;
-      let consecutiveMisses = 0;
-      for (const session of sessions) {
-        if (session.hit_all_reps) {
-          if (consecutiveMisses > 0) break;
-          consecutiveHits += 1;
-        } else {
-          if (consecutiveHits > 0) break;
-          consecutiveMisses += 1;
-        }
-      }
+      const { consecutiveHits, consecutiveMisses } = consecutiveOutcomeStreak(sessions);
 
       const isBodyweight = !latest.hasWeight;
       if (consecutiveHits >= 3) {
