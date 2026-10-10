@@ -6,6 +6,7 @@ export {
   getTodayDayName as getTodayName,
   getWeekDates,
   formatCalendarDate,
+  formatWeekRange,
   todayInZone,
   isValidTimeZone,
   DEFAULT_TIME_ZONE,

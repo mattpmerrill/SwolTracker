@@ -140,3 +140,22 @@ export function getWeekDates(
   end.setDate(end.getDate() + 6);
   return { start, end };
 }
+
+const SHORT_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/**
+ * "Mon Oct 5" from the Date's local calendar parts.
+ *
+ * toISOString() is a UTC instant and shifts the day in zones behind UTC.
+ * toLocaleDateString follows the process zone, which is not the user's.
+ * Week labels must use the same getDay()/getDate() parts as getWeekDates.
+ */
+function formatWeekdayMonthDay(date: Date): string {
+  return `${SHORT_WEEKDAYS[date.getDay()]} ${SHORT_MONTHS[date.getMonth()]} ${date.getDate()}`;
+}
+
+/** "Mon Oct 5 – Sun Oct 11" (en dash). Monday and Sunday of one program week. */
+export function formatWeekRange(start: Date, end: Date): string {
+  return `${formatWeekdayMonthDay(start)} \u2013 ${formatWeekdayMonthDay(end)}`;
+}

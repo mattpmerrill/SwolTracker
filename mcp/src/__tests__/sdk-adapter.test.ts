@@ -120,3 +120,31 @@ describe('tool list: program start date is write-once', () => {
     expect(z.object(completeOnboarding.schema).safeParse({ program_start_date: '2026-05-04' }).success).toBe(true);
   });
 });
+
+describe('list_gyms wire format', () => {
+  it('starts with the directive and still JSON-stringifies data, with primary added', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    const app = buildApp(sb as any);
+    const tool = app.tools.find((t) => t.name === 'list_gyms')!;
+    const result = await tool.execute(
+      {},
+      { request: { identity: { userId: 'u1' }, requestId: 'r1', transport: 'http' }, app },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.message.startsWith(
+      'Use gym "Home" (g1) for everything. Omit gym_id in tool calls and it is used automatically.',
+    )).toBe(true);
+    expect(result.message).toContain('You have exactly one gym.');
+    const json = result.message.slice(result.message.lastIndexOf('\n') + 1);
+    expect(JSON.parse(json)).toEqual({
+      gyms: [{ id: 'g1', name: 'Home', role: 'owner', primary: true }],
+    });
+    expect(result.data).toEqual({
+      gyms: [{ id: 'g1', name: 'Home', role: 'owner', primary: true }],
+    });
+  });
+});

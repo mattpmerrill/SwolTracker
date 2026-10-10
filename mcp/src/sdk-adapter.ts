@@ -167,19 +167,24 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "list_gyms",
-      description: "List all gyms the user belongs to — returns gym IDs, names, and roles",
+      description: "List gyms the user belongs to. One gym is primary — omit gym_id and that gym is used automatically. Never write the same program to more than one gym.",
       category: "query",
       scopes: ["read"],
       schema: {},
       execute: withKit(async (kit) => {
-        const gyms = await kit.queries.list_gyms!();
-        // list_gyms wire format is JSON-stringified data
-        return gyms;
-      }, toAppResultAsJson),
+        const result = await kit.queries.list_gyms!();
+        return result;
+      }, (r) => {
+        const json = toAppResultAsJson(r);
+        if (!r.success || !r.message.startsWith("Use gym ")) return json;
+        // serializeResult sends only message. Lead with the directive, then the
+        // existing JSON data payload (primary lives on that object).
+        return { ...json, message: `${r.message}\n${json.message}` };
+      }),
     }),
     defineTool({
       name: "get_todays_workout",
-      description: "Get prescribed exercises with resolved weights for any week+day. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise. Defaults to current week + today.",
+      description: "Get prescribed exercises with resolved weights for any week+day. Returns exercise_index, name, sets, reps, weight_lbs (resolved from 1RM percentages), max_1rm, and percentages for each exercise. Also returns week_number, week_start, week_end, today, and time_zone; those dates are authoritative. Defaults to current week + today.",
       category: "query",
       scopes: ["read"],
       schema: {
@@ -195,7 +200,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "get_weekly_workout",
-      description: "Get all 7 days for a week with resolved weights. Returns each day's focus, exercises (with exercise_index, weight_lbs), and total volume.",
+      description: "Get all 7 days for a week with resolved weights. Returns each day's focus, exercises (with exercise_index, weight_lbs), and total volume. data also includes week_start, week_end, today, and time_zone for that week; those dates are authoritative.",
       category: "query",
       scopes: ["read"],
       schema: {
@@ -210,7 +215,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "get_program_overview",
-      description: "High-level view of the full program — total weeks, each week's daily focus/theme, volume per week, and which week is current. Like a table of contents for the training plan.",
+      description: "High-level view of the full program — total weeks, each week's daily focus/theme, volume per week, and which week is current. Like a table of contents for the training plan. Current week includes week_start, week_end, today, and time_zone; those dates are authoritative.",
       category: "query",
       scopes: ["read"],
       schema: {
@@ -238,7 +243,7 @@ export function buildApp(supabase: SupabaseClient, deps?: BuildAppDeps): BotNati
     }),
     defineTool({
       name: "get_workout_logs",
-      description: "Get completed sets for a given week and optional day",
+      description: "Get completed sets for a given week and optional day. Also returns week_start, week_end, today, and time_zone for that week; those dates are authoritative.",
       category: "query",
       scopes: ["read"],
       schema: {

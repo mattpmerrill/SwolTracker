@@ -14,7 +14,7 @@ import type {
   ProgramDay,
   ProgramExercise,
 } from "../types.js";
-import { resolveUserClock } from "../user-clock.js";
+import { resolveUserClock, weekWindowFor, type UserClock } from "../user-clock.js";
 import {
   classifySet,
   consecutiveOutcomeStreak,
@@ -25,6 +25,11 @@ import {
 } from "../../../shared/set-outcome.js";
 
 export function createQueryTools(supabase: SupabaseClient, userId: string) {
+  function describeWeek(clock: UserClock, weekNumber: number) {
+    const { range_label, ...fields } = weekWindowFor(clock, weekNumber);
+    return { fields, label: `Week ${weekNumber} (${range_label})` };
+  }
+
   // ── Helpers ──────────────────────────────────────────────
 
   // "First gym" must be deterministic: oldest membership first, gym_id as the tie-breaker.
@@ -63,6 +68,17 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const writable = gyms.filter((g) => isGymWriter(g.role));
     if (!gymId) return writable[0]?.id ?? null;
     return writable.find((g) => g.id === gymId)?.id ?? null;
+  }
+
+  async function resolveLeaderProgramGym(): Promise<{ id: string; name: string } | null> {
+    // Same pick as the web bootstrap: get_leader_gym_id (accepted member → leader's
+    // oldest owned gym). Service role passes _require_self. A miss is not a member.
+    const { data, error } = await supabase.rpc("get_leader_gym_id", { p_member_id: userId });
+    if (error || data == null || data === "") return null;
+    const id = String(data);
+    const { data: gym } = await supabase.from("gyms").select("id, name").eq("id", id).maybeSingle();
+    const name = (gym as { name?: string } | null)?.name;
+    return { id, name: name && name.length > 0 ? name : "the leader's gym" };
   }
 
   async function resolveCurrentWeek(): Promise<number> {
@@ -205,13 +221,28 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: true, message: "No gyms found.", data: { gyms: [] } };
     }
 
+    const primary = gyms[0];
+    const leader = await resolveLeaderProgramGym();
     const lines = gyms.map(
       (g, i) => `${i + 1}. ${g.name} (${g.id}) — role: ${g.role}`
     );
+    // A group member logs to their own gym and follows the leader's program
+    // (web bootstrap: gyms[0] for logs, get_leader_gym_id for the program).
+    // Do not claim "exactly one gym" in that case — the program is not theirs.
+    const directive = leader
+      ? `Use gym "${primary.name}" (${primary.id}) for logging. Omit gym_id in tool calls and it is used automatically. You follow the leader's program at gym "${leader.name}" (${leader.id}).`
+      : `Use gym "${primary.name}" (${primary.id}) for everything. Omit gym_id in tool calls and it is used automatically.${gyms.length === 1 ? " You have exactly one gym." : ""}`;
     return {
       success: true,
-      message: `Your gyms:\n${lines.join("\n")}`,
-      data: { gyms: gyms.map((g) => ({ id: g.id, name: g.name, role: g.role })) },
+      message: `${directive}\nYour gyms:\n${lines.join("\n")}`,
+      data: {
+        gyms: gyms.map((g) => ({
+          id: g.id,
+          name: g.name,
+          role: g.role,
+          primary: g.id === primary.id,
+        })),
+      },
     };
   }
 
@@ -221,9 +252,10 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const clock = weekNumber == null || !dayName ? await resolveUserClock(supabase, userId) : null;
-    const week = weekNumber ?? clock!.currentWeek;
-    const day = dayName ?? clock!.dayName;
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const day = dayName ?? clock.dayName;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     const { data: programRow } = await supabase
       .from("workout_programs")
@@ -235,8 +267,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!programRow) {
       return {
         success: true,
-        message: `No program found for Week ${week}. Generate one first.`,
-        data: { current_week: week, day_name: day, gym_id: resolvedGymId },
+        message: `No program found for ${weekLabel}. Generate one first.`,
+        data: { current_week: week, day_name: day, gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -246,8 +278,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!today) {
       return {
         success: true,
-        message: `${day} is a rest day (Week ${week}).`,
-        data: { current_week: week, day_name: day, rest_day: true, gym_id: resolvedGymId },
+        message: `${day} is a rest day (${weekLabel}).`,
+        data: { current_week: week, day_name: day, rest_day: true, gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -331,7 +363,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Week ${week}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
+      message: `${weekLabel}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
       data: {
         current_week: week,
         day_name: day,
@@ -348,6 +380,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         total_logged_sets: totalLoggedSets,
         total_prescribed_sets: totalPrescribedSets,
         ad_hoc_logs: adHocLogs,
+        ...weekFields,
       },
     };
   }
@@ -358,7 +391,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const week = weekNumber ?? await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     const { data: programRow } = await supabase
       .from("workout_programs")
@@ -370,8 +405,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!programRow) {
       return {
         success: true,
-        message: `No program found for Week ${week}.`,
-        data: { week_number: week, gym_id: resolvedGymId },
+        message: `No program found for ${weekLabel}.`,
+        data: { gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -401,8 +436,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Week ${week} (${totalSets} total sets):\n${lines.join("\n")}`,
-      data: { week_number: week, total_sets: totalSets, days, gym_id: resolvedGymId },
+      message: `${weekLabel} (${totalSets} total sets):\n${lines.join("\n")}`,
+      data: { total_sets: totalSets, days, gym_id: resolvedGymId, ...weekFields },
     };
   }
 
@@ -412,7 +447,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const currentWeek = await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const currentWeek = clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, currentWeek);
 
     const { data: rows } = await supabase
       .from("workout_programs")
@@ -424,8 +461,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (programs.length === 0) {
       return {
         success: true,
-        message: "No programs found.",
-        data: { current_week: currentWeek, total_weeks: 0, weeks: [] },
+        message: `No programs found. Currently ${weekLabel}.`,
+        data: { current_week: currentWeek, total_weeks: 0, weeks: [], gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -470,12 +507,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Program overview (${programs.length} weeks, currently Week ${currentWeek}):\n${lines.join("\n")}`,
+      message: `Program overview (${programs.length} weeks, currently ${weekLabel}):\n${lines.join("\n")}`,
       data: {
         current_week: currentWeek,
         total_weeks: programs.length,
         weeks,
         gym_id: resolvedGymId,
+        ...weekFields,
       },
     };
   }
@@ -568,7 +606,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   ): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
 
-    const week = weekNumber ?? await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     let query = supabase
       .from("workout_logs")
@@ -587,12 +627,12 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const logs = (data as WorkoutLog[] | null) ?? [];
 
     const completedSets = logs.filter((l) => l.completed).length;
-    const summary = `Week ${week}${dayName ? `, ${dayName}` : ""}: ${completedSets} sets completed across ${new Set(logs.map((l) => l.exercise_name)).size} exercises.`;
+    const summary = `${weekLabel}${dayName ? `, ${dayName}` : ""}: ${completedSets} sets completed across ${new Set(logs.map((l) => l.exercise_name)).size} exercises.`;
 
     return {
       success: true,
       message: summary,
-      data: { week_number: week, day_name: dayName ?? null, logs },
+      data: { ...weekFields, day_name: dayName ?? null, logs },
     };
   }
 

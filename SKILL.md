@@ -59,6 +59,11 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 - Cannot manage gym memberships, invites, or group membership
 - Cannot upload or modify profile photos (web dashboard only)
 
+## Rules
+
+- gym_id is optional; omit it. Never write the same program to more than one gym.
+- Week dates in tool responses (week_start, week_end, today, time_zone) are authoritative; never compute week numbers yourself. If your week number and the response's dates disagree, the response wins.
+
 ## Tools
 
 43 tools across three categories. Call names match exactly.
@@ -70,7 +75,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 | `get_profile` | User profile: name, goals, schedule, equipment | — |
 | `get_maxes` | All current 1RM records | — |
 | `get_max_history` | Weight progression for one lift | `exercise_name` |
-| `list_gyms` | Gyms the user belongs to, with role | — |
+| `list_gyms` | Gyms the user belongs to, with role. One is `primary`; omit `gym_id` and that gym is used | — |
 | `get_todays_workout` | Today's prescribed exercises with resolved weights | — |
 | `get_weekly_workout` | All 7 days for a given week | — |
 | `get_program_overview` | High-level view of the full program | — |
@@ -168,6 +173,9 @@ Subscribe via `get_pending_events` (pull model — the endpoint returns unproces
   "data": {
     // P10 current_program
     "available": true, "week": 3, "day": "Wednesday",
+    "week_number": 3, "week_start": "2026-04-13", "week_end": "2026-04-19",
+    "today": "2026-04-15", "time_zone": "America/Denver",
+    "gym_id": "...", "gym_name": "Home",
     "focus": "Pull", "exercise_count": 5,
     "exercises": [{ "name": "Deadlift", "sets": 3, "reps": 5 }, ...],
 
