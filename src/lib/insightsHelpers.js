@@ -13,13 +13,6 @@ export function getCurrentWeekFromStartDate(programStartDate) {
   return calculateCurrentWeek(programStartDate)
 }
 
-export function parseReps(value) {
-  if (typeof value === 'number') return value
-  if (typeof value !== 'string') return 0
-  const match = value.match(/\d+/)
-  return match ? parseInt(match[0], 10) : 0
-}
-
 export function getAverage(values) {
   if (!values.length) return 0
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
