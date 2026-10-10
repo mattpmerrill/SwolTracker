@@ -15,6 +15,7 @@ import {
   PauseCircle,
 } from 'lucide-react';
 import AvatarDisplay from '../Profile/AvatarDisplay';
+import { sessionRepsStatusLabel } from '../../utils/set-outcome';
 
 /**
  * AI workout generator modal with preview
@@ -187,7 +188,7 @@ export default function AiGeneratorModal({
                           <ul className="mt-2 space-y-1 text-xs text-zinc-400">
                             {week.exercise_sessions.slice(0, 3).map((session) => (
                               <li key={`${week.week_number}-${session.day_name}-${session.exercise_name}`}>
-                                {session.day_name} • {session.exercise_name} • {session.sets_logged} sets @ {session.avg_actual_weight || session.avg_prescribed_weight || 0} lbs • {session.hit_all_reps ? 'reps hit' : 'reps missed'}
+                                {session.day_name} • {session.exercise_name} • {session.sets_logged} sets @ {session.avg_actual_weight || session.avg_prescribed_weight || 0} lbs • {sessionRepsStatusLabel(session)}
                               </li>
                             ))}
                           </ul>
