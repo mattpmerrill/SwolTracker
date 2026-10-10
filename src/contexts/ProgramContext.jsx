@@ -4,7 +4,7 @@ import { useToast } from '../components/Toast';
 import { validate, equipmentNameSchema } from '../lib/validation';
 import { reportWriteFailure } from '../lib/errorService';
 import { defaultEquipment } from '../constants';
-import { calculateCurrentWeek, getTodayDayName } from '../utils/date';
+import { calculateCurrentWeek, getTodayDayName, isValidTimeZone } from '../utils/date';
 
 const ProgramContext = createContext(null);
 
@@ -26,13 +26,24 @@ export function ProgramProvider({ children, bundle }) {
     setGymId(bundle.gymId);
     if (bundle.equipment) setEquipment(bundle.equipment);
     setProgramStartDate(bundle.programStartDate);
-    setCurrentWeek(bundle.currentWeek);
+    const loadedZone = typeof bundle.profile?.timezone === 'string' && isValidTimeZone(bundle.profile.timezone)
+      ? bundle.profile.timezone
+      : undefined;
+    setCurrentWeek(loadedZone
+      ? calculateCurrentWeek(bundle.programStartDate, { timeZone: loadedZone })
+      : bundle.currentWeek);
+    if (loadedZone) setCurrentDay(getTodayDayName({ timeZone: loadedZone }));
     setWorkoutProgram(bundle.workoutProgram || {});
   }, [bundle]);
 
+  const profileTimeZone = bundle?.profile?.timezone;
+  const timeZone = typeof profileTimeZone === 'string' && isValidTimeZone(profileTimeZone)
+    ? profileTimeZone
+    : undefined;
+
   const actualCurrentWeek = useMemo(
-    () => calculateCurrentWeek(programStartDate),
-    [programStartDate],
+    () => calculateCurrentWeek(programStartDate, timeZone ? { timeZone } : undefined),
+    [programStartDate, timeZone],
   );
 
   const maxWeekInProgram = useMemo(
@@ -107,8 +118,8 @@ export function ProgramProvider({ children, bundle }) {
 
   const goToCurrentWeek = useCallback(() => {
     setCurrentWeek(actualCurrentWeek);
-    setCurrentDay(getTodayDayName());
-  }, [actualCurrentWeek]);
+    setCurrentDay(getTodayDayName(timeZone ? { timeZone } : undefined));
+  }, [actualCurrentWeek, timeZone]);
 
   const value = useMemo(() => ({
     gymId,

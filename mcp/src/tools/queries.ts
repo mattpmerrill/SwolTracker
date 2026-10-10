@@ -14,7 +14,7 @@ import type {
   ProgramDay,
   ProgramExercise,
 } from "../types.js";
-import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import { resolveUserClock } from "../user-clock.js";
 import {
   classifySet,
   consecutiveOutcomeStreak,
@@ -66,12 +66,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   }
 
   async function resolveCurrentWeek(): Promise<number> {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("program_start_date")
-      .eq("id", userId)
-      .single();
-    return getCurrentWeek(profile?.program_start_date ?? null);
+    return (await resolveUserClock(supabase, userId)).currentWeek;
   }
 
   async function getUserMaxes(): Promise<Record<string, number>> {
@@ -226,8 +221,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const week = weekNumber ?? await resolveCurrentWeek();
-    const day = dayName ?? getTodayName();
+    const clock = weekNumber == null || !dayName ? await resolveUserClock(supabase, userId) : null;
+    const week = weekNumber ?? clock!.currentWeek;
+    const day = dayName ?? clock!.dayName;
 
     const { data: programRow } = await supabase
       .from("workout_programs")

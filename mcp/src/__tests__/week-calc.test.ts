@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getCurrentWeek, parseCalendarDate } from '../week-calc';
+import { getCurrentWeek, getTodayName, parseCalendarDate } from '../week-calc';
 
 describe('MCP week calculation', () => {
   it('parses YYYY-MM-DD program starts as local calendar dates', () => {
@@ -18,5 +18,9 @@ describe('MCP week calculation', () => {
     expect(getCurrentWeek('2026-03-30')).toBe(13);
 
     vi.useRealTimers();
+  });
+
+  it('getTodayName alias uses an explicit zone instead of the process clock', () => {
+    expect(getTodayName({ now: new Date('2026-10-05T04:30:00Z'), timeZone: 'America/Denver' })).toBe('Sunday');
   });
 });

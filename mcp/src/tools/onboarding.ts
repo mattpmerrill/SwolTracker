@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@bot-native/sdk";
 import type { ToolResult } from "../types.js";
+import { resolveUserClock } from "../user-clock.js";
 import type { EventEmitter } from "../bot-native-shim.js";
 
 export interface UpdateProfileParams {
@@ -194,7 +195,7 @@ export function createOnboardingTools(
       program_start_date:
         current?.program_start_date ??
         params.program_start_date ??
-        new Date().toISOString().split("T")[0],
+        (await resolveUserClock(supabase, userId)).today,
     };
 
     const missing = REQUIRED_FIELDS.filter((f) => {
