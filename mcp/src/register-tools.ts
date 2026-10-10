@@ -72,7 +72,11 @@ export function registerTools(
     {},
     async () => {
       const result = await queries.list_gyms();
-      return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
+      const payload = JSON.stringify(result.data);
+      const text = result.message.startsWith("Use gym ")
+        ? `${result.message}\n${payload}`
+        : payload;
+      return { content: [{ type: "text", text }] };
     }
   );
 

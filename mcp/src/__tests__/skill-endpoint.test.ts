@@ -105,6 +105,14 @@ describe('SKILL.md', () => {
     expect(body).toMatch(/### Meta/);
   });
 
+  it('tells agents week dates win and gym_id must be omitted', () => {
+    const { body } = parseFrontmatter(readSkill());
+    expect(body).toContain('gym_id is optional; omit it. Never write the same program to more than one gym.');
+    expect(body).toContain(
+      'Week dates in tool responses (week_start, week_end, today, time_zone) are authoritative; never compute week numbers yourself. If your week number and the response\'s dates disagree, the response wins.',
+    );
+  });
+
   it('lists exactly the registered tools, and states the real count', () => {
     const { body } = parseFrontmatter(readSkill());
     const toolsSection = body.slice(body.indexOf('## Tools'), body.indexOf('## Events'));

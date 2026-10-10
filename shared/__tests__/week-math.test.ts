@@ -3,7 +3,9 @@ import {
   DEFAULT_TIME_ZONE,
   calculateCurrentWeek,
   formatCalendarDate,
+  formatWeekRange,
   getTodayDayName,
+  getWeekDates,
   isValidTimeZone,
   todayInZone,
 } from "../week-math";
@@ -63,5 +65,14 @@ describe("week math in a user's time zone", () => {
     expect(isValidTimeZone("Not/AZone")).toBe(false);
     expect(isValidTimeZone("")).toBe(false);
     expect(isValidTimeZone("America/Denver ")).toBe(false);
+  });
+
+  it("labels a program week from calendar parts, not a UTC instant", () => {
+    const { start, end } = getWeekDates("2026-06-01", 19);
+    expect(formatCalendarDate(start)).toBe("2026-10-05");
+    expect(formatCalendarDate(end)).toBe("2026-10-11");
+    expect(formatWeekRange(start, end)).toBe("Mon Oct 5 \u2013 Sun Oct 11");
+    const prior = getWeekDates("2026-06-01", 18);
+    expect(formatWeekRange(prior.start, prior.end)).toBe("Mon Sep 28 \u2013 Sun Oct 4");
   });
 });
