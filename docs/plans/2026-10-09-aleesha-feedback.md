@@ -175,3 +175,11 @@ SKILL.md lines. No code.
 3. **Matt OK** → apply migration 042 to project `qbykzrpppowcjxrofoxi` (SwolTracker, 21 Stacks), verify
    `get_current_week` for every user equals `shared/` math, and that a re-date attempt on Aleesha's profile is refused.
 4. Tell Aleesha's agent (Coach Board note): one gym, dates are in every response, unmeasured items are not misses.
+
+## Status
+
+Tasks 1-5 and 7 are done and merged into `feat/aleesha-feedback`. Task 7 is the reminder zone and
+the demo re-date function, added from review. Task 6 is this docs update.
+
+Remaining: the pull request, Matt's OK to deploy, Matt's OK to apply 042, and a Coach Board note
+to Aleesha's agent.

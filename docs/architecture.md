@@ -270,6 +270,10 @@ that bug was fixed twice before the math was moved here. Web (`src/utils/date.js
 (`mcp/src/week-calc.ts`) re-export it, and `shared/__tests__/parity.test.ts` runs the same fixtures
 through both paths. The reminder cron imports the compiled copy from `mcp/dist/shared/`.
 
+Server day and week decisions go through `resolveUserClock` in `mcp/src/user-clock.ts`: the profile
+time zone, or `America/Denver` when it is missing or invalid, not the UTC process clock. Logged-set
+labels (`hit`, `missed`, `done_unmeasured`, `not_logged`) come from `shared/set-outcome.ts`.
+
 ## Coach Board
 
 Asynchronous notes between the user and their AI agent, stored in `agent_messages`
