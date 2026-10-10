@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AppError, isAppError } from '@bot-native/sdk';
 import { createQueryTools } from '../tools/queries.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
@@ -315,5 +315,28 @@ describe('MCP queries contract', () => {
     expect(result.message).toContain('done (no rep count)');
     expect(result.message).not.toMatch(/Jaw Release:.*missed/);
     expect(result.message).toContain('missed reps');
+  });
+
+  it('get_todays_workout without week/day uses the user zone, not the process clock', async () => {
+    // Sunday 22:30 MDT. A UTC process clock already thinks this is Monday of week 19.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-05T04:30:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      sb.respond('gym_members.list', {
+        data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+        error: null,
+      });
+      sb.respond('profiles.single', {
+        data: { program_start_date: '2026-06-01', timezone: null },
+        error: null,
+      });
+      const tools = createQueryTools(sb, 'u1');
+      const result = await tools.get_todays_workout();
+      expect((result.data as any).current_week).toBe(18);
+      expect((result.data as any).day_name).toBe('Sunday');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

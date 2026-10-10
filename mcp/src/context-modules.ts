@@ -5,7 +5,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContextModule } from "@bot-native/sdk";
-import { getCurrentWeek, getTodayName } from "./week-calc.js";
+import { parseCalendarDate } from "./week-calc.js";
+import { resolveUserClock } from "./user-clock.js";
 import { classifySet, consecutiveOutcomeStreak, sessionOutcome } from "../../shared/set-outcome.js";
 import type { LoggedSetOutcome } from "../../shared/set-outcome.js";
 import type { CurrentMax, ProgramDay, WorkoutProgramRow } from "./types.js";
@@ -29,12 +30,7 @@ async function resolveGymId(deps: ContextDeps): Promise<string | null> {
 }
 
 async function resolveCurrentWeek(deps: ContextDeps): Promise<number> {
-  const { data } = await deps.supabase
-    .from("profiles")
-    .select("program_start_date")
-    .eq("id", deps.userId)
-    .single();
-  return getCurrentWeek(data?.program_start_date ?? null);
+  return (await resolveUserClock(deps.supabase, deps.userId)).currentWeek;
 }
 
 // ── P10: Current program (today's workout) ────────────────
@@ -46,8 +42,9 @@ const currentProgramModule: ContextModule<ContextDeps> = {
     const gymId = await resolveGymId(deps);
     if (!gymId) return { available: false };
 
-    const week = await resolveCurrentWeek(deps);
-    const day = getTodayName();
+    const clock = await resolveUserClock(deps.supabase, deps.userId);
+    const week = clock.currentWeek;
+    const day = clock.dayName;
 
     const { data: programRow } = await deps.supabase
       .from("workout_programs")
@@ -88,15 +85,17 @@ const recentLogsModule: ContextModule<ContextDeps> = {
   key: "recent_logs",
   priority: 9,
   async load(deps) {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const clock = await resolveUserClock(deps.supabase, deps.userId);
+    // Lookback is calendar days in the user's zone, not the UTC process date.
+    const cutoff = parseCalendarDate(clock.today);
+    cutoff.setDate(cutoff.getDate() - 7);
 
     const { data } = await deps.supabase
       .from("workout_logs")
       .select("exercise_name, actual_weight, actual_reps, completed_at, day_name, week_number")
       .eq("user_id", deps.userId)
       .eq("completed", true)
-      .gte("completed_at", sevenDaysAgo.toISOString())
+      .gte("completed_at", cutoff.toISOString())
       .order("completed_at", { ascending: false })
       .limit(200);
 
@@ -200,7 +199,7 @@ const streakModule: ContextModule<ContextDeps> = {
       }
     }
 
-    const currentWeek = getCurrentWeek(null);
+    const currentWeek = (await resolveUserClock(deps.supabase, deps.userId)).currentWeek;
     const weekSet = new Set(weeks);
     let current = 0;
     for (let w = currentWeek; w >= 1; w--) {

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError, buildContextBundleFromModules } from "@bot-native/sdk";
 import type { ToolResult } from "../types.js";
-import { getCurrentWeek } from "../week-calc.js";
+import { resolveUserClock } from "../user-clock.js";
 import { createContextModules } from "../context-modules.js";
 import type { createQueryTools } from "./queries.js";
 
@@ -37,7 +37,7 @@ export function createContextTools(
       return { currentStreakWeeks: 0, longestStreakWeeks: 0, completedWeeks: [] };
     }
 
-    const currentWeek = getCurrentWeek(null);
+    const currentWeek = (await resolveUserClock(supabase, userId)).currentWeek;
 
     // Calculate streaks
     let longestStreak = 1;

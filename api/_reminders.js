@@ -1,7 +1,9 @@
 // Pure decision logic for the daily workout reminder (slice 9.4).
 // Kept free of I/O so it's unit-tested; api/cron/reminders.js does the fetching.
 
-const REMINDER_TZ = 'America/Denver';
+import { DEFAULT_TIME_ZONE } from '../mcp/dist/shared/week-math.js';
+
+const REMINDER_TZ = DEFAULT_TIME_ZONE;
 
 /** { date: 'YYYY-MM-DD', dayName: 'Thursday', hour: 16 } in the given tz. */
 export function localNow(now = new Date(), timeZone = REMINDER_TZ) {

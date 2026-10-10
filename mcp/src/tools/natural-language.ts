@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@bot-native/sdk";
 import type { ToolResult, ProgramExercise } from "../types.js";
-import { getTodayName } from "../week-calc.js";
+import { resolveUserClock } from "../user-clock.js";
 import type { createQueryTools } from "./queries.js";
 import type { createActionTools } from "./actions.js";
 import type { LlmCaller } from "./generation.js";
@@ -120,8 +120,12 @@ export function createNaturalLanguageTools(
     const todayData = todayResult.data as Record<string, unknown>;
 
     const resolvedGymId = todayData.gym_id as string | undefined;
-    const currentWeek = (todayData.current_week as number) ?? weekNumber ?? 1;
-    const resolvedDayName = (todayData.day_name as string) ?? dayName ?? getTodayName();
+    const needsClock =
+      ((todayData.current_week == null && weekNumber == null) ||
+        (todayData.day_name == null && !dayName));
+    const clock = needsClock ? await resolveUserClock(supabase, userId) : null;
+    const currentWeek = (todayData.current_week as number) ?? weekNumber ?? clock!.currentWeek;
+    const resolvedDayName = (todayData.day_name as string) ?? dayName ?? clock!.dayName;
     const exercises = (todayData.exercises as ResolvedProgramExercise[]) ?? [];
 
     if (!resolvedGymId) {
