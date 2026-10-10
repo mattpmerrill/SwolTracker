@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AppError } from "@bot-native/sdk";
 import type { EventEmitter } from "../bot-native-shim.js";
 import type { ToolResult, WeekProgram } from "../types.js";
-import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import { resolveUserClock } from "../user-clock.js";
 import { normalizeExerciseName } from "../exercise-normalizer.js";
 import { findEstimatedPrs } from "../e1rm.js";
 import type { createQueryTools } from "./queries.js";
@@ -111,20 +111,11 @@ export function createActionTools(
     const resolvedGymId = await queries.resolveGymId(gymId);
     if (!resolvedGymId) return null;
 
-    let week = weekNumber;
-    if (!week) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("program_start_date")
-        .eq("id", userId)
-        .single();
-      week = getCurrentWeek(profile?.program_start_date ?? null);
-    }
-
+    const clock = !weekNumber || !dayName ? await resolveUserClock(supabase, userId) : null;
     return {
       gymId: resolvedGymId,
-      weekNumber: week,
-      dayName: dayName ?? getTodayName(),
+      weekNumber: weekNumber ?? clock!.currentWeek,
+      dayName: dayName ?? clock!.dayName,
     };
   }
 
@@ -719,7 +710,7 @@ export function createActionTools(
   }
 
   async function generate_weekly_summary(weekNumber?: number, gymId?: string): Promise<ToolResult> {
-    const slot = await resolveWorkoutSlot(gymId, weekNumber, getTodayName());
+    const slot = await resolveWorkoutSlot(gymId, weekNumber);
     if (!slot) {
       throw AppError.notFound("No gym found.");
     }
@@ -865,7 +856,8 @@ export function createActionTools(
       throw AppError.notFound("No gym found.");
     }
 
-    const todayName = getTodayName();
+    const clock = await resolveUserClock(supabase, userId);
+    const todayName = clock.dayName;
 
     // Get today's program
     const todayResult = await queries.get_todays_workout(resolvedGymId, todayName);
@@ -890,19 +882,18 @@ export function createActionTools(
       };
     }
 
-    // Check time threshold (use UTC hour + approximate MT offset: UTC-6 in MDT)
-    // Better: compare against threshold in a timezone-agnostic way using Date
-    const nowUTC = new Date();
-    const nowHourMT = ((nowUTC.getUTCHours() - 6) + 24) % 24; // MDT = UTC-6
+    // Threshold is a wall-clock hour in the user's zone, not UTC-6. MDT/MST
+    // both shift, and a hardcoded offset was already wrong half the year.
+    const nowHour = clock.hour;
 
-    if (nowHourMT < thresholdHour) {
+    if (nowHour < thresholdHour) {
       return {
         success: true,
-        message: `No sets logged today (${todayName}) but it's only ${nowHourMT}:00 MT — reminder threshold is ${thresholdHour}:00 MT. Check back later.`,
+        message: `No sets logged today (${todayName}) but it's only ${nowHour}:00 in ${clock.timeZone} — reminder threshold is ${thresholdHour}:00. Check back later.`,
         data: {
           action: "skipped",
           reason: "too_early",
-          current_hour_mt: nowHourMT,
+          current_hour_mt: nowHour,
           threshold_hour: thresholdHour,
           day_name: todayName,
         },
@@ -944,7 +935,7 @@ export function createActionTools(
         focus,
         exercises_count: exerciseCount,
         threshold_hour: thresholdHour,
-        triggered_at: nowUTC.toISOString(),
+        triggered_at: new Date().toISOString(),
       });
     } catch (err: any) {
       return {
@@ -956,7 +947,7 @@ export function createActionTools(
 
     return {
       success: true,
-      message: `🏋️ Reminder event emitted for ${todayName} — ${focus} (${exerciseCount} exercises). No sets logged yet and it's past ${thresholdHour}:00 MT.`,
+      message: `🏋️ Reminder event emitted for ${todayName} — ${focus} (${exerciseCount} exercises). No sets logged yet and it's past ${thresholdHour}:00 in ${clock.timeZone}.`,
       data: {
         action: "reminder_sent",
         day_name: todayName,
@@ -987,7 +978,7 @@ export function createActionTools(
     reason?: string,
     gymId?: string
   ): Promise<ToolResult> {
-    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName ?? getTodayName());
+    const slot = await resolveWorkoutSlot(gymId, weekNumber, dayName);
     if (!slot) {
       throw AppError.notFound("No gym found.");
     }

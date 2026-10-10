@@ -5,7 +5,10 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContextModule } from "@bot-native/sdk";
-import { getCurrentWeek, getTodayName } from "./week-calc.js";
+import { parseCalendarDate, formatWeekRange } from "./week-calc.js";
+import { resolveUserClock, weekWindowFor } from "./user-clock.js";
+import { classifySet, consecutiveOutcomeStreak, sessionOutcome } from "../../shared/set-outcome.js";
+import type { LoggedSetOutcome } from "../../shared/set-outcome.js";
 import type { CurrentMax, ProgramDay, WorkoutProgramRow } from "./types.js";
 
 export interface ContextDeps {
@@ -15,50 +18,69 @@ export interface ContextDeps {
 
 // ── Shared helpers ─────────────────────────────────────────
 
-async function resolveGymId(deps: ContextDeps): Promise<string | null> {
+async function resolvePrimaryGym(deps: ContextDeps): Promise<{ id: string; name: string | null } | null> {
   const { data } = await deps.supabase
     .from("gym_members")
-    .select("gym_id")
+    .select("gym_id, gyms(name)")
     .eq("user_id", deps.userId)
     .order("joined_at", { ascending: true })
     .order("gym_id", { ascending: true })
     .limit(1);
-  return data?.[0]?.gym_id ?? null;
+  const row = data?.[0] as {
+    gym_id?: string;
+    gyms?: { name?: string } | Array<{ name?: string }> | null;
+  } | undefined;
+  if (!row?.gym_id) return null;
+  const joined = Array.isArray(row.gyms) ? row.gyms[0] : row.gyms;
+  const name = typeof joined?.name === "string" && joined.name.length > 0 ? joined.name : null;
+  return { id: row.gym_id, name };
+}
+
+async function resolveGymId(deps: ContextDeps): Promise<string | null> {
+  return (await resolvePrimaryGym(deps))?.id ?? null;
 }
 
 async function resolveCurrentWeek(deps: ContextDeps): Promise<number> {
-  const { data } = await deps.supabase
-    .from("profiles")
-    .select("program_start_date")
-    .eq("id", deps.userId)
-    .single();
-  return getCurrentWeek(data?.program_start_date ?? null);
+  return (await resolveUserClock(deps.supabase, deps.userId)).currentWeek;
 }
 
 // ── P10: Current program (today's workout) ────────────────
+
+function programWeekLabel(data: Record<string, unknown>): string {
+  if (
+    typeof data.week_start === "string" &&
+    typeof data.week_end === "string" &&
+    data.week_number != null
+  ) {
+    return `Week ${data.week_number} (${formatWeekRange(parseCalendarDate(data.week_start), parseCalendarDate(data.week_end))})`;
+  }
+  return `Week ${data.week}`;
+}
 
 const currentProgramModule: ContextModule<ContextDeps> = {
   key: "current_program",
   priority: 10,
   async load(deps) {
-    const gymId = await resolveGymId(deps);
-    if (!gymId) return { available: false };
-
-    const week = await resolveCurrentWeek(deps);
-    const day = getTodayName();
+    const gym = await resolvePrimaryGym(deps);
+    const clock = await resolveUserClock(deps.supabase, deps.userId);
+    const { range_label: _range, ...weekFields } = weekWindowFor(clock, clock.currentWeek);
+    const week = clock.currentWeek;
+    const day = clock.dayName;
+    const gymFields = { gym_id: gym?.id ?? null, gym_name: gym?.name ?? null };
+    if (!gym) return { available: false, week, day, ...weekFields, ...gymFields };
 
     const { data: programRow } = await deps.supabase
       .from("workout_programs")
       .select("program_data")
-      .eq("gym_id", gymId)
+      .eq("gym_id", gym.id)
       .eq("week_number", week)
       .single();
 
-    if (!programRow) return { available: false, week, day };
+    if (!programRow) return { available: false, week, day, ...weekFields, ...gymFields };
 
     const program = (programRow as Pick<WorkoutProgramRow, "program_data">).program_data;
     const today: ProgramDay | undefined = program[day];
-    if (!today) return { available: true, week, day, rest_day: true };
+    if (!today) return { available: true, week, day, rest_day: true, ...weekFields, ...gymFields };
 
     return {
       available: true,
@@ -71,12 +93,15 @@ const currentProgramModule: ContextModule<ContextDeps> = {
         sets: ex.sets,
         reps: ex.reps,
       })),
+      ...weekFields,
+      ...gymFields,
     };
   },
   summarize(data) {
     if (!data.available) return "No active program yet.";
-    if (data.rest_day) return `Today (Week ${data.week}, ${data.day}) is a rest day.`;
-    return `Today: Week ${data.week} ${data.day} — ${data.focus}, ${data.exercise_count} exercises.`;
+    const label = programWeekLabel(data);
+    if (data.rest_day) return `Today (${label}, ${data.day}) is a rest day.`;
+    return `Today: ${label} ${data.day} — ${data.focus}, ${data.exercise_count} exercises.`;
   },
 };
 
@@ -86,15 +111,17 @@ const recentLogsModule: ContextModule<ContextDeps> = {
   key: "recent_logs",
   priority: 9,
   async load(deps) {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const clock = await resolveUserClock(deps.supabase, deps.userId);
+    // Lookback is calendar days in the user's zone, not the UTC process date.
+    const cutoff = parseCalendarDate(clock.today);
+    cutoff.setDate(cutoff.getDate() - 7);
 
     const { data } = await deps.supabase
       .from("workout_logs")
       .select("exercise_name, actual_weight, actual_reps, completed_at, day_name, week_number")
       .eq("user_id", deps.userId)
       .eq("completed", true)
-      .gte("completed_at", sevenDaysAgo.toISOString())
+      .gte("completed_at", cutoff.toISOString())
       .order("completed_at", { ascending: false })
       .limit(200);
 
@@ -198,7 +225,7 @@ const streakModule: ContextModule<ContextDeps> = {
       }
     }
 
-    const currentWeek = getCurrentWeek(null);
+    const currentWeek = (await resolveUserClock(deps.supabase, deps.userId)).currentWeek;
     const weekSet = new Set(weeks);
     let current = 0;
     for (let w = currentWeek; w >= 1; w--) {
@@ -309,32 +336,30 @@ const upcomingDeloadModule: ContextModule<ContextDeps> = {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      actual_reps: number | string;
+      actual_reps: number | string | null;
       prescribed_reps: number | string | null;
     }>;
 
-    const parseReps = (v: number | string | null | undefined) => {
-      if (typeof v === "number") return v;
-      const match = String(v ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    };
-
-    // Aggregate per (exercise, session) whether all prescribed reps were hit.
-    const sessionMap = new Map<string, { week: number; day: string; hit: boolean }>();
+    // Same session rule as get_overload_recommendations: unmeasured sets are not misses.
+    const sessionMap = new Map<string, { week: number; day: string; set_outcomes: LoggedSetOutcome[] }>();
     for (const log of logs) {
       const key = `${log.exercise_name}::${log.week_number}::${log.day_name}`;
-      const prev = sessionMap.get(key) ?? { week: log.week_number, day: log.day_name, hit: true };
-      const actual = parseReps(log.actual_reps);
-      const prescribed = log.prescribed_reps == null ? null : parseReps(log.prescribed_reps);
-      if (prescribed !== null && actual < prescribed) prev.hit = false;
+      const prev = sessionMap.get(key) ?? { week: log.week_number, day: log.day_name, set_outcomes: [] };
+      prev.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: true,
+      }));
       sessionMap.set(key, prev);
     }
 
-    const byExercise = new Map<string, Array<{ week: number; day: string; hit: boolean }>>();
+    const byExercise = new Map<string, Array<{ week: number; day: string; outcome: LoggedSetOutcome }>>();
     for (const [key, session] of sessionMap) {
+      const outcome = sessionOutcome(session.set_outcomes);
+      if (outcome === "not_logged") continue;
       const [exName] = key.split("::");
       const arr = byExercise.get(exName) ?? [];
-      arr.push(session);
+      arr.push({ week: session.week, day: session.day, outcome });
       byExercise.set(exName, arr);
     }
 
@@ -345,12 +370,8 @@ const upcomingDeloadModule: ContextModule<ContextDeps> = {
         if (a.week !== b.week) return b.week - a.week;
         return dayOrder.indexOf(b.day) - dayOrder.indexOf(a.day);
       });
-      let misses = 0;
-      for (const s of sorted) {
-        if (s.hit) break;
-        misses += 1;
-      }
-      if (misses >= 2) candidates.push(ex);
+      const { consecutiveMisses } = consecutiveOutcomeStreak(sorted);
+      if (consecutiveMisses >= 2) candidates.push(ex);
     }
 
     return { candidates };

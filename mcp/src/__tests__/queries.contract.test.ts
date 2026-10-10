@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AppError, isAppError } from '@bot-native/sdk';
 import { createQueryTools } from '../tools/queries.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
@@ -198,5 +198,327 @@ describe('MCP queries contract', () => {
       ['joined_at', { ascending: true }],
       ['gym_id', { ascending: true }],
     ]);
+  });
+
+  // Unmeasured mobility/timed work must not look like missed reps. These rows
+  // match sets Aleesha actually saved: completed, actual_reps NULL.
+  function unmeasuredCoachingFixture() {
+    const row = (
+      day: string,
+      exercise: string,
+      prescribed: number | string,
+      actual: number | string | null,
+      weight: number | null = null,
+    ) => ({
+      week_number: 1,
+      day_name: day,
+      exercise_name: exercise,
+      actual_weight: weight,
+      actual_reps: actual,
+      prescribed_weight: weight,
+      prescribed_reps: prescribed,
+      completed: true,
+      completed_at: '2026-10-01T18:00:00.000Z',
+    });
+    return [
+      row('Monday', 'Jaw Release', '20s', null),
+      row('Wednesday', 'Jaw Release', '20s', null),
+      row('Monday', 'Face Yoga', '10x', null),
+      row('Wednesday', 'Face Yoga', '10x', null),
+      row('Monday', 'Goblet Squat', 10, 8, 25),
+      row('Wednesday', 'Goblet Squat', 10, 8, 25),
+      row('Monday', 'Bench Press', 10, 10, 95),
+      row('Tuesday', 'Bench Press', '30–40 sec', null),
+      row('Wednesday', 'Bench Press', 10, 10, 95),
+      row('Friday', 'Bench Press', 10, 10, 95),
+    ];
+  }
+
+  function seedCoachingReads(sb: ReturnType<typeof createMcpMockSupabase>, logs: unknown[]) {
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    sb.respond('profiles.single', {
+      data: { id: 'u1', name: 'Aleesha', program_start_date: null },
+      error: null,
+    });
+    sb.respond('current_user_maxes.list', { data: [], error: null });
+    sb.respond('workout_logs.list', { data: logs, error: null });
+    sb.respond('workout_completions.list', { data: [], error: null });
+    sb.respond('missed_days.list', { data: [], error: null });
+    sb.respond('workout_programs.list', { data: [], error: null });
+    sb.respond('session_notes.list', { data: [], error: null });
+  }
+
+  it('does not deload unmeasured timed or per-side sets, and still flags real misses and hits', async () => {
+    const sb = createMcpMockSupabase();
+    seedCoachingReads(sb, unmeasuredCoachingFixture());
+    const tools = createQueryTools(sb, 'u1');
+    const result = await tools.get_overload_recommendations('g1', 4);
+    const recs = (result.data as any).recommendations as Array<{ exercise_name: string; type: string; status_label: string }>;
+    const byName = Object.fromEntries(recs.map((rec) => [rec.exercise_name, rec]));
+
+    expect(byName['Jaw Release']).toBeUndefined();
+    expect(byName['Face Yoga']).toBeUndefined();
+    expect(result.message).not.toContain('Jaw Release');
+    expect(result.message).not.toContain('Face Yoga');
+
+    expect(byName['Goblet Squat']?.type).toBe('deload');
+    expect(byName['Goblet Squat']?.status_label).toBe('Check load');
+
+    // The timed Tuesday session is skipped, so the three measured hits still level up.
+    expect(byName['Bench Press']?.type).toBe('increase');
+    expect(byName['Bench Press']?.status_label).toBe('Ready to level up');
+  });
+
+  it('prints done (no rep count) for unmeasured sessions, not missed reps', async () => {
+    const sb = createMcpMockSupabase();
+    seedCoachingReads(sb, [
+      {
+        week_number: 1,
+        day_name: 'Monday',
+        exercise_name: 'Jaw Release',
+        actual_weight: null,
+        actual_reps: null,
+        prescribed_weight: null,
+        prescribed_reps: '20s',
+        completed: true,
+        completed_at: '2026-10-01T18:00:00.000Z',
+      },
+      {
+        week_number: 1,
+        day_name: 'Monday',
+        exercise_name: 'Goblet Squat',
+        actual_weight: 25,
+        actual_reps: 8,
+        prescribed_weight: 25,
+        prescribed_reps: 10,
+        completed: true,
+        completed_at: '2026-10-01T18:00:00.000Z',
+      },
+    ]);
+    const tools = createQueryTools(sb, 'u1');
+    const result = await tools.get_training_history_summary('g1', 4);
+    const sessions = (result.data as any).week_summaries[1].exercise_sessions as Array<{
+      exercise_name: string;
+      hit_all_reps: boolean;
+      outcome: string;
+    }>;
+    const jaw = sessions.find((session) => session.exercise_name === 'Jaw Release');
+    const squat = sessions.find((session) => session.exercise_name === 'Goblet Squat');
+
+    expect(jaw?.outcome).toBe('done_unmeasured');
+    expect(jaw?.hit_all_reps).toBe(false);
+    expect(squat?.outcome).toBe('missed');
+    expect(result.message).toContain('Jaw Release');
+    expect(result.message).toContain('done (no rep count)');
+    expect(result.message).not.toMatch(/Jaw Release:.*missed/);
+    expect(result.message).toContain('missed reps');
+  });
+
+  it('get_todays_workout without week/day uses the user zone, not the process clock', async () => {
+    // Sunday 22:30 MDT. A UTC process clock already thinks this is Monday of week 19.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-05T04:30:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      sb.respond('gym_members.list', {
+        data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+        error: null,
+      });
+      sb.respond('profiles.single', {
+        data: { program_start_date: '2026-06-01', timezone: null },
+        error: null,
+      });
+      const tools = createQueryTools(sb, 'u1');
+      const result = await tools.get_todays_workout();
+      expect((result.data as any).current_week).toBe(18);
+      expect((result.data as any).day_name).toBe('Sunday');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+const WEEK_19 = 'Week 19 (Mon Oct 5 – Sun Oct 11)';
+const WEEK_18 = 'Week 18 (Mon Sep 28 – Sun Oct 4)';
+
+function seedDenverClock(sb: ReturnType<typeof createMcpMockSupabase>) {
+  sb.respond('gym_members.list', {
+    data: [{ gym_id: 'g1', role: 'owner', joined_at: '2026-01-01', gyms: { id: 'g1', name: 'Home' } }],
+    error: null,
+  });
+  sb.respond('profiles.single', {
+    data: { program_start_date: '2026-06-01', timezone: null },
+    error: null,
+  });
+}
+
+describe('authoritative week dates', () => {
+  it('get_todays_workout pins week 19 to Mon Oct 5 – Sun Oct 11 in the user zone', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      seedDenverClock(sb);
+      sb.respond('workout_programs.single', {
+        data: {
+          program_data: {
+            Friday: { focus: 'Pull', exercises: [{ name: 'Row', sets: 3, reps: '8' }] },
+          },
+        },
+        error: null,
+      });
+      sb.respond('current_user_maxes.list', { data: [], error: null });
+      sb.respond('workout_logs.list', { data: [], error: null });
+      sb.respond('workout_completions.maybeSingle', { data: null, error: null });
+
+      const result = await createQueryTools(sb, 'u1').get_todays_workout();
+      const data = result.data as Record<string, unknown>;
+
+      expect(data.week_number).toBe(19);
+      expect(data.current_week).toBe(19);
+      expect(data.week_start).toBe('2026-10-05');
+      expect(data.week_end).toBe('2026-10-11');
+      expect(data.today).toBe('2026-10-09');
+      expect(data.time_zone).toBe('America/Denver');
+      expect(result.message).toContain(WEEK_19);
+      expect(result.message).toContain('Friday — Pull');
+      expect(sb.calls.filter(([table, op]) => table === 'profiles' && op === 'from')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('get_weekly_workout with an explicit week_number dates that week, not the current one', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      seedDenverClock(sb);
+      sb.respond('workout_programs.single', {
+        data: {
+          program_data: {
+            Monday: { focus: 'Push', exercises: [{ name: 'Bench', sets: 3, reps: '5' }] },
+          },
+        },
+        error: null,
+      });
+      sb.respond('current_user_maxes.list', { data: [], error: null });
+
+      const result = await createQueryTools(sb, 'u1').get_weekly_workout(18);
+      const data = result.data as Record<string, unknown>;
+
+      expect(data.week_number).toBe(18);
+      expect(data.week_start).toBe('2026-09-28');
+      expect(data.week_end).toBe('2026-10-04');
+      expect(data.today).toBe('2026-10-09');
+      expect(data.time_zone).toBe('America/Denver');
+      expect(result.message).toContain(WEEK_18);
+      expect(result.message).toContain('total sets');
+      expect(sb.calls.filter(([table, op]) => table === 'profiles' && op === 'from')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('get_program_overview and get_workout_logs carry the same current-week dates', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      seedDenverClock(sb);
+      sb.respond('workout_programs.list', { data: [], error: null });
+      sb.respond('workout_logs.list', { data: [], error: null });
+      const tools = createQueryTools(sb, 'u1');
+
+      const overview = await tools.get_program_overview();
+      expect(overview.data).toMatchObject({
+        current_week: 19,
+        week_number: 19,
+        week_start: '2026-10-05',
+        week_end: '2026-10-11',
+        today: '2026-10-09',
+        time_zone: 'America/Denver',
+      });
+      expect(overview.message).toContain(WEEK_19);
+
+      const logs = await tools.get_workout_logs(18);
+      expect(logs.data).toMatchObject({
+        week_number: 18,
+        week_start: '2026-09-28',
+        week_end: '2026-10-04',
+        today: '2026-10-09',
+        time_zone: 'America/Denver',
+      });
+      expect(logs.message).toContain(WEEK_18);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('authoritative gym', () => {
+  it('list_gyms marks the oldest membership primary and says to use it', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [
+        { gym_id: 'g-old', role: 'owner', gyms: { id: 'g-old', name: 'Home' } },
+        { gym_id: 'g-new', role: 'member', gyms: { id: 'g-new', name: 'Shadow' } },
+      ],
+      error: null,
+    });
+    const result = await createQueryTools(sb, 'u1').list_gyms();
+    const gyms = (result.data as { gyms: Array<Record<string, unknown>> }).gyms;
+
+    expect(gyms).toEqual([
+      { id: 'g-old', name: 'Home', role: 'owner', primary: true },
+      { id: 'g-new', name: 'Shadow', role: 'member', primary: false },
+    ]);
+    expect(result.message.startsWith(
+      'Use gym "Home" (g-old) for everything. Omit gym_id in tool calls and it is used automatically.',
+    )).toBe(true);
+    expect(result.message).toContain('Your gyms:');
+    expect(result.message).toContain('1. Home (g-old) — role: owner');
+    expect(result.message).not.toContain('You have exactly one gym.');
+    const gymCalls = sb.calls.filter(([table]) => table === 'gym_members').map(([, op, args]) => [op, ...args]);
+    expect(gymCalls).toContainEqual(['order', 'joined_at', { ascending: true }]);
+    expect(gymCalls).toContainEqual(['order', 'gym_id', { ascending: true }]);
+  });
+
+  it('list_gyms says the user has exactly one gym when that is true', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    const result = await createQueryTools(sb, 'u1').list_gyms();
+    expect(result.message.startsWith(
+      'Use gym "Home" (g1) for everything. Omit gym_id in tool calls and it is used automatically.',
+    )).toBe(true);
+    expect(result.message).toContain('You have exactly one gym.');
+    expect((result.data as { gyms: Array<{ primary: boolean }> }).gyms[0].primary).toBe(true);
+  });
+
+  it('a group member is not told they have one gym; logging gym and leader program are named', async () => {
+    const sb = createMcpMockSupabase();
+    sb.respond('gym_members.list', {
+      data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+      error: null,
+    });
+    sb.respond('rpc.get_leader_gym_id', { data: 'leader-1', error: null });
+    sb.respond('gyms.maybeSingle', { data: { id: 'leader-1', name: 'Coach Gym' }, error: null });
+
+    const result = await createQueryTools(sb, 'u1').list_gyms();
+
+    expect(result.message.startsWith(
+      'Use gym "Home" (g1) for logging. Omit gym_id in tool calls and it is used automatically.',
+    )).toBe(true);
+    expect(result.message).toContain('You follow the leader\'s program at gym "Coach Gym" (leader-1).');
+    expect(result.message).not.toContain('You have exactly one gym.');
+    expect(result.message).not.toContain('for everything');
+    expect(sb.calls).toContainEqual(['rpc', 'get_leader_gym_id', [{ p_member_id: 'u1' }]]);
+    expect((result.data as { gyms: Array<{ primary: boolean }> }).gyms[0].primary).toBe(true);
   });
 });

@@ -14,9 +14,22 @@ import type {
   ProgramDay,
   ProgramExercise,
 } from "../types.js";
-import { getCurrentWeek, getTodayName } from "../week-calc.js";
+import { resolveUserClock, weekWindowFor, type UserClock } from "../user-clock.js";
+import {
+  classifySet,
+  consecutiveOutcomeStreak,
+  parsePrescription,
+  sessionOutcome,
+  sessionRepsLabel,
+  type LoggedSetOutcome,
+} from "../../../shared/set-outcome.js";
 
 export function createQueryTools(supabase: SupabaseClient, userId: string) {
+  function describeWeek(clock: UserClock, weekNumber: number) {
+    const { range_label, ...fields } = weekWindowFor(clock, weekNumber);
+    return { fields, label: `Week ${weekNumber} (${range_label})` };
+  }
+
   // ── Helpers ──────────────────────────────────────────────
 
   // "First gym" must be deterministic: oldest membership first, gym_id as the tie-breaker.
@@ -57,13 +70,19 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     return writable.find((g) => g.id === gymId)?.id ?? null;
   }
 
+  async function resolveLeaderProgramGym(): Promise<{ id: string; name: string } | null> {
+    // Same pick as the web bootstrap: get_leader_gym_id (accepted member → leader's
+    // oldest owned gym). Service role passes _require_self. A miss is not a member.
+    const { data, error } = await supabase.rpc("get_leader_gym_id", { p_member_id: userId });
+    if (error || data == null || data === "") return null;
+    const id = String(data);
+    const { data: gym } = await supabase.from("gyms").select("id, name").eq("id", id).maybeSingle();
+    const name = (gym as { name?: string } | null)?.name;
+    return { id, name: name && name.length > 0 ? name : "the leader's gym" };
+  }
+
   async function resolveCurrentWeek(): Promise<number> {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("program_start_date")
-      .eq("id", userId)
-      .single();
-    return getCurrentWeek(profile?.program_start_date ?? null);
+    return (await resolveUserClock(supabase, userId)).currentWeek;
   }
 
   async function getUserMaxes(): Promise<Record<string, number>> {
@@ -202,13 +221,28 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: true, message: "No gyms found.", data: { gyms: [] } };
     }
 
+    const primary = gyms[0];
+    const leader = await resolveLeaderProgramGym();
     const lines = gyms.map(
       (g, i) => `${i + 1}. ${g.name} (${g.id}) — role: ${g.role}`
     );
+    // A group member logs to their own gym and follows the leader's program
+    // (web bootstrap: gyms[0] for logs, get_leader_gym_id for the program).
+    // Do not claim "exactly one gym" in that case — the program is not theirs.
+    const directive = leader
+      ? `Use gym "${primary.name}" (${primary.id}) for logging. Omit gym_id in tool calls and it is used automatically. You follow the leader's program at gym "${leader.name}" (${leader.id}).`
+      : `Use gym "${primary.name}" (${primary.id}) for everything. Omit gym_id in tool calls and it is used automatically.${gyms.length === 1 ? " You have exactly one gym." : ""}`;
     return {
       success: true,
-      message: `Your gyms:\n${lines.join("\n")}`,
-      data: { gyms: gyms.map((g) => ({ id: g.id, name: g.name, role: g.role })) },
+      message: `${directive}\nYour gyms:\n${lines.join("\n")}`,
+      data: {
+        gyms: gyms.map((g) => ({
+          id: g.id,
+          name: g.name,
+          role: g.role,
+          primary: g.id === primary.id,
+        })),
+      },
     };
   }
 
@@ -218,8 +252,10 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const week = weekNumber ?? await resolveCurrentWeek();
-    const day = dayName ?? getTodayName();
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const day = dayName ?? clock.dayName;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     const { data: programRow } = await supabase
       .from("workout_programs")
@@ -231,8 +267,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!programRow) {
       return {
         success: true,
-        message: `No program found for Week ${week}. Generate one first.`,
-        data: { current_week: week, day_name: day, gym_id: resolvedGymId },
+        message: `No program found for ${weekLabel}. Generate one first.`,
+        data: { current_week: week, day_name: day, gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -242,8 +278,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!today) {
       return {
         success: true,
-        message: `${day} is a rest day (Week ${week}).`,
-        data: { current_week: week, day_name: day, rest_day: true, gym_id: resolvedGymId },
+        message: `${day} is a rest day (${weekLabel}).`,
+        data: { current_week: week, day_name: day, rest_day: true, gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -327,7 +363,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Week ${week}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
+      message: `${weekLabel}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
       data: {
         current_week: week,
         day_name: day,
@@ -344,6 +380,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         total_logged_sets: totalLoggedSets,
         total_prescribed_sets: totalPrescribedSets,
         ad_hoc_logs: adHocLogs,
+        ...weekFields,
       },
     };
   }
@@ -354,7 +391,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const week = weekNumber ?? await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     const { data: programRow } = await supabase
       .from("workout_programs")
@@ -366,8 +405,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (!programRow) {
       return {
         success: true,
-        message: `No program found for Week ${week}.`,
-        data: { week_number: week, gym_id: resolvedGymId },
+        message: `No program found for ${weekLabel}.`,
+        data: { gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -397,8 +436,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Week ${week} (${totalSets} total sets):\n${lines.join("\n")}`,
-      data: { week_number: week, total_sets: totalSets, days, gym_id: resolvedGymId },
+      message: `${weekLabel} (${totalSets} total sets):\n${lines.join("\n")}`,
+      data: { total_sets: totalSets, days, gym_id: resolvedGymId, ...weekFields },
     };
   }
 
@@ -408,7 +447,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return { success: false, message: "No gym found for user.", data: {} };
     }
 
-    const currentWeek = await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const currentWeek = clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, currentWeek);
 
     const { data: rows } = await supabase
       .from("workout_programs")
@@ -420,8 +461,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     if (programs.length === 0) {
       return {
         success: true,
-        message: "No programs found.",
-        data: { current_week: currentWeek, total_weeks: 0, weeks: [] },
+        message: `No programs found. Currently ${weekLabel}.`,
+        data: { current_week: currentWeek, total_weeks: 0, weeks: [], gym_id: resolvedGymId, ...weekFields },
       };
     }
 
@@ -466,12 +507,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `Program overview (${programs.length} weeks, currently Week ${currentWeek}):\n${lines.join("\n")}`,
+      message: `Program overview (${programs.length} weeks, currently ${weekLabel}):\n${lines.join("\n")}`,
       data: {
         current_week: currentWeek,
         total_weeks: programs.length,
         weeks,
         gym_id: resolvedGymId,
+        ...weekFields,
       },
     };
   }
@@ -564,7 +606,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
   ): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
 
-    const week = weekNumber ?? await resolveCurrentWeek();
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const { fields: weekFields, label: weekLabel } = describeWeek(clock, week);
 
     let query = supabase
       .from("workout_logs")
@@ -583,12 +627,12 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const logs = (data as WorkoutLog[] | null) ?? [];
 
     const completedSets = logs.filter((l) => l.completed).length;
-    const summary = `Week ${week}${dayName ? `, ${dayName}` : ""}: ${completedSets} sets completed across ${new Set(logs.map((l) => l.exercise_name)).size} exercises.`;
+    const summary = `${weekLabel}${dayName ? `, ${dayName}` : ""}: ${completedSets} sets completed across ${new Set(logs.map((l) => l.exercise_name)).size} exercises.`;
 
     return {
       success: true,
       message: summary,
-      data: { week_number: week, day_name: dayName ?? null, logs },
+      data: { ...weekFields, day_name: dayName ?? null, logs },
     };
   }
 
@@ -684,7 +728,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         get_maxes(),
         supabase
           .from("workout_logs")
-          .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
+          .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed, completed_at")
           .eq("user_id", userId)
           .eq("gym_id", resolvedGymId)
           .eq("completed", true)
@@ -721,8 +765,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const maxes = (maxesResult.data as any)?.maxes ?? {};
     const logs = (logsResult.data ?? []) as Array<{
       week_number: number; day_name: string; exercise_name: string;
-      actual_weight: number; actual_reps: number | string;
+      actual_weight: number | null; actual_reps: number | string | null;
       prescribed_weight: number | null; prescribed_reps: number | string | null;
+      completed?: boolean | null;
       completed_at: string | null;
     }>;
     const completions = (completionsResult.data ?? []) as Array<{ week_number: number; day_name: string }>;
@@ -731,10 +776,10 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const sessionNotes = (sessionNotesResult.data ?? []) as Array<{ week_number: number; day_name: string; label: string | null; text: string }>;
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-    const parseReps = (value: number | string | null | undefined) => {
-      if (typeof value === "number") return value;
-      const match = String(value ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
+    const measuredRepCount = (value: unknown): number | null => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number.parseInt(value.trim(), 10);
+      return null;
     };
     const average = (values: number[]) =>
       values.length > 0
@@ -754,6 +799,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         avg_actual_reps: number;
         prescribed_reps: number | null;
         hit_all_reps: boolean;
+        outcome: LoggedSetOutcome;
       }>;
     }> = {};
 
@@ -781,7 +827,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       prescribed_weights: number[];
       actual_reps: number[];
       prescribed_reps: number[];
-      hit_all_reps: boolean;
+      set_outcomes: LoggedSetOutcome[];
+      sets_logged: number;
       completed_at: string | null;
     }>();
     for (const log of logs) {
@@ -795,21 +842,25 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           prescribed_weights: [],
           actual_reps: [],
           prescribed_reps: [],
-          hit_all_reps: true,
+          set_outcomes: [],
+          sets_logged: 0,
           completed_at: log.completed_at,
         });
       }
 
       const session = sessionMap.get(sessionKey)!;
-      const actualReps = parseReps(log.actual_reps);
-      const prescribedReps = log.prescribed_reps === null ? null : parseReps(log.prescribed_reps);
+      const prescription = parsePrescription(log.prescribed_reps);
+      const measuredActual = measuredRepCount(log.actual_reps);
       if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
       if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
-      session.actual_reps.push(actualReps);
-      if (prescribedReps !== null) session.prescribed_reps.push(prescribedReps);
-      if (prescribedReps !== null && actualReps < prescribedReps) {
-        session.hit_all_reps = false;
-      }
+      if (measuredActual != null) session.actual_reps.push(measuredActual);
+      if (prescription.kind === "reps") session.prescribed_reps.push(prescription.count);
+      session.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: log.completed,
+      }));
+      session.sets_logged += 1;
     }
 
     Array.from(sessionMap.values())
@@ -820,16 +871,19 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       .forEach((session) => {
         const summary = weekSummaries[session.week_number];
         if (!summary) return;
+        const outcome = sessionOutcome(session.set_outcomes);
+        if (outcome === "not_logged") return;
 
         summary.exercise_sessions.push({
           day_name: session.day_name,
           exercise_name: session.exercise_name,
-          sets_logged: session.actual_reps.length,
+          sets_logged: session.sets_logged,
           avg_actual_weight: average(session.actual_weights),
           avg_prescribed_weight: average(session.prescribed_weights),
           avg_actual_reps: average(session.actual_reps),
           prescribed_reps: session.prescribed_reps[0] ?? null,
-          hit_all_reps: session.hit_all_reps,
+          hit_all_reps: outcome === "hit",
+          outcome,
         });
       });
 
@@ -852,8 +906,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         .slice(0, 4)
         .map((session) => {
           const targetWeight = session.avg_actual_weight || session.avg_prescribed_weight || 0;
-          const hitStr = session.hit_all_reps ? "hit reps" : "missed reps";
-          return `    - ${session.day_name} ${session.exercise_name}: ${session.sets_logged} sets @ ~${targetWeight} lbs, ${hitStr}`;
+          return `    - ${session.day_name} ${session.exercise_name}: ${session.sets_logged} sets @ ~${targetWeight} lbs, ${sessionRepsLabel(session.outcome)}`;
         });
 
       const missedStr = ws.missed_days.length > 0
@@ -912,7 +965,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     const { data: logsRaw } = await supabase
       .from("workout_logs")
-      .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed_at")
+      .select("week_number, day_name, exercise_name, actual_weight, actual_reps, prescribed_weight, prescribed_reps, completed, completed_at")
       .eq("user_id", userId)
       .eq("gym_id", resolvedGymId)
       .eq("completed", true)
@@ -923,10 +976,11 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      actual_weight: number;
-      actual_reps: number | string;
+      actual_weight: number | null;
+      actual_reps: number | string | null;
       prescribed_weight: number | null;
       prescribed_reps: number | string | null;
+      completed?: boolean | null;
       completed_at: string | null;
     }>;
 
@@ -935,16 +989,11 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-    const parseReps = (value: number | string | null | undefined) => {
-      if (typeof value === "number") return value;
-      const match = String(value ?? "").match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    };
     const sessionMap = new Map<string, {
       week_number: number;
       day_name: string;
       exercise_name: string;
-      hit_all_reps: boolean;
+      set_outcomes: LoggedSetOutcome[];
       actual_weights: number[];
       prescribed_weights: number[];
     }>();
@@ -955,20 +1004,20 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           week_number: log.week_number,
           day_name: log.day_name,
           exercise_name: log.exercise_name,
-          hit_all_reps: true,
+          set_outcomes: [],
           actual_weights: [],
           prescribed_weights: [],
         });
       }
 
       const session = sessionMap.get(sessionKey)!;
-      const actualReps = parseReps(log.actual_reps);
-      const prescribedReps = log.prescribed_reps == null ? null : parseReps(log.prescribed_reps);
       if (typeof log.actual_weight === "number") session.actual_weights.push(log.actual_weight);
       if (typeof log.prescribed_weight === "number") session.prescribed_weights.push(log.prescribed_weight);
-      if (prescribedReps !== null && actualReps < prescribedReps) {
-        session.hit_all_reps = false;
-      }
+      session.set_outcomes.push(classifySet({
+        actual_reps: log.actual_reps,
+        prescribed_reps: log.prescribed_reps,
+        completed: log.completed,
+      }));
     }
 
     interface Recommendation {
@@ -983,13 +1032,15 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     }
 
     const recommendations: Recommendation[] = [];
-    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; hit_all_reps: boolean; hasWeight: boolean }>>();
+    const byExercise = new Map<string, Array<{ week_number: number; day_name: string; outcome: LoggedSetOutcome; hasWeight: boolean }>>();
     Array.from(sessionMap.values()).forEach((session) => {
+      const outcome = sessionOutcome(session.set_outcomes);
+      if (outcome === "not_logged") return;
       const sessions = byExercise.get(session.exercise_name) ?? [];
       sessions.push({
         week_number: session.week_number,
         day_name: session.day_name,
-        hit_all_reps: session.hit_all_reps,
+        outcome,
         hasWeight: session.actual_weights.some((w) => w > 0) || session.prescribed_weights.some((w) => w > 0),
       });
       byExercise.set(session.exercise_name, sessions);
@@ -1018,17 +1069,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         continue;
       }
 
-      let consecutiveHits = 0;
-      let consecutiveMisses = 0;
-      for (const session of sessions) {
-        if (session.hit_all_reps) {
-          if (consecutiveMisses > 0) break;
-          consecutiveHits += 1;
-        } else {
-          if (consecutiveHits > 0) break;
-          consecutiveMisses += 1;
-        }
-      }
+      const { consecutiveHits, consecutiveMisses } = consecutiveOutcomeStreak(sessions);
 
       const isBodyweight = !latest.hasWeight;
       if (consecutiveHits >= 3) {

@@ -1,9 +1,8 @@
 // Daily workout reminder push (slice 9.4). Triggered by Vercel Cron.
 // Auth: Vercel sends `Authorization: Bearer ${CRON_SECRET}` on cron calls.
 import { createClient } from '@supabase/supabase-js';
-import { calculateCurrentWeek } from '../../mcp/dist/shared/week-math.js';
 import { configureWebPush, sendToSubscriptions } from '../_push.js';
-import { localNow, reminderDecision, reminderPayload } from '../_reminders.js';
+import { localNow, reminderClock, reminderDecision, reminderPayload } from '../_reminders.js';
 
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
@@ -18,7 +17,10 @@ export default async function handler(req, res) {
   if (!url || !key) return res.status(500).json({ error: 'Server misconfigured.' });
   const supabase = createClient(url, key);
 
-  const today = localNow();
+  // One instant for the whole run. The summary date is the app-default zone;
+  // each user's date, day and week come from their own zone via reminderClock.
+  const now = new Date();
+  const today = localNow(now);
   const { data: subs, error } = await supabase
     .from('push_subscriptions')
     .select('user_id, endpoint, keys, prefs, last_reminded_on');
@@ -37,7 +39,7 @@ export default async function handler(req, res) {
       const lastRemindedOn = devices.map((d) => d.last_reminded_on).filter(Boolean).sort().pop() ?? null;
 
       const [{ data: profile }, { data: membership }] = await Promise.all([
-        supabase.from('profiles').select('program_start_date').eq('id', userId).single(),
+        supabase.from('profiles').select('program_start_date, timezone').eq('id', userId).single(),
         supabase.from('gym_members').select('gym_id').eq('user_id', userId).order('joined_at', { ascending: true }).order('gym_id', { ascending: true }).limit(1),
       ]);
       const gymId = membership?.[0]?.gym_id;
@@ -45,23 +47,24 @@ export default async function handler(req, res) {
         results.push({ send: false, reason: 'no_program' });
         continue;
       }
-      const week = calculateCurrentWeek(profile.program_start_date);
+      const clock = reminderClock(profile.program_start_date, now, profile.timezone);
+      const week = clock.week;
 
       const [{ data: program }, { count: loggedSets }, { count: completedCount }, { count: missedCount }] = await Promise.all([
         supabase.from('workout_programs').select('program_data').eq('gym_id', gymId).eq('week_number', week).maybeSingle(),
         supabase.from('workout_logs').select('id', { count: 'exact', head: true })
-          .eq('user_id', userId).eq('week_number', week).eq('day_name', today.dayName).eq('completed', true),
+          .eq('user_id', userId).eq('week_number', week).eq('day_name', clock.dayName).eq('completed', true),
         supabase.from('workout_completions').select('id', { count: 'exact', head: true })
-          .eq('user_id', userId).eq('week_number', week).eq('day_name', today.dayName),
+          .eq('user_id', userId).eq('week_number', week).eq('day_name', clock.dayName),
         supabase.from('missed_days').select('id', { count: 'exact', head: true })
-          .eq('user_id', userId).eq('week_number', week).eq('day_name', today.dayName),
+          .eq('user_id', userId).eq('week_number', week).eq('day_name', clock.dayName),
       ]);
 
-      const dayPlan = program?.program_data?.[today.dayName] ?? null;
+      const dayPlan = program?.program_data?.[clock.dayName] ?? null;
       const decision = reminderDecision({
         prefs,
         lastRemindedOn,
-        today,
+        today: clock,
         dayPlan,
         loggedSets: loggedSets ?? 0,
         completed: (completedCount ?? 0) > 0,
@@ -71,7 +74,7 @@ export default async function handler(req, res) {
       if (decision.send) {
         const sent = await sendToSubscriptions(supabase, devices, reminderPayload(dayPlan));
         if (sent > 0) {
-          await supabase.from('push_subscriptions').update({ last_reminded_on: today.date }).eq('user_id', userId);
+          await supabase.from('push_subscriptions').update({ last_reminded_on: clock.date }).eq('user_id', userId);
         }
         results.push({ ...decision, sent });
       } else {

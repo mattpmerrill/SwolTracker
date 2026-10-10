@@ -112,6 +112,46 @@ describe('context modules', () => {
     }
   });
 
+  it('current_program carries authoritative week dates and the primary gym', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+    try {
+      const sb = createMcpMockSupabase();
+      seedHappyPath(sb);
+      sb.respond('profiles.single', {
+        data: { program_start_date: '2026-06-01', timezone: null },
+        error: null,
+      });
+      sb.respond('gym_members.list', {
+        data: [{ gym_id: 'g1', gyms: { name: 'Home' } }],
+        error: null,
+      });
+      sb.respond('workout_programs.single', {
+        data: {
+          program_data: {
+            Friday: {
+              focus: 'Pull',
+              exercises: [{ name: 'Row', sets: 3, reps: 8 }],
+            },
+          },
+        },
+        error: null,
+      });
+      const mod = createContextModules().find((m) => m.key === 'current_program')!;
+      const data = await mod.load({ supabase: sb as any, userId: 'u1' }) as Record<string, unknown>;
+      expect(data.week_number).toBe(19);
+      expect(data.week_start).toBe('2026-10-05');
+      expect(data.week_end).toBe('2026-10-11');
+      expect(data.today).toBe('2026-10-09');
+      expect(data.time_zone).toBe('America/Denver');
+      expect(data.gym_id).toBe('g1');
+      expect(data.gym_name).toBe('Home');
+      expect(mod.summarize(data)).toContain('Week 19 (Mon Oct 5 – Sun Oct 11)');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('current_program summary names focus + exercise count', async () => {
     const sb = createMcpMockSupabase();
     seedHappyPath(sb);

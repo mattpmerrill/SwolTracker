@@ -2,12 +2,38 @@
 
 Where the project stands and how to pick it up. Update this at the end of each working session.
 
+**Aleesha feedback (2026-10-09, branch feat/aleesha-feedback, not yet merged).**
+Not on `main` yet.
+- `shared/set-outcome.ts` is the one owner for set outcomes (`hit`, `missed`, `done_unmeasured`,
+  `not_logged`). Timed or unmeasured sets (`actual_reps` null, or a time prescription such as
+  `20s`) are no longer missed reps in MCP overload, training history, the context bundle deload,
+  web insights, and the AI generator modal.
+- Time zone: `shared/week-math.ts` adds `DEFAULT_TIME_ZONE` (`America/Denver`), `todayInZone`,
+  `isValidTimeZone`, `formatCalendarDate`, and optional `{ now, timeZone }` on
+  `calculateCurrentWeek` and `getTodayDayName`. MCP uses `resolveUserClock` in
+  `mcp/src/user-clock.ts` (profile time zone, otherwise Denver) for every day and week decision
+  instead of the UTC server clock. `get_streak` no longer always counts from week 1. Web
+  `ProgramContext` uses `profile.timezone` when it is valid. The reminder cron uses the user's
+  zone for the week too.
+- MCP responses: `get_todays_workout`, `get_weekly_workout`, `get_program_overview`,
+  `get_workout_logs` and the context bundle `current_program` add `week_number`, `week_start`,
+  `week_end`, `today` and `time_zone`. The text shows, for example, `Week 19 (Mon Oct 5 – Sun Oct 11)`.
+  The context bundle also adds `gym_id` and `gym_name`. `list_gyms` marks one gym `primary: true`
+  and says to use that gym for everything. `SKILL.md` already has the matching rules.
+- `migrations/042-authoritative-week.sql` is written and not applied. It makes `get_current_week`
+  Monday-aligned and time-zone-aware, adds trigger `profiles_start_date_write_once` (raises
+  `23514` once history exists; SQL escape hatch `SET LOCAL swoltracker.allow_redate = 'on'`), and
+  adds service-role-only `admin_set_program_start_date`, which `scripts/demo-seed.mjs` uses to
+  re-date the demo user. Demo seed re-dating fails until 042 is applied. Before applying, diff
+  the live `get_current_week` against the rollback body in that file (read 2026-10-09). If the
+  live function differs, the rollback is stale.
+
 **As of 2026-09-30.** The app is live at https://swol-tracker.vercel.app and deploys from `main`
 on every push. The Test and Knip workflows passed on the last `main` push (after merged PRs #3 to
 #7: Knip added and dead code removed, a lint fix, a Vite chunking cleanup, and a fix for the web
 app showing one program week ahead west of UTC, with a Denver-time regression test). Locally, `npm test`
-runs 316 tests in 54 files and `npm run lint` reports 0 errors and 17 warnings (count after the
-Phase 0.3 hotfix below, which is on branch `fix/phase0-db-hardening` and not yet merged).
+runs 359 tests in 59 files and `npm run lint` reports 0 errors and 17 warnings (2026-10-09, branch
+`feat/aleesha-feedback`, not yet merged; 316 tests in 54 files on 2026-09-30).
 
 **Phase 0.3 hotfix (2026-10-01, on `fix/phase0-db-hardening`, uncommitted at the time of writing).**
 Done while Snappy Coach is built, so the old app cannot undo a data repair:
@@ -25,8 +51,9 @@ Done while Snappy Coach is built, so the old app cannot undo a data repair:
   `create_user_gym` made idempotent so a repeat or racing call returns the existing gym) was tested on a scratch
   Postgres (including 160 concurrent calls) and applied to production on 2026-10-01; a repeat call
   as the demo user returned the existing gym and created nothing.
-- Not done: a database-level guard (trigger or column privilege) for the start date. RLS still lets
-  a signed-in user update their own `program_start_date` directly.
+- A database-level guard for the start date is addressed by `migrations/042-authoritative-week.sql`
+  once applied (trigger `profiles_start_date_write_once`). Until then, RLS still lets a signed-in
+  user update their own `program_start_date` directly.
 
 The code is feature-complete for its current scope and is resting while a refactor is planned as a
 separate project. This docs pass (README, AGENTS.md, architecture, ADRs, this file, screenshots)
@@ -55,7 +82,8 @@ was written on the branch `docs/readme-and-agents` and changes no app code.
 
 Migrations `001` to `040` are in `migrations/` (`040` is written but not yet applied). They are applied to production by hand, and the
 Supabase CLI history is incomplete, so check the live database rather than assuming a given
-migration is applied.
+migration is applied. `migrations/042-authoritative-week.sql` is written and not applied (see the
+Aleesha feedback section).
 
 ## Demo account
 
@@ -110,8 +138,9 @@ data you care about, and never paste a key into a tracked file.
 
 ## Known gaps, for the planned refactor
 
-Everything here was checked against the code on 2026-09-30. None of it is broken in production;
-it is where the code falls short of AGENTS.md.
+Everything here was checked against the code on 2026-09-30, except the reminder time zone line
+below (updated 2026-10-09). None of it is broken in production; it is where the code falls short
+of AGENTS.md.
 
 **Structure**
 
@@ -171,9 +200,10 @@ it is where the code falls short of AGENTS.md.
   allows 270 seconds. Long multi-week generations can time out on the client first.
 - The admin API-settings screen still saves provider keys into `app_settings`, but the proxy reads
   environment variables only, so those fields have no effect.
-- Reminders use one fixed time zone (`America/Denver` in `api/_reminders.js`) and run once a day,
-  and the push preference switches exist in the API and database but have no UI. The VAPID public
-  key is duplicated in `src/lib/push.js` and `api/_push.js`.
+- Reminders compute today and the program week in the user's time zone, or `America/Denver` when
+  the profile zone is missing or invalid. They still run once a day, and the push preference
+  switches exist in the API and database but have no UI. The VAPID public key is duplicated in
+  `src/lib/push.js` and `api/_push.js`.
 - The root `app.json` names `mcp/dist/server.js` as the entrypoint, but the build writes
   `mcp/dist/mcp/src/server.js`.
 - The `api/` functions import compiled output from `mcp/dist/`, so a fresh clone needs

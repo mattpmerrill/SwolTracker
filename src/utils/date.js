@@ -6,6 +6,7 @@ export {
   calculateCurrentWeek,
   getTodayDayName,
   getWeekDates,
+  isValidTimeZone,
 } from '../../shared/week-math'
 
 import { parseCalendarDate } from '../../shared/week-math'

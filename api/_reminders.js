@@ -1,7 +1,30 @@
 // Pure decision logic for the daily workout reminder (slice 9.4).
 // Kept free of I/O so it's unit-tested; api/cron/reminders.js does the fetching.
 
-const REMINDER_TZ = 'America/Denver';
+import { DEFAULT_TIME_ZONE, calculateCurrentWeek, isValidTimeZone } from '../mcp/dist/shared/week-math.js';
+
+const REMINDER_TZ = DEFAULT_TIME_ZONE;
+
+/** Profile zone if Intl accepts it, otherwise the app default. A UTC process clock must not win. */
+function reminderTimeZone(profileTimeZone) {
+  return typeof profileTimeZone === 'string' && isValidTimeZone(profileTimeZone)
+    ? profileTimeZone
+    : DEFAULT_TIME_ZONE;
+}
+
+/**
+ * Date, weekday, hour, and program week from one instant and one zone.
+ * calculateCurrentWeek without a zone uses the process calendar date, so on a
+ * UTC server Sunday evening Denver is already next week's Monday.
+ */
+export function reminderClock(programStartDate, now = new Date(), profileTimeZone) {
+  const timeZone = reminderTimeZone(profileTimeZone);
+  return {
+    ...localNow(now, timeZone),
+    week: calculateCurrentWeek(programStartDate, { now, timeZone }),
+    timeZone,
+  };
+}
 
 /** { date: 'YYYY-MM-DD', dayName: 'Thursday', hour: 16 } in the given tz. */
 export function localNow(now = new Date(), timeZone = REMINDER_TZ) {
