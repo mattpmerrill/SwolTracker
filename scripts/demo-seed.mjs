@@ -2,10 +2,14 @@
 /**
  * Seed the SwolTracker demo account with realistic fake data.
  *
- * Acts ONLY as the demo user: signs in with the anon key + password, so RLS
+ * Acts as the demo user: signs in with the anon key + password, so RLS
  * applies to every read and write. Program, logs, maxes and Coach Board notes
  * go through the same MCP endpoint an external agent would use, with a
  * short-lived `swol_` key minted by the demo user and revoked at the end.
+ * The one exception is a re-date: if the demo profile already has a different
+ * program_start_date, that write calls admin_set_program_start_date with the
+ * service-role key. Migration 042's write-once trigger blocks the user-session
+ * update once history exists, and PostgREST cannot set the allow_redate GUC.
  *
  * Idempotent: every step checks what already exists and skips it.
  *
@@ -18,6 +22,7 @@
  *   DEMO_EMAIL, DEMO_PASSWORD   required (email must end in @example.com)
  *   SUPABASE_URL                defaults to VITE_SUPABASE_URL
  *   SUPABASE_ANON_KEY           defaults to VITE_SUPABASE_ANON_KEY
+ *   SUPABASE_SERVICE_ROLE_KEY   required only to re-date an existing start date
  *   MCP_URL                     defaults to https://swol-tracker.vercel.app/api/mcp
  *
  * Secrets are read from the environment only and are never printed.
@@ -291,13 +296,21 @@ async function main() {
       });
       console.log('Completed onboarding');
     } else if (profile.program_start_date !== startDate) {
-      // The one sanctioned re-dating path, for the demo account only. The start date is write-once for
-      // users and agents (update_profile rejects it), so this script writes it directly as the demo user.
-      // If a DB-level write-once guard is added later, this branch must switch to a service-role client.
-      const { data: moved, error: dateErr } = await supabase
-        .from('profiles').update({ program_start_date: startDate }).eq('id', userId)
-        .select('program_start_date').single();
-      if (dateErr || !moved) throw new Error(`moving program start date failed: ${dateErr?.message ?? 'no row updated'}`);
+      // Migration 042 makes program_start_date write-once after history.
+      // PostgREST cannot SET swoltracker.allow_redate, so the user-session
+      // update is rejected. The demo account is still the only sanctioned
+      // re-date (the @example.com guard above); it goes through the
+      // service-role RPC, which opens the hatch for that update only.
+      const serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
+      if (!serviceKey) {
+        fail('set SUPABASE_SERVICE_ROLE_KEY to re-date the demo program start. The user update is blocked once training history exists.');
+      }
+      const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: moved, error: dateErr } = await admin.rpc('admin_set_program_start_date', {
+        p_user_id: userId,
+        p_start: startDate,
+      });
+      if (dateErr || moved == null) throw new Error(`moving program start date failed: ${dateErr?.message ?? 'no date returned'}`);
       console.log(`Moved program start date to ${startDate}`);
     }
 

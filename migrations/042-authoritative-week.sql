@@ -35,14 +35,20 @@
 --   * roles anon, authenticated, service_role (the REVOKE/GRANT below)
 --   * pg_catalog.pg_timezone_names contains America/Denver (stock tzdata)
 --
--- Escape hatch for demo-seed and repairs, same transaction as the UPDATE:
+-- Escape hatch for demo-seed and repairs.
+-- The trigger allows a change only when the GUC is exactly 'on' (case-sensitive),
+-- in the same transaction as the UPDATE. PostgREST and the Supabase client cannot
+-- set a custom GUC, so a user-session API update still raises once workout_logs
+-- or workout_completions exist. The exception text does not mention the hatch.
+--
+-- SQL editor / repair, same transaction as the UPDATE:
 --   SET LOCAL swoltracker.allow_redate = 'on';
--- The value must be exactly 'on' (case-sensitive). It is a SQL-session setting.
--- PostgREST and the Supabase client cannot set it, so an API update still raises
--- once workout_logs or workout_completions exist for that user. scripts/demo-seed.mjs
--- re-dates through the API and does not set this GUC; after this migration is
--- applied, that re-date fails when the demo user has history. A repair runs the
--- SET LOCAL in SQL. The exception text does not mention the hatch.
+--
+-- Service role (the path scripts/demo-seed.mjs uses). Not granted to PUBLIC,
+-- anon, or authenticated. The function sets the GUC for its UPDATE only and
+-- clears it before returning, so a later statement in the same transaction
+-- cannot re-date. is_local true also drops the setting at transaction end.
+--   SELECT public.admin_set_program_start_date('<user uuid>', DATE '2026-06-01');
 --
 -- How to verify (owner / SQL editor; the helpers are not granted to API roles):
 --   SELECT public.swol_week_number('2026-06-01', '2026-10-09');  -- 19
@@ -60,6 +66,8 @@
 --      SET program_start_date = DATE '2026-06-01'
 --    WHERE id = '<user uuid>';
 --   COMMIT;
+--   -- service_role only:
+--   SELECT public.admin_set_program_start_date('<user uuid>', DATE '2026-06-01');
 --
 /*
 ROLLBACK — do not execute as part of applying this file. Restores the live
@@ -68,6 +76,7 @@ CREATE OR REPLACE keeps the 039 grants; they are re-stated anyway.
 
 DROP TRIGGER IF EXISTS profiles_start_date_write_once ON public.profiles;
 DROP FUNCTION IF EXISTS public.profiles_start_date_write_once();
+DROP FUNCTION IF EXISTS public.admin_set_program_start_date(uuid, date);
 CREATE OR REPLACE FUNCTION public.get_current_week(p_user_id uuid)
  RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
@@ -233,3 +242,32 @@ CREATE TRIGGER profiles_start_date_write_once
   ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.profiles_start_date_write_once();
+
+-- Service-role re-date. PostgREST cannot SET a custom GUC, so demo-seed calls
+-- this instead of updating profiles as the user. SECURITY DEFINER: the UPDATE
+-- and the invoker trigger run as the owner, who can see history rows.
+-- The hatch is opened only for this UPDATE. set_config cannot take NULL, so an
+-- unset previous value is restored as '' — the trigger accepts only exact 'on'.
+CREATE OR REPLACE FUNCTION public.admin_set_program_start_date(p_user_id uuid, p_start date)
+RETURNS date
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_prev text;
+  v_start date;
+BEGIN
+  v_prev := current_setting('swoltracker.allow_redate', true);
+  PERFORM set_config('swoltracker.allow_redate', 'on', true);
+  UPDATE public.profiles
+     SET program_start_date = p_start
+   WHERE public.profiles.id = p_user_id
+   RETURNING public.profiles.program_start_date INTO v_start;
+  PERFORM set_config('swoltracker.allow_redate', COALESCE(v_prev, ''), true);
+  RETURN v_start;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_set_program_start_date(uuid, date) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_set_program_start_date(uuid, date) TO service_role;
