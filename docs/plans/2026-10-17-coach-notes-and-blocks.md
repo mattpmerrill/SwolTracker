@@ -189,3 +189,12 @@ repo, table, shared module), changelog line in `docs/WEB-ARCHITECTURE-AND-GAME-P
 ## Status
 
 Planned 2026-10-17.
+
+- Task 1 done (Sonnet, `81abe76`, `2d48c09`; Opus fix `043` re-runnable). Opus review: reran DoD (425 tests),
+  ran 043 twice on scratch Postgres 17 with RLS/CHECK probes. Extra over plan, accepted: `weight_lbs` kept on
+  save (regression test), `bestPreviousScore` in shared, stricter block schema, leader-program lookup.
+- Task 2 done (Sonnet, `3329f36`). Opus review: reran DoD (471 tests), checked no DB calls outside repos and
+  that block logs bypass the PR wrapper. Extra over plan, accepted: `logSet` `completed` override,
+  `useBlockTimer`, `blockScoreEntry`, `ClampedNote`. Not viewed in a browser.
+- Task 3 done (Opus): status, architecture, changelog, README/AGENTS tool count.
+- Remaining (Matt): PR + CI, apply 043, merge, backfill Week 38, update Joi skill and brief.
