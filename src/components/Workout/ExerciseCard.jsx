@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Loader2, Check, X } from 'lucide-react';
 import SetRow from './SetRow';
+import ClampedNote from './ClampedNote';
 import { calculateWeight, findMaxKey, resolveLoggedReps } from '../../utils/workout';
 import { applyWeightCascade, overrideStorageKey } from '../../utils/weightOverrides';
 import { getRestSeconds } from '../../utils/restCue';
@@ -214,12 +215,7 @@ export default function ExerciseCard({
 
         {exercise.note && (
           <div className="mb-4 px-3 py-2 bg-zinc-800/40 rounded-lg">
-            <p
-              className="text-xs text-zinc-400 break-words"
-              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-            >
-              {exercise.note}
-            </p>
+            <ClampedNote text={exercise.note} lines={3} />
           </div>
         )}
 

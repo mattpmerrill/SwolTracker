@@ -10,6 +10,7 @@ import { useMaxesActions } from '../hooks/useMaxesActions';
 import { useProfileActions } from '../hooks/useProfileActions';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import { useBlockScores } from '../hooks/useBlockScores';
 import { useProgram, useWorkoutLog } from '../contexts';
 
 import { Header, BottomNav } from './Layout';
@@ -75,6 +76,17 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   } = useWorkoutLog();
 
   const currentUser = authUser.id;
+
+  // Raw logSet (not handleLogSet): block reps are not a 1RM attempt, so no PR check.
+  const blockScores = useBlockScores({
+    currentUser,
+    gymId,
+    currentWeek,
+    currentDay,
+    weekProgram: workoutProgram?.[currentWeek],
+    toast,
+    logSet,
+  });
 
   const [estimatedPr, setEstimatedPr] = useState(null);
   const prCeilings = useRef({});
@@ -283,6 +295,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             onGenerateWorkout: aiGen.openAiGenerator,
             isSetLogged,
             onLogSet: handleLogSet,
+            blockScores,
             onAddMax: maxesActions.openQuickAddMax,
             getCompletionPercentage,
             isWorkoutComplete,

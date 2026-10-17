@@ -3,6 +3,8 @@ export { default as RestTimer } from './RestTimer';
 export { default as DaySelector } from './DaySelector';
 export { default as WorkoutFocus } from './WorkoutFocus';
 export { default as ExerciseCard } from './ExerciseCard';
+export { default as CoachNotesCard } from './CoachNotesCard';
+export { default as WorkoutBlockCard } from './WorkoutBlockCard';
 export { default as WeekEndReviewCard } from './WeekEndReviewCard';
 export { default as SquadStrip } from './SquadStrip';
 export { NoWorkoutState, RestDayState } from './EmptyStates';
