@@ -13,6 +13,7 @@ import { createErrorsRepo } from './repositories/errors'
 import { createOnboardingRepo } from './repositories/onboarding'
 import { createAgentChatRepo } from './repositories/agent-chat'
 import { createSessionNotesRepo } from './repositories/sessionNotes'
+import { createBlockScoresRepo } from './repositories/blockScores'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -59,6 +60,7 @@ const onboardingRepo = createOnboardingRepo(supabase, {
 })
 const agentChatRepo = createAgentChatRepo(supabase)
 const sessionNotesRepo = createSessionNotesRepo(supabase)
+const blockScoresRepo = createBlockScoresRepo(supabase)
 
 export const db = {
   ...profilesRepo,
@@ -75,4 +77,5 @@ export const db = {
   ...onboardingRepo,
   ...agentChatRepo,
   ...sessionNotesRepo,
+  ...blockScoresRepo,
 }

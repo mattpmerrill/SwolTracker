@@ -60,7 +60,8 @@ export function useWorkoutLogger({ currentUser, currentWeek, currentDay, workout
     const prescribedWeight = data.prescribedWeight ?? data.weight ?? null;
     const actualReps = data.actualReps ?? data.reps ?? null;
     const prescribedReps = data.prescribedReps ?? data.reps ?? null;
-    const completed = !wasCompleted;
+    // Taps toggle; a caller that must never un-log (a block score re-save) passes completed: true.
+    const completed = data.completed ?? !wasCompleted;
     const nextEntry = {
       actualWeight,
       prescribedWeight,

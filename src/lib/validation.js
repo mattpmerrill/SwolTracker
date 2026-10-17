@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { BLOCK_ID_RE, isValidBlockScore } from '../utils/workoutBlocks'
 
 // Profile schemas — must accept every field ProfileArea writes.
 // program_start_date is deliberately absent: it is write-once (set at onboarding), and this
@@ -27,6 +28,29 @@ export const maxWeightSchema = z.object({
 export const equipmentNameSchema = z.string().min(1).max(100).trim()
 
 export const searchQuerySchema = z.string().min(2).max(50).trim()
+
+// Block score (AMRAP / For Time). Field rules are the table's; the cross-field
+// rule is the shared isValidBlockScore, so web, MCP and the CHECK agree.
+export const BLOCK_SCORE_NOTE_MAX = 280
+
+export const blockScoreSchema = z.object({
+  block_id: z.string().regex(BLOCK_ID_RE),
+  benchmark: z.string().regex(BLOCK_ID_RE).nullable().optional(),
+  score_type: z.enum(['amrap', 'for_time']),
+  rounds: z.number().int().min(0).max(999).nullable().optional(),
+  reps: z.number().int().min(0).max(9999).nullable().optional(),
+  time_seconds: z.number().int().min(1).max(36000).nullable().optional(),
+  capped: z.boolean().default(false),
+  note: z.string().trim().max(BLOCK_SCORE_NOTE_MAX, `Note is too long (max ${BLOCK_SCORE_NOTE_MAX} characters)`).nullable().optional(),
+}).superRefine((score, ctx) => {
+  if (isValidBlockScore(score.score_type, score)) return
+  const message = score.score_type === 'amrap'
+    ? 'Enter the rounds you completed.'
+    : score.capped
+      ? 'Enter the rounds or reps you completed before the cap.'
+      : 'Enter your finish time as m:ss, or mark that you hit the cap.'
+  ctx.addIssue({ code: 'custom', message })
+})
 
 // Agent chat schemas
 export const agentChatMessageSchema = z.string().trim().min(1, 'Message cannot be empty').max(5000, 'Message too long (max 5000 characters)')
