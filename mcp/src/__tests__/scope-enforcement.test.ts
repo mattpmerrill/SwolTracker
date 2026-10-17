@@ -79,6 +79,20 @@ describe('scope enforcement — MCP tools', () => {
     expect(result.error?.details).toMatchObject({ missing: ['write:logs'] });
   });
 
+  it('log_block_score requires write:logs — read alone is insufficient, and it declares no user_id argument', async () => {
+    const { app, tool } = findTool('swoltracker', 'log_block_score');
+    const result = await executeToolWithGuards(
+      tool,
+      { block_id: 'forge', rounds: 5 },
+      ctxFor(app, ['read', 'write:program', 'coach'])
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('forbidden');
+    expect(result.error?.details).toMatchObject({ tool: 'log_block_score', missing: ['write:logs'] });
+    expect(tool.scopes).toEqual(['write:logs']);
+    expect(Object.keys(tool.schema)).not.toContain('user_id');
+  });
+
   it('undefined identity.scopes fails closed (denies everything requiring a scope)', async () => {
     const { app, tool } = findTool('swoltracker', 'get_profile');
     const result = await executeToolWithGuards(tool, {}, ctxFor(app, undefined));

@@ -2,6 +2,27 @@
 
 Where the project stands and how to pick it up. Update this at the end of each working session.
 
+**Coach's notes and scored blocks (2026-10-17, branch feat/coach-notes-blocks, not yet merged).**
+Plan: `docs/plans/2026-10-17-coach-notes-and-blocks.md`. Why: Week 38 Saturday's Forge AMRAP showed
+four movements and no time cap or scoring, and the AMRAP logged as four sets with no reps.
+- Program days may carry `coach_notes` (≤ 1500) and `blocks` (`amrap` / `for_time`, `time_cap_min`,
+  `exercise_indexes`, optional `rounds`, `benchmark`, `notes`). Exercise `note` max is 500 (the agent
+  used `notes`, which Zod stripped). `ExerciseSchema` now keeps `weight_lbs` (it was stripped on save).
+- `shared/workout-blocks.ts` owns block parsing, day sections, AMRAP rep totals, score format,
+  compare and best previous.
+- `migrations/043-workout-block-scores.sql` is written, NOT applied. Re-runnable. Opus ran it twice
+  on a scratch Postgres 17: RLS and CHECKs behave (see its header). Apply before merging the code.
+- MCP: 44 tools. New `log_block_score` (`write:logs`) writes the score row and the set-0 log per
+  block movement. `get_todays_workout` returns `coach_notes` and `blocks[]` with `score` and
+  `best_previous`. `get_weekly_workout` and the history summary include blocks.
+- Web: `CoachNotesCard`, `WorkoutBlockCard` (cap badge, timestamp-based countdown timer, score entry,
+  number to beat, new best), `ClampedNote` (Show more on exercise notes), `useBlockScores`,
+  `db.blockScores` repository. `logSet` accepts `completed: true` so a score re-save never un-logs.
+- Tests 359 → 471. Lint 0 errors / 17 warnings, both builds, knip clean. The UI has not been
+  viewed in a browser yet; there are no render tests (no DOM in vitest).
+- After merge: backfill Week 38 Saturday (coach_notes + `forge` block, score 5 rounds + 10 reps),
+  and update the Joi skill and morning brief to read `coach_notes` and blocks.
+
 **Aleesha feedback (2026-10-09, branch feat/aleesha-feedback, not yet merged).**
 Not on `main` yet.
 - `shared/set-outcome.ts` is the one owner for set outcomes (`hit`, `missed`, `done_unmeasured`,

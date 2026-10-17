@@ -176,8 +176,9 @@ export function createGenerationTools(
       JSON.stringify(currentWeek, null, 2),
       "",
       "Return JSON ONLY in this exact shape — a single week keyed by day, no wrapper object:",
-      '{ "Monday": { "focus": "...", "exercises": [...] }, "Tuesday": {...}, ... "Sunday": {...} }',
+      '{ "Monday": { "focus": "...", "coach_notes": "...", "exercises": [...], "blocks": [...] }, "Tuesday": {...}, ... "Sunday": {...} }',
       "",
+      "Keep every day's coach_notes and blocks. A block lists the exercises it covers by position in \"exercise_indexes\" (0-based), so when you add, remove or reorder exercises on a day, update that day's exercise_indexes to match.",
       "All seven days (Monday–Sunday) must be present. Preserve the overall training intent of the week while satisfying the constraints. Do not wrap the response in 'week1' or any other outer key.",
     ].join("\n");
 

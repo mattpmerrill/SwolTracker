@@ -10,11 +10,15 @@ import { getWeekSessionNotes } from '../lib/sessionNotes';
 import { buildSquadStatuses } from '../lib/squadStatus';
 import { getWeekDates, getTodayDayName } from '../utils/date';
 import { unlockRestAudio } from '../utils/restCue';
+import { buildDaySections } from '../utils/workoutBlocks';
+import { dayHasLoggedSet, getCoachNotes } from '../utils/blockScoreEntry';
 import {
   WeekSelector,
   DaySelector,
   WorkoutFocus,
   ExerciseCard,
+  CoachNotesCard,
+  WorkoutBlockCard,
   RestTimer,
   NoWorkoutState,
   RestDayState,
@@ -47,6 +51,7 @@ export default function WorkoutScreen({
   onGenerateWorkout,
   isSetLogged,
   onLogSet,
+  blockScores,
   onAddMax,
   getCompletionPercentage,
   isWorkoutComplete,
@@ -82,6 +87,8 @@ export default function WorkoutScreen({
   const weekDates = getWeekDates(programStartDate, currentWeek);
   const todayWorkout = workoutProgram[currentWeek]?.[currentDay];
   const hasWorkoutProgrammed = workoutProgram[currentWeek] !== undefined;
+  const coachNotes = getCoachNotes(todayWorkout);
+  const daySections = useMemo(() => buildDaySections(todayWorkout), [todayWorkout]);
   const todayDayName = getTodayDayName();
   const isViewingToday = currentWeek === actualCurrentWeek && currentDay === todayDayName;
   const dayComplete = user?.id
@@ -296,27 +303,57 @@ export default function WorkoutScreen({
           <RestDayState />
         ) : (
           <div className="space-y-4">
-            {todayWorkout?.exercises?.map((exercise, exIdx) => (
-              <ExerciseCard
-                key={`${currentWeek}-${currentDay}-${exIdx}-${exercise.name}`}
-                exercise={exercise}
-                exerciseIndex={exIdx}
-                currentWeek={currentWeek}
-                currentDay={currentDay}
-                userMaxes={user?.maxes}
-                overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
-                lastAvgReps={lastByExercise[exercise.name.toLowerCase()]?.avg_actual_reps}
-                isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
-                isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
-                onLogSet={onLogSet}
-                onAddMax={onAddMax}
-                onRestStart={handleRestStart}
-                swapState={swapState}
-                onRequestSwap={onRequestSwap}
-                onAcceptSwap={onAcceptSwap}
-                onCancelSwap={onCancelSwap}
+            {coachNotes && (
+              <CoachNotesCard
+                key={`${currentWeek}-${currentDay}`}
+                notes={coachNotes}
+                hasLoggedSet={dayHasLoggedSet(
+                  todayWorkout?.exercises,
+                  (exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id),
+                )}
               />
-            ))}
+            )}
+            {daySections.map((section) => {
+              if (section.kind === 'block') {
+                const { block } = section;
+                return (
+                  <WorkoutBlockCard
+                    key={`${currentWeek}-${currentDay}-block-${block.id}`}
+                    block={block}
+                    movements={section.indexes.map((index) => ({ index, exercise: todayWorkout.exercises[index] }))}
+                    score={blockScores?.scoreFor(block.id) ?? null}
+                    previous={blockScores?.previousFor(block) ?? null}
+                    status={blockScores?.status}
+                    historyStatus={blockScores?.historyStatus}
+                    onSave={blockScores?.saveScore}
+                    onRetry={blockScores?.reload}
+                  />
+                );
+              }
+              const exIdx = section.index;
+              const exercise = todayWorkout.exercises[exIdx];
+              return (
+                <ExerciseCard
+                  key={`${currentWeek}-${currentDay}-${exIdx}-${exercise.name}`}
+                  exercise={exercise}
+                  exerciseIndex={exIdx}
+                  currentWeek={currentWeek}
+                  currentDay={currentDay}
+                  userMaxes={user?.maxes}
+                  overloadRecommendation={overloadByExercise[exercise.name.toLowerCase()]}
+                  lastAvgReps={lastByExercise[exercise.name.toLowerCase()]?.avg_actual_reps}
+                  isWorkoutComplete={isWorkoutComplete(currentWeek, currentDay, user.id)}
+                  isSetLogged={(exerciseIndex, setIndex) => isSetLogged(exerciseIndex, setIndex, user.id)}
+                  onLogSet={onLogSet}
+                  onAddMax={onAddMax}
+                  onRestStart={handleRestStart}
+                  swapState={swapState}
+                  onRequestSwap={onRequestSwap}
+                  onAcceptSwap={onAcceptSwap}
+                  onCancelSwap={onCancelSwap}
+                />
+              );
+            })}
           </div>
         )
       )}

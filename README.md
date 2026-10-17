@@ -57,7 +57,7 @@ be the coach. The agent talks to a Model Context Protocol server built into the 
   api/mcp.js   hash the key, find the user, check scopes,
                apply rate limits, write an audit row
         v
-  @bot-native/sdk   dispatches to 43 tools in mcp/src/tools
+  @bot-native/sdk   dispatches to 44 tools in mcp/src/tools
         v
   Supabase (service role, every query scoped to your user id)
 ```
