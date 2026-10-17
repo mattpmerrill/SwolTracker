@@ -35,6 +35,10 @@
 --   * public.profiles(id), public.gyms(id), public.gym_members(gym_id, user_id)
 --   * gen_random_uuid() (pg_catalog on PG13+, as used by earlier migrations)
 --
+-- Re-runnable: policies are dropped and recreated. Opus ran this file twice on a scratch
+-- Postgres 17 (2026-10-17): RLS refused another user's row, a stranger's gym and a gym move;
+-- the CHECKs refused an AMRAP without rounds and a 0-second For Time.
+--
 -- How to verify (SQL editor, after applying):
 --   SELECT relrowsecurity FROM pg_class WHERE oid = 'public.workout_block_scores'::regclass;  -- t
 --   SELECT policyname, cmd FROM pg_policies WHERE tablename = 'workout_block_scores';          -- 4 rows
@@ -86,15 +90,18 @@ CREATE INDEX IF NOT EXISTS idx_workout_block_scores_user_benchmark
 
 ALTER TABLE public.workout_block_scores ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users view own block scores" ON public.workout_block_scores;
 CREATE POLICY "Users view own block scores" ON public.workout_block_scores
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users insert own block scores" ON public.workout_block_scores;
 CREATE POLICY "Users insert own block scores" ON public.workout_block_scores
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
     AND gym_id IN (SELECT gm.gym_id FROM public.gym_members AS gm WHERE gm.user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Users update own block scores" ON public.workout_block_scores;
 CREATE POLICY "Users update own block scores" ON public.workout_block_scores
   FOR UPDATE
   USING (user_id = auth.uid())
@@ -103,5 +110,6 @@ CREATE POLICY "Users update own block scores" ON public.workout_block_scores
     AND gym_id IN (SELECT gm.gym_id FROM public.gym_members AS gm WHERE gm.user_id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Users delete own block scores" ON public.workout_block_scores;
 CREATE POLICY "Users delete own block scores" ON public.workout_block_scores
   FOR DELETE USING (user_id = auth.uid());
