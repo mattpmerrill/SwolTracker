@@ -66,7 +66,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 
 ## Tools
 
-43 tools across three categories. Call names match exactly.
+44 tools across three categories. Call names match exactly.
 
 ### Query (read-only state)
 
@@ -102,6 +102,7 @@ This document tells an AI agent how to drive SwolTracker for the user. If you're
 | Tool | Purpose | Required args |
 |---|---|---|
 | `log_set` | Log one set (low-level) | `exercise_index`, `set_index`, `exercise_name`, `actual_weight`, `actual_reps` |
+| `log_block_score` | Log the one score of a scored block (AMRAP rounds + reps, or For Time finish time / capped). Logs the block's movements too, and returns the number to beat | `block_id` (+ `rounds`, or `time_seconds`, or `capped`) |
 | `log_exercise` | Log from natural language (fuzzy match + set expansion) | `exercise_name`, `sets`, `reps` |
 | `log_workout_summary` | Log a whole workout in one call | `exercises[]` |
 | `bulk_log_workout` | Parse a free-text workout description via the server LLM and log every set | `description` |
@@ -216,6 +217,38 @@ You have three options in increasing order of responsibility:
 3. **`bulk_log_workout(description)`** — when the user pastes or speaks a whole workout as one string ("benched 185x5, 185x5, 175x6; squat 3x5 @ 225"). The server-side LLM parses it; you don't have to.
 
 All three fuzzy-match exercise names against the user's current program. Always confirm what was logged: "Logged Bench Press 3×8 @ 185."
+
+### Coach's notes and scored blocks (AMRAP / For Time)
+A program day may carry day-level instructions and scored blocks. Both are optional; old weeks have neither.
+
+```jsonc
+{
+  "focus": "Forge Baseline AMRAP - SCORE IT",
+  "coach_notes": "Warm up 5 min. Cleans first while fresh, then the 12-min AMRAP...",  // day-level, up to 1500 chars
+  "exercises": [
+    { "name": "Hang Power Cleans", "sets": 3, "reps": "3", "percentages": [60,65,65], "note": "Fast, crisp" },
+    { "name": "Hang Power Cleans", "sets": 1, "reps": "10/rd", "weight_lbs": 95 },
+    { "name": "Push-Ups", "sets": 1, "reps": "12/rd" },
+    { "name": "Bodyweight Squats", "sets": 1, "reps": "15/rd" },
+    { "name": "Burpees", "sets": 1, "reps": "8/rd" }
+  ],
+  "blocks": [
+    { "id": "forge", "type": "amrap", "title": "Forge AMRAP", "time_cap_min": 12,
+      "exercise_indexes": [1, 2, 3, 4], "benchmark": "forge",
+      "notes": "Score = full rounds + extra reps. Pick a pace you can hold." }
+  ]
+}
+```
+
+- **`coach_notes`** (day, up to 1500 chars): how to warm up, what order, how to score. This is where the user reads the plan.
+- **Exercise `note`** (singular, up to 500 chars): a cue for one exercise. The field is `note`, not `notes`; `notes` is silently dropped on save.
+- **`weight_lbs`** on an exercise is a prescribed load (used when no 1RM percentage resolves).
+- **`blocks[]`**: `id` (`a-z`, `0-9`, `-`, up to 32, unique in the day), `type` (`amrap` or `for_time`), `title` (up to 60), `time_cap_min` (integer 1–90), `exercise_indexes` (0-based positions in that day's `exercises`; each exercise belongs to at most one block), optional `rounds` (`for_time` only, e.g. 3 rounds for time), `benchmark` (slug; the same benchmark across weeks is the number to beat), `notes` (up to 1000). Block movements keep `sets: 1` and put the per-round count in `reps` (`"10/rd"`). A block pointing past the exercise list or reusing an index is rejected on save.
+- **Conditioning days MUST carry `coach_notes` and a block with a time cap.** A bare `10/rd AMRAP` on a movement tells the athlete nothing about how long to go or how to score it.
+- When you reorder, add or remove exercises on a day that has blocks, update that day's `exercise_indexes` to match.
+- `get_todays_workout` returns `data.coach_notes`, `data.blocks[]` (each with `score` for that day or `null`, and `best_previous` for the same benchmark in earlier weeks or `null`, both with a `display` string such as `5 rounds + 22 reps`), and `block_id` and `note` on each exercise. `get_weekly_workout` returns `coach_notes` and `blocks` per day without scores. Read the notes aloud to the user before the workout.
+
+**Logging a block score:** call `log_block_score`, not `log_set` per movement. AMRAP: `rounds` and extra `reps` (`block_id: "forge", rounds: 5, reps: 22`). For Time: `time_seconds` when finished, or `capped: true` with the `rounds`/`reps` done. The response has the formatted score, `previous_best` for the benchmark and `beat` (true when it beat it). One score per block per day; calling again replaces it. It also logs each movement so completion and streaks count the work.
 
 ### "What are my maxes?"
 Call `get_maxes`. For history, `get_max_history` with one lift.

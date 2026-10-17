@@ -1,3 +1,5 @@
+import type { WorkoutBlock } from "../../shared/workout-blocks.js";
+
 /** Profile from the `profiles` table */
 export interface Profile {
   id: string;
@@ -42,12 +44,18 @@ export interface ProgramExercise {
   percentages?: number[];
   /** Optional prescribed load. Used when no 1RM resolves. */
   weight_lbs?: number;
+  /** Coaching cue for this exercise, up to 500 characters. */
+  note?: string;
 }
 
 /** A single day in the workout program */
 export interface ProgramDay {
   focus: string;
+  /** Day-level instructions, up to 1500 characters. */
+  coach_notes?: string;
   exercises: ProgramExercise[];
+  /** Raw as stored; read through getDayBlocks, which drops malformed ones. */
+  blocks?: WorkoutBlock[];
 }
 
 /** Full week program — 7 days keyed by day name */
@@ -129,4 +137,20 @@ export interface ToolResult {
   success: boolean;
   message: string;
   data: Record<string, unknown>;
+}
+
+/** Row from `workout_block_scores` (migration 043) */
+export interface WorkoutBlockScoreRow {
+  user_id?: string;
+  gym_id: string;
+  week_number: number;
+  day_name: string;
+  block_id: string;
+  benchmark: string | null;
+  score_type: "amrap" | "for_time";
+  rounds: number | null;
+  reps: number | null;
+  time_seconds: number | null;
+  capped: boolean;
+  note: string | null;
 }

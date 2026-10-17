@@ -2,10 +2,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { AppError } from "@bot-native/sdk";
 import type { EventEmitter } from "../bot-native-shim.js";
-import type { ToolResult, WeekProgram } from "../types.js";
+import type { ProgramDay, ToolResult, WeekProgram, WorkoutBlockScoreRow } from "../types.js";
 import { resolveUserClock } from "../user-clock.js";
 import { normalizeExerciseName } from "../exercise-normalizer.js";
 import { findEstimatedPrs } from "../e1rm.js";
+import {
+  BLOCK_ID_RE,
+  BLOCK_NOTES_MAX,
+  BLOCK_TIME_CAP_MAX_MIN,
+  BLOCK_TITLE_MAX,
+  amrapMovementTotals,
+  bestPreviousScore,
+  compareBlockScores,
+  formatBlockScore,
+  getDayBlocks,
+  isValidBlockScore,
+  type BlockScore,
+} from "../../../shared/workout-blocks.js";
 import type { createQueryTools } from "./queries.js";
 
 // ---------------------------------------------------------------------------
@@ -28,8 +41,10 @@ const REQUIRED_DAYS = [
 const REPS_MAX = 16;
 const NAME_MAX = 100;
 const MUSCLE_MAX = 120;
-const NOTE_MAX = 200;
+const NOTE_MAX = 500;
 const FOCUS_MAX = 80;
+const COACH_NOTES_MAX = 1500;
+const WEIGHT_MAX = 2000;
 
 const ExerciseSchema = z.object({
   name: z.string().min(1).max(NAME_MAX),
@@ -41,13 +56,63 @@ const ExerciseSchema = z.object({
     .nullable()
     .optional(),
   muscleGroups: z.string().max(MUSCLE_MAX).optional(),
+  // z.object strips unknown keys, so a field missing here is silently dropped
+  // on save. enrichExercises reads weight_lbs for prescribed loads (e.g. 95 lb
+  // cleans in an AMRAP), and it was being stripped before this was listed.
+  weight_lbs: z.number().nonnegative().max(WEIGHT_MAX).optional(),
   note: z.string().max(NOTE_MAX).optional(),
 });
 
-const DaySchema = z.object({
-  focus: z.string().max(FOCUS_MAX).optional(),
-  exercises: z.array(ExerciseSchema).max(50),
+const BlockSchema = z.object({
+  id: z.string().regex(BLOCK_ID_RE, "must be 1-32 chars of a-z, 0-9 and -"),
+  type: z.enum(["amrap", "for_time"]),
+  title: z.string().min(1).max(BLOCK_TITLE_MAX),
+  time_cap_min: z.number().int().min(1).max(BLOCK_TIME_CAP_MAX_MIN),
+  exercise_indexes: z.array(z.number().int().min(0)).min(1).max(50),
+  rounds: z.number().int().min(1).max(100).optional(),
+  benchmark: z.string().regex(BLOCK_ID_RE, "must be 1-32 chars of a-z, 0-9 and -").optional(),
+  notes: z.string().max(BLOCK_NOTES_MAX).optional(),
 });
+
+// Blocks reference exercises by position, so the day is the unit that can be
+// checked: a per-block schema cannot see how many exercises there are.
+const DaySchema = z
+  .object({
+    focus: z.string().max(FOCUS_MAX).optional(),
+    coach_notes: z.string().max(COACH_NOTES_MAX).optional(),
+    exercises: z.array(ExerciseSchema).max(50),
+    blocks: z.array(BlockSchema).max(10).optional(),
+  })
+  .superRefine((day, ctx) => {
+    const owner = new Map<number, string>();
+    const ids = new Set<string>();
+    (day.blocks ?? []).forEach((block, b) => {
+      if (ids.has(block.id)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["blocks", b, "id"], message: `duplicate block id "${block.id}"` });
+      }
+      ids.add(block.id);
+      if (block.rounds !== undefined && block.type !== "for_time") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["blocks", b, "rounds"], message: "rounds is for_time only" });
+      }
+      const seen = new Set<number>();
+      for (const index of block.exercise_indexes) {
+        const path = ["blocks", b, "exercise_indexes"];
+        if (index >= day.exercises.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path,
+            message: `index ${index} is past the end of exercises (${day.exercises.length})`,
+          });
+        } else if (seen.has(index)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: `index ${index} listed twice` });
+        } else if (owner.has(index)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: `index ${index} is already in block "${owner.get(index)}"` });
+        }
+        seen.add(index);
+        if (!owner.has(index)) owner.set(index, block.id);
+      }
+    });
+  });
 
 const WeekProgramSchema = z
   .record(z.enum(REQUIRED_DAYS), DaySchema)
@@ -76,6 +141,20 @@ interface LogSetParams {
   prescribed_reps?: number | string;
 }
 
+interface LogBlockScoreParams {
+  gym_id?: string;
+  week_number?: number;
+  day_name?: string;
+  block_id: string;
+  rounds?: number;
+  reps?: number;
+  time_seconds?: number;
+  capped?: boolean;
+  note?: string;
+}
+
+const BLOCK_SCORE_NOTE_MAX = 280;
+
 interface WorkoutLogEntry {
   user_id: string;
   gym_id: string;
@@ -84,10 +163,11 @@ interface WorkoutLogEntry {
   exercise_index: number;
   set_index: number;
   exercise_name: string;
-  prescribed_weight?: number;
+  prescribed_weight?: number | null;
   prescribed_reps?: number | string;
-  actual_weight: number;
-  actual_reps: number | string;
+  // null for work with no measured load or count (bodyweight, For Time movements)
+  actual_weight: number | null;
+  actual_reps: number | string | null;
   completed: boolean;
 }
 
@@ -169,6 +249,184 @@ export function createActionTools(
       message: `Logged: ${params.exercise_name} set ${params.set_index + 1} — ${params.actual_reps} reps @ ${params.actual_weight} lbs`,
       data: {
         log: data?.[0] ?? null,
+        week_number: slot.weekNumber,
+        day_name: slot.dayName,
+        gym_id: slot.gymId,
+      },
+    };
+  }
+
+  /**
+   * Members log under their own gym but follow the leader's program, so the
+   * block is looked up in the leader's program first, then the caller's own.
+   */
+  async function findDayProgram(
+    ownGymId: string,
+    weekNumber: number,
+    dayName: string
+  ): Promise<ProgramDay | null> {
+    const leader = await queries.resolveLeaderProgramGym();
+    const candidates = [...new Set([leader?.id, ownGymId].filter((id): id is string => Boolean(id)))];
+    for (const gymId of candidates) {
+      const { data } = await supabase
+        .from("workout_programs")
+        .select("program_data")
+        .eq("gym_id", gymId)
+        .eq("week_number", weekNumber)
+        .single();
+      const day = (data as { program_data?: WeekProgram } | null)?.program_data?.[dayName];
+      if (day) return day;
+    }
+    return null;
+  }
+
+  async function log_block_score(params: LogBlockScoreParams): Promise<ToolResult> {
+    const slot = await resolveWorkoutSlot(params.gym_id, params.week_number, params.day_name);
+    if (!slot) {
+      throw AppError.notFound("No gym found.");
+    }
+
+    const day = await findDayProgram(slot.gymId, slot.weekNumber, slot.dayName);
+    if (!day) {
+      throw AppError.notFound(`No program found for ${slot.dayName} of Week ${slot.weekNumber}.`);
+    }
+
+    const blocks = getDayBlocks(day);
+    const block = blocks.find((b) => b.id === params.block_id);
+    if (!block) {
+      const known = blocks.map((b) => b.id).join(", ") || "none";
+      throw AppError.notFound(
+        `No block "${params.block_id}" on ${slot.dayName} of Week ${slot.weekNumber}. Blocks that day: ${known}.`
+      );
+    }
+
+    if (params.note !== undefined && params.note.length > BLOCK_SCORE_NOTE_MAX) {
+      throw AppError.invalidArgs(`note must be ${BLOCK_SCORE_NOTE_MAX} characters or fewer.`);
+    }
+
+    // The tool accepts a loose superset of fields; keep only the ones that mean
+    // something for this block type so the row always satisfies the table CHECK.
+    const capped = block.type === "for_time" && params.capped === true;
+    const score: BlockScore = {
+      score_type: block.type,
+      rounds: params.rounds ?? null,
+      reps: params.reps ?? (block.type === "amrap" ? 0 : null),
+      time_seconds: params.time_seconds ?? null,
+      capped,
+    };
+    if (!isValidBlockScore(block.type, { ...score, capped: params.capped ?? false })) {
+      throw AppError.invalidArgs(
+        block.type === "amrap"
+          ? "An AMRAP score needs rounds (and optionally extra reps); time_seconds and capped do not apply."
+          : "A For Time score needs time_seconds, or capped=true with the rounds and/or reps completed."
+      );
+    }
+    if (capped) score.time_seconds = null;
+    if (block.type === "for_time" && !capped) {
+      score.rounds = null;
+      score.reps = null;
+    }
+
+    // Read earlier scores before writing, so this score can never be its own "previous".
+    const { data: priorRows } = block.benchmark
+      ? await supabase
+          .from("workout_block_scores")
+          .select("week_number, day_name, block_id, benchmark, score_type, rounds, reps, time_seconds, capped, note")
+          .eq("user_id", userId)
+          .eq("benchmark", block.benchmark)
+          .lt("week_number", slot.weekNumber)
+      : { data: [] };
+    const previous = bestPreviousScore(
+      (priorRows ?? []) as Array<WorkoutBlockScoreRow>,
+      block.benchmark,
+      block.type,
+      slot.weekNumber
+    );
+    const beat = previous !== null && compareBlockScores(score, previous) > 0;
+
+    const row = {
+      user_id: userId,
+      gym_id: slot.gymId,
+      week_number: slot.weekNumber,
+      day_name: slot.dayName,
+      block_id: block.id,
+      benchmark: block.benchmark ?? null,
+      score_type: score.score_type,
+      rounds: score.rounds,
+      reps: score.reps,
+      time_seconds: score.time_seconds,
+      capped: score.capped,
+      note: params.note ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: saved, error: scoreError } = await supabase
+      .from("workout_block_scores")
+      .upsert(row, { onConflict: "user_id,gym_id,week_number,day_name,block_id" })
+      .select()
+      .single();
+    if (scoreError) {
+      return { success: false, message: `Failed to save block score: ${scoreError.message}`, data: {} };
+    }
+
+    // Completion and streaks count workout_logs rows, so each block movement
+    // gets a set-0 row. AMRAP splits the score into per-movement reps; For
+    // Time has no per-movement count, so reps stay null (done, unmeasured).
+    const maxes = await queries.getUserMaxes();
+    const exercises = queries.enrichExercises(day.exercises ?? [], maxes, blocks);
+    const totals =
+      block.type === "amrap"
+        ? amrapMovementTotals(block, day.exercises ?? [], score.rounds ?? 0, score.reps ?? 0)
+        : {};
+    const logEntries: WorkoutLogEntry[] = block.exercise_indexes.map((index) => {
+      const exercise = exercises[index];
+      return {
+        user_id: userId,
+        gym_id: slot.gymId,
+        week_number: slot.weekNumber,
+        day_name: slot.dayName,
+        exercise_index: index,
+        set_index: 0,
+        exercise_name: normalizeExerciseName(exercise.name),
+        prescribed_weight: exercise.weight_lbs,
+        prescribed_reps: exercise.reps,
+        actual_weight: exercise.weight_lbs,
+        actual_reps: totals[index] ?? null,
+        completed: true,
+      };
+    });
+    const { error: logError } = await upsertWorkoutLogs(logEntries);
+
+    const display = formatBlockScore(score);
+    const previousView = previous
+      ? {
+          week_number: previous.week_number,
+          day_name: previous.day_name,
+          rounds: previous.rounds,
+          reps: previous.reps,
+          time_seconds: previous.time_seconds,
+          capped: previous.capped,
+          display: formatBlockScore(previous),
+        }
+      : null;
+    const versus = previousView
+      ? beat
+        ? ` New best! Previous: ${previousView.display} (Week ${previousView.week_number}).`
+        : ` Number to beat: ${previousView.display} (Week ${previousView.week_number}).`
+      : "";
+
+    return {
+      success: true,
+      message:
+        `Logged ${block.title}: ${display}.${versus}` +
+        (logError
+          ? ` The score is saved, but the movement sets failed to log: ${logError.message}`
+          : ""),
+      data: {
+        score: { ...(saved as object), display },
+        block_id: block.id,
+        previous_best: previousView,
+        beat,
+        movements_logged: logError ? 0 : logEntries.length,
         week_number: slot.weekNumber,
         day_name: slot.dayName,
         gym_id: slot.gymId,
@@ -508,7 +766,7 @@ export function createActionTools(
         message: `Program data validation failed: ${formatZodIssues(parsed.error.issues)}`,
         data: {
           issues: parsed.error.issues.slice(0, 20),
-          hint: `Each exercise "reps" must be ≤ ${REPS_MAX} characters (use "note" for warmup schemes or coaching cues). "name" ≤ ${NAME_MAX}, "note" ≤ ${NOTE_MAX}, "muscleGroups" ≤ ${MUSCLE_MAX}, "focus" ≤ ${FOCUS_MAX}. All 7 days must be present.`,
+          hint: `Each exercise "reps" must be ≤ ${REPS_MAX} characters (use "note" for warmup schemes or coaching cues). "name" ≤ ${NAME_MAX}, "note" ≤ ${NOTE_MAX}, "muscleGroups" ≤ ${MUSCLE_MAX}, "focus" ≤ ${FOCUS_MAX}, day "coach_notes" ≤ ${COACH_NOTES_MAX}. A block's "exercise_indexes" are positions in that day's exercises, each in at most one block. All 7 days must be present.`,
         },
       };
     }
@@ -1102,6 +1360,7 @@ export function createActionTools(
 
   return {
     log_set,
+    log_block_score,
     log_many_sets,
     delete_set,
     correct_set,

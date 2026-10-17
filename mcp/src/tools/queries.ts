@@ -13,6 +13,7 @@ import type {
   ToolResult,
   ProgramDay,
   ProgramExercise,
+  WorkoutBlockScoreRow,
 } from "../types.js";
 import { resolveUserClock, weekWindowFor, type UserClock } from "../user-clock.js";
 import {
@@ -23,6 +24,50 @@ import {
   sessionRepsLabel,
   type LoggedSetOutcome,
 } from "../../../shared/set-outcome.js";
+import {
+  bestPreviousScore,
+  formatBlockScore,
+  getDayBlocks,
+  type WorkoutBlock,
+} from "../../../shared/workout-blocks.js";
+
+const BLOCK_SCORE_COLUMNS =
+  "gym_id, week_number, day_name, block_id, benchmark, score_type, rounds, reps, time_seconds, capped, note";
+
+/** A stored score as the API returns it: the row fields plus a display string. */
+function presentBlockScore(row: WorkoutBlockScoreRow) {
+  return {
+    week_number: row.week_number,
+    day_name: row.day_name,
+    score_type: row.score_type,
+    rounds: row.rounds,
+    reps: row.reps,
+    time_seconds: row.time_seconds,
+    capped: row.capped,
+    note: row.note,
+    display: formatBlockScore(row),
+  };
+}
+
+/** Block definition as the API returns it. Scores are added by callers that have them. */
+function presentBlock(block: WorkoutBlock) {
+  return {
+    id: block.id,
+    type: block.type,
+    title: block.title,
+    time_cap_min: block.time_cap_min,
+    exercise_indexes: block.exercise_indexes,
+    rounds: block.rounds ?? null,
+    benchmark: block.benchmark ?? null,
+    notes: block.notes ?? null,
+  };
+}
+
+function blockHeadline(block: WorkoutBlock): string {
+  const kind = block.type === "amrap" ? "AMRAP" : "For Time";
+  const rounds = block.rounds ? `, ${block.rounds} rounds` : "";
+  return `${block.title} (${kind}${rounds}, ${block.time_cap_min} min cap)`;
+}
 
 export function createQueryTools(supabase: SupabaseClient, userId: string) {
   function describeWeek(clock: UserClock, weekNumber: number) {
@@ -122,8 +167,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
   function enrichExercises(
     exercises: ProgramExercise[],
-    maxes: Record<string, number>
+    maxes: Record<string, number>,
+    blocks: WorkoutBlock[] = []
   ) {
+    const blockOfIndex = new Map<number, string>();
+    for (const block of blocks) {
+      for (const index of block.exercise_indexes) blockOfIndex.set(index, block.id);
+    }
     return exercises.map((ex, i) => {
       const max1RM = resolveMaxForExercise(ex.name, maxes);
       let weight_lbs: number | null = null;
@@ -144,6 +194,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         max_1rm: max1RM,
         percentages: ex.percentages ?? null,
         muscleGroups: ex.muscleGroups ?? null,
+        note: ex.note ?? null,
+        block_id: blockOfIndex.get(i) ?? null,
       };
     });
   }
@@ -246,6 +298,16 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     };
   }
 
+  /** The user's scores up to `week`: this week's for display, earlier ones for "the number to beat". */
+  async function loadBlockScores(week: number): Promise<WorkoutBlockScoreRow[]> {
+    const { data } = await supabase
+      .from("workout_block_scores")
+      .select(BLOCK_SCORE_COLUMNS)
+      .eq("user_id", userId)
+      .lte("week_number", week);
+    return (data as WorkoutBlockScoreRow[] | null) ?? [];
+  }
+
   async function get_todays_workout(gymId?: string, dayName?: string, weekNumber?: number): Promise<ToolResult> {
     const resolvedGymId = await resolveGymId(gymId);
     if (!resolvedGymId) {
@@ -283,6 +345,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       };
     }
 
+    const dayBlocks = getDayBlocks(today);
+    const blockScoreRows = dayBlocks.length > 0 ? await loadBlockScores(week) : [];
+
     const [maxes, logsResult, completionResult] = await Promise.all([
       getUserMaxes(),
       supabase
@@ -305,7 +370,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     ]);
 
     const logs = (logsResult.data as Array<Pick<WorkoutLog, "exercise_index" | "set_index" | "exercise_name" | "actual_weight" | "actual_reps" | "prescribed_weight" | "prescribed_reps" | "completed" | "completed_at">> | null) ?? [];
-    const enrichedExercises = enrichExercises(today.exercises, maxes).map((ex) => {
+    const enrichedExercises = enrichExercises(today.exercises, maxes, dayBlocks).map((ex) => {
       const matchingLogs = logs.filter((log) => log.exercise_index === ex.exercise_index);
       const completedLogs = matchingLogs.filter((log) => log.completed);
       const loggedSetIndexes = [...new Set(completedLogs.map((log) => log.set_index))].sort((a, b) => a - b);
@@ -353,6 +418,30 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       return `  ${ex.exercise_index + 1}. ${ex.name} — ${ex.sets}x${ex.reps} ${weightStr}${progressStr}`.trim();
     });
 
+    const blocks = dayBlocks.map((block) => {
+      const mine = blockScoreRows.find(
+        (r) =>
+          r.week_number === week &&
+          r.day_name === day &&
+          r.block_id === block.id &&
+          r.gym_id === resolvedGymId
+      );
+      const previous = bestPreviousScore(blockScoreRows, block.benchmark, block.type, week);
+      return {
+        ...presentBlock(block),
+        score: mine ? presentBlockScore(mine) : null,
+        best_previous: previous ? presentBlockScore(previous) : null,
+      };
+    });
+
+    const blockLines = blocks.map((b, i) => {
+      const movements = dayBlocks[i].exercise_indexes.map((n) => n + 1).join(", ");
+      const score = b.score ? ` — score: ${b.score.display}` : "";
+      const beat = !b.score && b.best_previous ? ` — number to beat: ${b.best_previous.display} (Week ${b.best_previous.week_number})` : "";
+      return `  Block ${blockHeadline(dayBlocks[i])}: movements ${movements}${score}${beat}`;
+    });
+    const notesBlock = today.coach_notes ? `\nCoach's notes: ${today.coach_notes}` : "";
+
     const statusLine = dayCompleted
       ? (dayCompletionType === "partial"
         ? `\nStatus: partial (${dayLoggedSets}/${dayPlannedSets} programmed sets logged)`
@@ -363,11 +452,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
 
     return {
       success: true,
-      message: `${weekLabel}, ${day} — ${today.focus}:\n${exerciseLines.join("\n")}${statusLine}`,
+      message: `${weekLabel}, ${day} — ${today.focus}:${notesBlock}\n${exerciseLines.join("\n")}${blockLines.length > 0 ? `\n${blockLines.join("\n")}` : ""}${statusLine}`,
       data: {
         current_week: week,
         day_name: day,
         focus: today.focus,
+        coach_notes: today.coach_notes ?? null,
+        blocks,
         exercises: enrichedExercises,
         gym_id: resolvedGymId,
         day_completed: dayCompleted,
@@ -426,11 +517,18 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         continue;
       }
 
-      const enriched = enrichExercises(day.exercises, maxes);
+      const dayBlocks = getDayBlocks(day);
+      const enriched = enrichExercises(day.exercises, maxes, dayBlocks);
       const daySets = enriched.reduce((sum, ex) => sum + ex.sets, 0);
       totalSets += daySets;
 
-      days[dayName] = { focus: day.focus, exercises: enriched, total_sets: daySets };
+      days[dayName] = {
+        focus: day.focus,
+        coach_notes: day.coach_notes ?? null,
+        blocks: dayBlocks.map(presentBlock),
+        exercises: enriched,
+        total_sets: daySets,
+      };
       lines.push(`  ${dayName}: ${day.focus} — ${enriched.length} exercises, ${daySets} sets`);
     }
 
@@ -722,7 +820,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const safeLookbackWeeks = Math.max(1, lookbackWeeks || 4);
     const fromWeek = Math.max(1, currentWeek - safeLookbackWeeks + 1);
 
-    const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult, sessionNotesResult] =
+    const [profileResult, maxesResult, logsResult, completionsResult, missedDaysResult, programsResult, sessionNotesResult, blockScoresResult] =
       await Promise.all([
         get_profile(),
         get_maxes(),
@@ -759,6 +857,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
           .eq("user_id", userId)
           .gte("week_number", fromWeek)
           .order("week_number", { ascending: false }),
+        supabase
+          .from("workout_block_scores")
+          .select(BLOCK_SCORE_COLUMNS)
+          .eq("user_id", userId)
+          .eq("gym_id", resolvedGymId)
+          .gte("week_number", fromWeek)
+          .order("week_number", { ascending: false }),
       ]);
 
     const profile = profileResult.data as Record<string, unknown>;
@@ -774,6 +879,13 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     const missedDays = (missedDaysResult.data ?? []) as Array<{ week_number: number; day_name: string; reason: string | null }>;
     const programs = (programsResult.data ?? []) as Array<{ week_number: number; program_data: Record<string, any>; ai_notes: string | null }>;
     const sessionNotes = (sessionNotesResult.data ?? []) as Array<{ week_number: number; day_name: string; label: string | null; text: string }>;
+
+    const blockScores = ((blockScoresResult.data ?? []) as WorkoutBlockScoreRow[]).map((row) => {
+      const program = programs.find((p) => p.week_number === row.week_number);
+      const title =
+        getDayBlocks(program?.program_data?.[row.day_name]).find((b) => b.id === row.block_id)?.title ?? row.block_id;
+      return { ...presentBlockScore(row), block_id: row.block_id, title, benchmark: row.benchmark };
+    });
 
     const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
     const measuredRepCount = (value: unknown): number | null => {
@@ -929,6 +1041,9 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       ...(sessionNotes.length > 0
         ? ["", "Session notes:", ...sessionNotes.map((n) => `  - Week ${n.week_number} ${n.day_name}: ${n.text}`)]
         : []),
+      ...(blockScores.length > 0
+        ? ["", "Block scores:", ...blockScores.map((b) => `  - Week ${b.week_number} ${b.day_name} ${b.title}: ${b.display}`)]
+        : []),
       "",
       `Recommended next week: Week ${nextWeek}`,
     ].join("\n");
@@ -948,6 +1063,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
         profile_name: profile.name,
         missed_days: missedDays,
         session_notes: sessionNotes,
+        block_scores: blockScores,
         programs_context: programs.map((p) => ({ week_number: p.week_number, ai_notes: p.ai_notes })),
       },
     };
@@ -1269,5 +1385,8 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     getMyGyms,
     resolveGymId,
     resolveWritableGymId,
+    resolveLeaderProgramGym,
+    getUserMaxes,
+    enrichExercises,
   };
 }

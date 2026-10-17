@@ -97,9 +97,9 @@ describe('tool list: program start date is write-once', () => {
     expect(app.tools.map((t) => t.name)).not.toContain('shift_program');
   });
 
-  it('registers 43 tools with unique names', () => {
+  it('registers 44 tools with unique names', () => {
     const names = app.tools.map((t) => t.name);
-    expect(names).toHaveLength(43);
+    expect(names).toHaveLength(44);
     expect(new Set(names).size).toBe(names.length);
   });
 
