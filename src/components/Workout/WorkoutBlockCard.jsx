@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { AlertCircle, Check, Loader2, Minus, Pause, Pencil, Play, Plus, RotateCcw, Timer, Trophy } from 'lucide-react';
 import { useBlockTimer } from '../../hooks/useBlockTimer';
+import { blockTimerKey } from '../../utils/blockTimerStorage';
 import { BLOCK_DATA_STATUS } from '../../hooks/useBlockScores';
 import { TIMER_STATUS, formatClock } from '../../utils/blockTimer';
 import { formatBlockScore } from '../../utils/workoutBlocks';
@@ -57,8 +58,8 @@ function CountStepper({ label, value, onChange }) {
   );
 }
 
-function BlockTimer({ capMinutes }) {
-  const { status, secondsLeft, progress, start, pause, reset } = useBlockTimer(capMinutes);
+function BlockTimer({ capMinutes, storageKey }) {
+  const { status, secondsLeft, progress, start, pause, reset } = useBlockTimer(capMinutes, storageKey);
   const running = status === TIMER_STATUS.RUNNING;
   const finished = status === TIMER_STATUS.FINISHED;
 
@@ -209,6 +210,7 @@ function ScoreForm({ block, draft, onChange, onSave, onCancel, saving, error }) 
  *   historyStatus- BLOCK_DATA_STATUS of the benchmark history
  *   onSave       - (block, draft) => Promise<{ ok, error? }>
  *   onRetry      - reload scores after a failed load
+ *   userId/week/day - identify this block instance so its timer survives a reload
  */
 export default function WorkoutBlockCard({
   block,
@@ -219,6 +221,9 @@ export default function WorkoutBlockCard({
   historyStatus = BLOCK_DATA_STATUS.READY,
   onSave,
   onRetry,
+  userId = null,
+  week = null,
+  day = null,
 }) {
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -273,7 +278,10 @@ export default function WorkoutBlockCard({
           ))}
         </ul>
 
-        <BlockTimer capMinutes={block.time_cap_min} />
+        <BlockTimer
+          capMinutes={block.time_cap_min}
+          storageKey={blockTimerKey({ userId, week, day, blockId: block.id })}
+        />
 
         {historyStatus === BLOCK_DATA_STATUS.ERROR && (
           <p className="text-xs text-zinc-500">Could not load your earlier scores, so there is no number to beat yet.</p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '../lib/supabase';
 import {
   BOOTSTRAP_LOG_LOOKBACK_WEEKS,
@@ -10,6 +10,17 @@ import { calculateCurrentWeek } from '../utils/date';
 /** True when the first load failed and there is nothing to show. */
 export function isBootstrapLoadError(loadError, bundle) {
   return Boolean(loadError) && !bundle;
+}
+
+/**
+ * True when the full-screen loading gate should replace the app. Once a bundle
+ * for this same user is on screen, a background reload keeps the app mounted
+ * (unmounting would wipe in-progress UI state such as a running block timer).
+ */
+export function shouldShowBootstrapLoading({ authLoading, authUser, isLoading, bundle }) {
+  if (authLoading) return true;
+  if (!authUser || !isLoading) return false;
+  return !(bundle && bundle.userId === authUser.id);
 }
 
 /**
@@ -40,12 +51,18 @@ export function useAppBootstrap(authUser) {
   const [loadError, setLoadError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // The effect is keyed on the user id, not the object: the auth client hands
+  // out new objects for the same user (token refresh) and that must not reload.
+  const authUserRef = useRef(authUser);
+  authUserRef.current = authUser;
+  const authUserId = authUser?.id ?? null;
+
   const reload = useCallback(() => {
     setReloadToken((t) => t + 1);
   }, []);
 
   useEffect(() => {
-    if (!authUser) {
+    if (!authUserId) {
       setIsLoading(false);
       setBundle(null);
       setOnboarding(null);
@@ -59,7 +76,7 @@ export function useAppBootstrap(authUser) {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const loaded = await loadUserBundle(authUser);
+        const loaded = await loadUserBundle(authUserRef.current);
         if (cancelled) return;
 
         if (loaded.kind === 'onboarding') {
@@ -81,7 +98,7 @@ export function useAppBootstrap(authUser) {
     })();
 
     return () => { cancelled = true; };
-  }, [authUser, reloadToken]);
+  }, [authUserId, reloadToken]);
 
   return { isLoading, bundle, onboarding, reload, loadError };
 }

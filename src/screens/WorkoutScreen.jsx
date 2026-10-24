@@ -327,6 +327,9 @@ export default function WorkoutScreen({
                     historyStatus={blockScores?.historyStatus}
                     onSave={blockScores?.saveScore}
                     onRetry={blockScores?.reload}
+                    userId={user?.id}
+                    week={currentWeek}
+                    day={currentDay}
                   />
                 );
               }
