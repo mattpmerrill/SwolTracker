@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { useSessionContext, ProgramProvider, WorkoutLogProvider } from './contexts';
-import { isBootstrapLoadError, useAppBootstrap } from './hooks/useAppBootstrap';
+import { isBootstrapLoadError, shouldShowBootstrapLoading, useAppBootstrap } from './hooks/useAppBootstrap';
 import { useOnboardingActions } from './hooks/useOnboardingActions';
 import { ROUTES } from './lib/routes';
 
@@ -20,7 +20,7 @@ export default function SwolTracker() {
   const { authUser, authLoading, signOut } = useSessionContext();
   const { isLoading, bundle, onboarding, reload: reloadApp, loadError } = useAppBootstrap(authUser);
 
-  if (authLoading || (authUser && isLoading)) {
+  if (shouldShowBootstrapLoading({ authLoading, authUser, isLoading, bundle })) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="text-center">

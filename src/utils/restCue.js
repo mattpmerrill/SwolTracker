@@ -57,3 +57,12 @@ export function signalRestComplete() {
     // ignore — autoplay policy or missing AudioContext
   }
 }
+
+/**
+ * Whole seconds left until `endAt` (ms epoch), rounded up so 0 means time is
+ * really up. Derived from the clock rather than counted per interval tick, so
+ * a throttled background tab shows the right value when it wakes.
+ */
+export function restSecondsLeft(endAt, now) {
+  return Math.max(0, Math.ceil((endAt - now) / 1000));
+}
