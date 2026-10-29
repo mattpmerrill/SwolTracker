@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { isAppError } from '@bot-native/sdk';
 import { createActionTools } from '../tools/actions.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
@@ -11,6 +11,7 @@ const stubEvents: EventEmitter = {
 const stubQueries = {
   resolveGymId: vi.fn(async (_gymId?: string) => 'g1'),
   resolveWritableGymId: vi.fn(async (_gymId?: string) => 'g1'),
+  resolveLeaderProgramGym: vi.fn(async () => null),
   // only methods actually invoked by update_max/log_set are referenced
 } as any;
 
@@ -153,5 +154,122 @@ describe('MCP actions contract', () => {
       return e.code === 'forbidden';
     });
     expect(memberQueries.resolveWritableGymId).toHaveBeenCalledWith('g-shared');
+  });
+});
+
+describe('update_program_day', () => {
+  const day = (focus: string, name = 'Squat') => ({
+    focus,
+    exercises: [{ name, sets: 3, reps: '5', percentages: [70, 70, 70] }],
+  });
+  const storedWeek = () => ({
+    Monday: day('Legs'),
+    Tuesday: { focus: 'Rest', exercises: [] },
+    Wednesday: day('Push', 'Bench Press'),
+    Thursday: { focus: 'Rest', exercises: [] },
+    Friday: day('Pull', 'Deadlift'),
+    Saturday: { focus: 'Rest', exercises: [] },
+    Sunday: { focus: 'Rest', exercises: [] },
+  });
+
+  // Fixed clock: program_start_date 2026-06-01 puts 2026-10-09 in week 19.
+  const CURRENT_WEEK = 19;
+  function setup() {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+    const sb = createMcpMockSupabase();
+    sb.respond('profiles.single', {
+      data: { program_start_date: '2026-06-01', timezone: null },
+      error: null,
+    });
+    const events = { emit: vi.fn(async () => undefined) } as any;
+    return { sb, tools: createActionTools(sb, 'u1', events, stubQueries) };
+  }
+  const upsertPayload = (sb: ReturnType<typeof createMcpMockSupabase>) =>
+    sb.calls.find(([table, method]) => table === 'workout_programs' && method === 'upsert')?.[2][0];
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('replaces one day and leaves the other days untouched', async () => {
+    const { sb, tools } = setup();
+    sb.respond('workout_programs.maybeSingle', { data: { program_data: storedWeek() }, error: null });
+    sb.respond('workout_programs.single', { data: { id: 'p1' }, error: null });
+
+    const next = day('Pull', 'Dumbbell Row');
+    const result = await tools.update_program_day(CURRENT_WEEK, 'Wednesday', next);
+
+    expect(result.success).toBe(true);
+    const payload = upsertPayload(sb);
+    expect(payload.gym_id).toBe('g1');
+    expect(payload.week_number).toBe(CURRENT_WEEK);
+    // The read is scoped to the verified gym and week, not just filtered by id.
+    expect(sb.calls).toContainEqual(['workout_programs', 'eq', ['gym_id', 'g1']]);
+    expect(sb.calls).toContainEqual(['workout_programs', 'eq', ['week_number', CURRENT_WEEK]]);
+    expect(payload.ai_notes).toBe('Edited by Chad');
+    expect(payload.program_data.Wednesday).toEqual(next);
+    const { Wednesday: _edited, ...rest } = payload.program_data;
+    const { Wednesday: _old, ...expectedRest } = storedWeek();
+    expect(rest).toEqual(expectedRest);
+  });
+
+  it('rejects a week before the current week and writes nothing', async () => {
+    const { sb, tools } = setup();
+    sb.respond('workout_programs.maybeSingle', { data: { program_data: storedWeek() }, error: null });
+
+    await expect(tools.update_program_day(CURRENT_WEEK - 1, 'Monday', day('Legs'))).rejects.toSatisfy(
+      (e: unknown) => isAppError(e) && e.code === 'invalid_args' && /past|locked/.test(e.message),
+    );
+    expect(upsertPayload(sb)).toBeUndefined();
+  });
+
+  it("forbids a group member from editing the leader's program", async () => {
+    // A member's personal gym is writable, so only the leader lookup can stop this edit.
+    const memberQueries = {
+      resolveGymId: vi.fn(async () => 'g-personal'),
+      resolveWritableGymId: vi.fn(async () => 'g-personal'),
+      resolveLeaderProgramGym: vi.fn(async () => ({ id: 'g-leader', name: 'Coach' })),
+    } as any;
+
+    for (const gymId of [undefined, 'g-leader']) {
+      const sb = createMcpMockSupabase();
+      const tools = createActionTools(sb, 'u-member', stubEvents, memberQueries);
+      await expect(tools.update_program_day(1, 'Monday', day('Legs'), gymId)).rejects.toSatisfy(
+        (e: unknown) => isAppError(e) && e.code === 'forbidden' && e.message.includes('Coach'),
+      );
+      expect(upsertPayload(sb)).toBeUndefined();
+    }
+  });
+
+  it('returns not found when the week has no program', async () => {
+    const { sb, tools } = setup();
+    sb.respond('workout_programs.maybeSingle', { data: null, error: null });
+
+    await expect(tools.update_program_day(CURRENT_WEEK + 1, 'Monday', day('Legs'))).rejects.toSatisfy(
+      (e: unknown) => isAppError(e) && e.code === 'not_found' && /No program for week 20/.test(e.message),
+    );
+    expect(upsertPayload(sb)).toBeUndefined();
+  });
+
+  it('rejects an unknown day name', async () => {
+    const { sb, tools } = setup();
+    await expect(tools.update_program_day(CURRENT_WEEK, 'Funday', day('Legs'))).rejects.toSatisfy(
+      (e: unknown) => isAppError(e) && e.code === 'invalid_args',
+    );
+    expect(upsertPayload(sb)).toBeUndefined();
+  });
+
+  it('rejects an invalid day with the validation message and does not save', async () => {
+    const { sb, tools } = setup();
+    sb.respond('workout_programs.maybeSingle', { data: { program_data: storedWeek() }, error: null });
+
+    const bad = { focus: 'Legs', exercises: [{ name: 'Squat', sets: 3, reps: 'x'.repeat(17) }] };
+    const result = await tools.update_program_day(CURRENT_WEEK, 'Monday', bad);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Program data validation failed');
+    expect(result.message).toContain('Monday');
+    expect(upsertPayload(sb)).toBeUndefined();
   });
 });

@@ -814,6 +814,56 @@ export function createActionTools(
     };
   }
 
+  // Edits exactly one day of an existing week. It delegates to save_workout_program so the
+  // gym write check, WeekProgramSchema/DaySchema validation and the upsert stay in one place.
+  async function update_program_day(
+    weekNumber: number,
+    dayName: string,
+    dayData: unknown,
+    gymId?: string
+  ): Promise<ToolResult> {
+    // A group member owns a personal gym too, so requireWritableGym alone would let them edit a
+    // program they do not follow. Joining a group adds no gym_members row in the leader's gym,
+    // so the leader's program has to be checked explicitly.
+    const leader = await queries.resolveLeaderProgramGym();
+    if (leader && (!gymId || gymId === leader.id)) {
+      throw AppError.forbidden(`You follow ${leader.name}'s program. Only the group leader can change it.`);
+    }
+    const resolvedGymId = await requireWritableGym(gymId);
+
+    const clock = await resolveUserClock(supabase, userId);
+    if (weekNumber < clock.currentWeek) {
+      throw AppError.invalidArgs(
+        `Week ${weekNumber} is in the past and locked. Only Week ${clock.currentWeek} and later can be edited.`
+      );
+    }
+
+    if (!(REQUIRED_DAYS as readonly string[]).includes(dayName)) {
+      throw AppError.invalidArgs(`dayName must be one of: ${REQUIRED_DAYS.join(", ")}.`);
+    }
+
+    const { data: existing, error: readErr } = await supabase
+      .from("workout_programs")
+      .select("program_data")
+      .eq("gym_id", resolvedGymId)
+      .eq("week_number", weekNumber)
+      .maybeSingle();
+
+    if (readErr) {
+      return { success: false, message: `Failed to read program: ${readErr.message}`, data: {} };
+    }
+    if (!existing) {
+      // Creating a week is a bigger decision than editing a day; keep it out of this path.
+      throw AppError.notFound(`No program for week ${weekNumber}.`);
+    }
+
+    const merged = {
+      ...((existing as { program_data: Record<string, unknown> }).program_data ?? {}),
+      [dayName]: dayData,
+    };
+    return save_workout_program(resolvedGymId, weekNumber, merged, true, "Edited by Chad");
+  }
+
   async function substitute_equipment_globally(
     fromExercise: string,
     toExercise: string,
@@ -1368,6 +1418,7 @@ export function createActionTools(
     update_max,
     delete_max,
     save_workout_program,
+    update_program_day,
     substitute_equipment_globally,
     get_pending_events,
     generate_weekly_summary,

@@ -74,6 +74,8 @@ const AdminApiSettings = ({ db }) => {
   const [newKeyValue, setNewKeyValue] = useState('');
   const [openrouterModel, setOpenrouterModel] = useState('openrouter/auto');
   const [savingModel, setSavingModel] = useState(false);
+  const [chadModel, setChadModel] = useState('');
+  const [savingChadModel, setSavingChadModel] = useState(false);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -115,6 +117,8 @@ const AdminApiSettings = ({ db }) => {
       if (savedModel && savedModel.trim() !== '') {
         setOpenrouterModel(savedModel.trim());
       }
+
+      setChadModel((settingsMap['chad_model'] || '').trim());
 
       setHasExistingKeys(existingKeys);
       setApiKeys(maskedKeys);
@@ -231,6 +235,25 @@ const AdminApiSettings = ({ db }) => {
       setMessage({ type: 'error', text: err.message || 'Failed to save model selection' });
     } finally {
       setSavingModel(false);
+    }
+  };
+
+  const handleSaveChadModel = async () => {
+    setSavingChadModel(true);
+    setMessage(null);
+    try {
+      const value = chadModel.trim();
+      const success = await db.saveAppSetting('chad_model', value);
+      if (success) {
+        setChadModel(value);
+        setMessage({ type: 'success', text: value ? `Chad model set to ${value}` : 'Chad model reset to the default' });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save Chad model' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to save Chad model' });
+    } finally {
+      setSavingChadModel(false);
     }
   };
 
@@ -498,6 +521,31 @@ const AdminApiSettings = ({ db }) => {
           </div>
         </div>
       )}
+
+      {/* Chad model: read by /api/chad, which always routes through OpenRouter */}
+      <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-orange-500/20 shadow-xl shadow-black/20">
+        <h3 className="font-semibold text-white mb-1">Chad model</h3>
+        <p className="text-sm text-zinc-400 mb-4">Any OpenRouter model id with tool support</p>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={chadModel}
+            onChange={(e) => setChadModel(e.target.value)}
+            placeholder="anthropic/claude-sonnet-5.5"
+            aria-label="Chad model id"
+            className="flex-1 px-4 py-3 bg-zinc-950/50 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all text-sm text-white placeholder:text-zinc-600"
+          />
+          <button
+            onClick={handleSaveChadModel}
+            disabled={savingChadModel}
+            className="px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+          >
+            {savingChadModel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
+        <p className="text-xs text-zinc-600 mt-2">Leave empty to use the default.</p>
+      </div>
 
       {/* Available Models Info */}
       <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-white/5 shadow-xl shadow-black/20">

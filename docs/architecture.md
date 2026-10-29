@@ -10,7 +10,7 @@ falls short of the rules in [AGENTS.md](../AGENTS.md), [status.md](status.md) li
 | Part | Path | What it is |
 | ---- | ---- | ---------- |
 | Web app | `src/` | React 18 + Vite single-page app in JavaScript, Tailwind v4, installable as a PWA (`public/sw.js`, `public/manifest.webmanifest`). Talks to Supabase with the public anon key and the signed-in user's JWT, so RLS applies. |
-| Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
+| Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the in-app coach (`chad.js`), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
 | MCP package | `mcp/` | TypeScript package with the agent tool kit: 44 tools in `mcp/src/tools/*`, wrapped as SDK tools in `mcp/src/sdk-adapter.ts`, plus context modules. Compiled to `mcp/dist/`, which the functions import. Also has a local stdio server (`mcp/src/server.ts`) for development. |
 | Shared core | `shared/` | Pure TypeScript with no I/O: week math, exercise aliases and name normalizer, estimated 1RM, set outcomes, workout blocks (AMRAP / For Time sections and scores). Imported by the web app (through `src/utils/*` re-exports) and by `mcp/` (through thin re-export shims). `mcp`'s `tsc` compiles it to `mcp/dist/shared/`. |
 | Vendored SDK | `vendor/bot-native-sdk/` | Built `dist/` of `@bot-native/sdk`, committed on purpose. It owns MCP protocol dispatch, scope checks, the skill loader, the OpenAPI export and the context-bundle builder. |
@@ -193,6 +193,42 @@ The MCP path defaults to `claude` when no provider is set. Typical call from web
 `generateWithLlm(provider, systemPrompt, userPrompt, 'weekly', db, currentUser)`; passing `db` and
 the user id turns on automatic error logging.
 See [ADR-002](decisions/ADR-002-llm-calls-through-api-llm.md).
+
+## Chad (in-app coach)
+
+Chad is a chat coach inside the app, separate from the user's own agent and the Coach Board. It runs
+on the OpenAI Agents SDK (`@openai/agents`) in `api/chad.js`. See
+[ADR-005](decisions/ADR-005-chad-openai-agents-sdk.md).
+
+```
+ChadPanel -> useChadChat -> src/lib/chad.js
+  POST /api/chad  Authorization: Bearer <user JWT>
+    1. Zod body check; JWT verified; 30 messages and 30 decisions per user per day
+       (check_rate_limit 'chad_message' / 'chad_decision'); runs abort at 50 s
+    2. kit = buildToolKit(serviceRoleClient, verifiedUserId), the MCP tool kit with the user bound in closures
+    3. Agent "Chad" = persona instructions + the context bundle + 7 tools + a red-flag input guardrail
+    4. Runner -> OpenAIProvider pointed at OpenRouter (Chat Completions), tracing off, maxTurns 8
+    5. update_program_day needs approval: the run pauses and the response carries
+       pending { state, proposal { week, day, summary, before, after } }
+  Apply / Nah -> POST /api/chad { type: 'decision', approve, state }
+    -> RunState.fromString, approve or reject, run again; changed: true after a saved edit
+  web reloads programs with db.getAllWorkoutPrograms
+```
+
+- **Model.** `OPENROUTER_API_KEY` (env) and the `chad_model` row in `app_settings` (an OpenRouter
+  model id, set in the admin panel). The default is in `api/_chad-core.js`. Chad does not use
+  `callLlmInternal` or its provider fallback.
+- **Tools.** Six reads (`get_todays_workout`, `get_weekly_workout`, `get_program_day`,
+  `get_training_history_summary`, `get_overload_recommendations`, `get_maxes`) and one write,
+  `update_program_day`. It replaces one day of a current or future week through
+  `save_workout_program`, so validation and the gym write check stay in one place. Group members
+  are refused. `get_program_day` and `update_program_day` are kit functions only, not MCP tools.
+- **State.** The chat history and the paused run state live in the browser (`sessionStorage`) and
+  are sent back each turn. The server trims history and never trusts it for identity. A user who
+  edits the paused state can only change what is saved to their own program, which still passes
+  the same checks.
+- **Safety.** A keyword guardrail (`detectRedFlags`) catches chest pain, numbness, a pop and similar
+  messages and answers with a fixed "see a professional" reply without calling the model.
 
 ## Push and reminders
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AppError, isAppError } from '@bot-native/sdk';
 import { createQueryTools } from '../tools/queries.js';
 import { createMcpMockSupabase } from './mockSupabase.js';
@@ -520,5 +520,97 @@ describe('authoritative gym', () => {
     expect(result.message).not.toContain('for everything');
     expect(sb.calls).toContainEqual(['rpc', 'get_leader_gym_id', [{ p_member_id: 'u1' }]]);
     expect((result.data as { gyms: Array<{ primary: boolean }> }).gyms[0].primary).toBe(true);
+  });
+
+  describe('get_program_day', () => {
+    // 2026-06-01 start puts 2026-10-09 (a Friday) in week 19.
+    const stored = {
+      Wednesday: { focus: 'Push', exercises: [{ name: 'Bench Press', sets: 3, reps: '8', percentages: [70, 70, 70] }] },
+      Friday: { focus: 'Pull', coach_notes: 'Keep it crisp', exercises: [{ name: 'Row', sets: 4, reps: '10' }] },
+    };
+
+    function setup() {
+      const sb = createMcpMockSupabase();
+      sb.respond('gym_members.list', {
+        data: [{ gym_id: 'g1', role: 'owner', gyms: { id: 'g1', name: 'Home' } }],
+        error: null,
+      });
+      sb.respond('profiles.single', {
+        data: { program_start_date: '2026-06-01', timezone: null },
+        error: null,
+      });
+      sb.respond('workout_programs.maybeSingle', { data: { program_data: stored }, error: null });
+      return sb;
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns the raw stored day, unenriched', async () => {
+      const result = await createQueryTools(setup(), 'u1').get_program_day(3, 'Wednesday');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ gym_id: 'g1', week_number: 3, day_name: 'Wednesday', day: stored.Wednesday });
+      expect(JSON.parse(result.message)).toEqual(result.data);
+    });
+
+    it("defaults to the clock's week and day", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-09T18:00:00Z'));
+      const sb = setup();
+
+      const result = await createQueryTools(sb, 'u1').get_program_day();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({ week_number: 19, day_name: 'Friday', day: stored.Friday });
+      expect(sb.calls).toContainEqual(['workout_programs', 'eq', ['week_number', 19]]);
+    });
+
+    it('fails clearly when the day is missing from the week', async () => {
+      const result = await createQueryTools(setup(), 'u1').get_program_day(3, 'Sunday');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No Sunday found in the Week 3 program');
+    });
+
+    it('fails clearly when the week has no program', async () => {
+      const sb = setup();
+      sb.respond('workout_programs.maybeSingle', { data: null, error: null });
+
+      const result = await createQueryTools(sb, 'u1').get_program_day(40, 'Monday');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No program found for Week 40');
+    });
+
+    it('reports a read error instead of pretending the week is missing', async () => {
+      const sb = setup();
+      sb.respond('workout_programs.maybeSingle', { data: null, error: { message: 'timeout' } });
+
+      const result = await createQueryTools(sb, 'u1').get_program_day(3, 'Wednesday');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Couldn't read the program right now.");
+    });
+
+    it('treats an inherited property name as a missing day', async () => {
+      const result = await createQueryTools(setup(), 'u1').get_program_day(3, 'constructor');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No constructor found');
+    });
+
+    it("reads the leader's program for a group member", async () => {
+      const sb = setup();
+      sb.respond('rpc.get_leader_gym_id', { data: 'g-leader', error: null });
+      sb.respond('gyms.maybeSingle', { data: { id: 'g-leader', name: 'Coach' }, error: null });
+
+      const result = await createQueryTools(sb, 'u1').get_program_day(3, 'Wednesday');
+
+      expect(result.success).toBe(true);
+      expect((result.data as { gym_id: string }).gym_id).toBe('g-leader');
+      expect(sb.calls).toContainEqual(['workout_programs', 'eq', ['gym_id', 'g-leader']]);
+    });
   });
 });

@@ -5,6 +5,7 @@ import { supabase, db } from '../lib/supabase';
 // Modals render null while closed, so mount-on-open + lazy keeps them out of
 // the entry chunk without changing close behavior. Each loads once, on demand.
 const AgentChatPanel = lazy(() => import('./AgentChat/AgentChatPanel'));
+const ChadPanel = lazy(() => import('./Chad/ChadPanel'));
 const SettingsModal = lazy(() => import('./Modals/SettingsModal'));
 const EquipmentModal = lazy(() => import('./Modals/EquipmentModal'));
 const AiGeneratorModal = lazy(() => import('./Modals/AiGeneratorModal'));
@@ -27,6 +28,7 @@ function OverlayFallback() {
  */
 export default function AppModals({
   agentChat,          // hook-returned object from useAgentChat
+  chad,               // hook-returned object from useChadChat
   settings,           // { isOpen, onClose, ...settingsProps }
   equipment,          // { isOpen, name, onNameChange, onAdd, onClose }
   aiGenerator,        // full aiGen prop bundle
@@ -49,6 +51,20 @@ export default function AppModals({
             onInputChange={agentChat.setInput}
             onSend={agentChat.send}
             onDelete={agentChat.remove}
+          />
+        </Suspense>
+      )}
+
+      {chad.isOpen && (
+        <Suspense fallback={<OverlayFallback />}>
+          <ChadPanel
+            messages={chad.messages}
+            pending={chad.pending}
+            loading={chad.loading}
+            onClose={chad.close}
+            onSend={chad.send}
+            onDecide={chad.decide}
+            onReset={chad.reset}
           />
         </Suspense>
       )}
