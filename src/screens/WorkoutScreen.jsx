@@ -27,6 +27,7 @@ import {
 } from '../components/Workout';
 import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
 import CoachBoardEntry from '../components/AgentChat/CoachBoardEntry';
+import ChadEntry from '../components/Chad/ChadEntry';
 import PostWorkoutCoachPrompt from '../components/AgentChat/PostWorkoutCoachPrompt';
 
 /**
@@ -67,6 +68,7 @@ export default function WorkoutScreen({
   onCancelSwap,
   latestCoachNote,
   onOpenAgentChat,
+  onOpenChad,
   hasAgentKey = false,
   coachHasUnread = false,
   coachSending = false,
@@ -407,6 +409,9 @@ export default function WorkoutScreen({
         {showThisWeek && <div className="mt-4">{weekPicker}</div>}
       </div>
 
+      <div className="mt-4">
+        <ChadEntry onOpen={onOpenChad} />
+      </div>
       {hasAgentKey && (
         <div className="mt-4">
           <CoachBoardEntry

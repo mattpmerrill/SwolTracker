@@ -126,6 +126,17 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     return { id, name: name && name.length > 0 ? name : "the leader's gym" };
   }
 
+  /**
+   * The gym whose program the user follows. Leader first, like the web bootstrap: a group member
+   * logs under their own gym but their program lives in the leader's.
+   */
+  async function resolveProgramGymId(gymId?: string): Promise<string | null> {
+    const leader = await resolveLeaderProgramGym();
+    if (!gymId) return leader?.id ?? (await resolveGymId());
+    if (leader && gymId === leader.id) return leader.id;
+    return resolveGymId(gymId);
+  }
+
   async function resolveCurrentWeek(): Promise<number> {
     return (await resolveUserClock(supabase, userId)).currentWeek;
   }
@@ -537,6 +548,45 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
       message: `${weekLabel} (${totalSets} total sets):\n${lines.join("\n")}`,
       data: { total_sets: totalSets, days, gym_id: resolvedGymId, ...weekFields },
     };
+  }
+
+  // Raw stored day, for callers that edit a day and write it back. get_todays_workout and
+  // get_weekly_workout return enriched shapes (resolved weights, presented blocks) that would
+  // not round-trip through DaySchema.
+  async function get_program_day(weekNumber?: number, dayName?: string, gymId?: string): Promise<ToolResult> {
+    const resolvedGymId = await resolveProgramGymId(gymId);
+    if (!resolvedGymId) {
+      return { success: false, message: "No gym found for user.", data: {} };
+    }
+
+    const clock = await resolveUserClock(supabase, userId);
+    const week = weekNumber ?? clock.currentWeek;
+    const dayKey = dayName ?? clock.dayName;
+
+    const { data: programRow, error } = await supabase
+      .from("workout_programs")
+      .select("program_data")
+      .eq("gym_id", resolvedGymId)
+      .eq("week_number", week)
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, message: "Couldn't read the program right now.", data: {} };
+    }
+    if (!programRow) {
+      return { success: false, message: `No program found for Week ${week}.`, data: {} };
+    }
+
+    // Own keys only: "constructor" or a mistyped day must read as a missing day, not an
+    // inherited prototype value.
+    const programData = (programRow as Pick<WorkoutProgramRow, "program_data">).program_data ?? {};
+    const day = Object.hasOwn(programData, dayKey) ? programData[dayKey] : undefined;
+    if (!day) {
+      return { success: false, message: `No ${dayKey} found in the Week ${week} program.`, data: {} };
+    }
+
+    const data = { gym_id: resolvedGymId, week_number: week, day_name: dayKey, day };
+    return { success: true, message: JSON.stringify(data), data };
   }
 
   async function get_program_overview(gymId?: string): Promise<ToolResult> {
@@ -1373,6 +1423,7 @@ export function createQueryTools(supabase: SupabaseClient, userId: string) {
     list_gyms,
     get_todays_workout,
     get_weekly_workout,
+    get_program_day,
     get_program_overview,
     get_program_progression,
     get_workout_logs,

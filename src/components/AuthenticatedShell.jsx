@@ -5,6 +5,7 @@ import { useAdmin } from '../hooks/useAdmin';
 import { useAiGenerator } from '../hooks/useAiGenerator';
 import { useExerciseSwap } from '../hooks/useExerciseSwap';
 import { useAgentChat } from '../hooks/useAgentChat';
+import { useChadChat } from '../hooks/useChadChat';
 import { useBuddyActions } from '../hooks/useBuddyActions';
 import { useMaxesActions } from '../hooks/useMaxesActions';
 import { useProfileActions } from '../hooks/useProfileActions';
@@ -150,7 +151,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   const [groupRole, setGroupRole] = useState('independent');
   const [groupMembers, setGroupMembers] = useState([]);
   const [groupLeader, setGroupLeader] = useState(null);
-  const [, setLeaderGymId] = useState(null);
+  const [leaderGymId, setLeaderGymId] = useState(null);
   const [groupName, setGroupName] = useState('');
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -158,6 +159,9 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   const [hasAgentKey, setHasAgentKey] = useState(false);
 
   const agentChat = useAgentChat({ currentUser, toast });
+  // Members read the leader's program, so a refresh after a Chad edit must too.
+  const programGymId = groupRole === 'member' && leaderGymId ? leaderGymId : gymId;
+  const chadChat = useChadChat({ currentUser, programGymId, setWorkoutProgram, toast });
 
   const aiGen = useAiGenerator({
     currentUser,
@@ -311,6 +315,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             onCancelSwap: clearSwap,
             latestCoachNote: agentChat.latestCoachNote,
             onOpenAgentChat: agentChat.open,
+            onOpenChad: chadChat.open,
             hasAgentKey,
             coachHasUnread: agentChat.hasUnread,
             coachSending: agentChat.sending,
@@ -382,6 +387,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
 
       <AppModals
         agentChat={agentChat}
+        chad={chadChat}
         settings={{
           isOpen: showSettings,
           groupRole,

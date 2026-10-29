@@ -48,7 +48,7 @@ const workoutSummaryExerciseSchema = z.object({
   percentage_of_max: z.number().min(0).max(100).optional().describe("Optional percentage-of-max fallback for weight resolution"),
 });
 
-type ToolKit = {
+export type ToolKit = {
   queries: ReturnType<typeof createQueryTools>;
   actions: ReturnType<typeof createActionTools>;
   context: ReturnType<typeof createContextTools>;
@@ -58,7 +58,7 @@ type ToolKit = {
   onboarding: ReturnType<typeof createOnboardingTools>;
 };
 
-function buildToolKit(
+export function buildToolKit(
   supabase: SupabaseClient,
   userId: string,
   deps?: BuildAppDeps

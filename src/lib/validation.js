@@ -53,6 +53,24 @@ export const blockScoreSchema = z.object({
 })
 
 // Agent chat schemas
+// /api/chad response. Day payloads stay unknown here: the server already
+// validated them, and the UI only reads them defensively (see utils/chadProposal.js).
+export const chadResponseSchema = z.object({
+  reply: z.string().default(''),
+  history: z.array(z.unknown()),
+  pending: z.object({
+    state: z.string().min(1),
+    proposal: z.object({
+      week: z.number().int(),
+      day: z.string(),
+      summary: z.string().optional(),
+      before: z.unknown().nullable(),
+      after: z.unknown(),
+    }),
+  }).nullable().default(null),
+  changed: z.boolean().default(false),
+})
+
 export const agentChatMessageSchema = z.string().trim().min(1, 'Message cannot be empty').max(5000, 'Message too long (max 5000 characters)')
 
 // AI generation schemas

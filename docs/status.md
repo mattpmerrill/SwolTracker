@@ -2,6 +2,31 @@
 
 Where the project stands and how to pick it up. Update this at the end of each working session.
 
+**Chad, the in-app coach (2026-10-29, branch feat/chad-coach, not yet merged).**
+Design: ADR-005 and the Chad section of architecture.md. A same-day POC to learn the OpenAI
+Agents SDK.
+- `api/chad.js`, `api/_chad-agent.js`, `api/_chad-core.js`; kit functions `get_program_day` and
+  `update_program_day` (not MCP tools; still 44); web `src/components/Chad/*`, `useChadChat`,
+  `src/lib/chad.js`; admin field for `chad_model`.
+- Needs `OPENROUTER_API_KEY` in Vercel Production. Without it `/api/chad` answers 503. Preview
+  deployments have no `SUPABASE_SERVICE_ROLE_KEY`, so test on production.
+- Known gaps and follow-ups:
+  - For group members, `get_todays_workout`, `get_weekly_workout` and the context bundle read the
+    member's own gym, not the leader's program (pre-existing MCP behavior), so Chad sees the wrong
+    program for members. Edits are correctly refused.
+  - An edit revalidates the whole week with `WeekProgramSchema`. Weeks saved by the web generator
+    (no schema check) can fail on a day Chad did not touch, and unknown keys on the other days are
+    stripped.
+  - Read, merge, upsert has no concurrency guard; two edits to the same week can lose one.
+  - No warning when the edited day already has logged sets.
+  - Chat history is per tab (`sessionStorage`); a `chad_messages` table is the next step.
+  - The paused run state is not signed (HMAC is a follow-up). No streaming yet.
+  - The red-flag guardrail is a keyword check with a short negation window; it will miss some
+    phrasings and flag some harmless ones.
+  - Rate limits fail open when `check_rate_limit` errors (same as `/api/llm`).
+  - `/api/llm` reads provider keys from env, but the admin panel saves keys to `app_settings`, and
+    Vercel has no LLM keys; in-app generation may be failing in production.
+
 **Coach's notes and scored blocks (2026-10-17, branch feat/coach-notes-blocks, not yet merged).**
 Plan: `docs/plans/2026-10-17-coach-notes-and-blocks.md`. Why: Week 38 Saturday's Forge AMRAP showed
 four movements and no time cap or scoring, and the AMRAP logged as four sets with no reps.

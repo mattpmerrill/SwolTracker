@@ -54,7 +54,7 @@ change.
   or its inputs also updates `SKILL.md`.
 - **Secrets stay server-side.** LLM provider keys, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`
   and `CRON_SECRET` are read only in `api/` and `mcp/`, never imported into `src/`. `VITE_` means
-  public and ships to every browser. LLM calls from the browser go through `/api/llm`. Never commit
+  public and ships to every browser. LLM calls from the browser go through `/api/llm`, or `/api/chad` for the in-app coach (ADR-005). Never commit
   `.env*` or `.claude/settings.local.json`, never put a credential in tracked tool config
   (`.mcp.json`, `.claude/`), and never log a key, a token or a user's personal data. Write only the
   names of variables in docs, never values.
@@ -131,6 +131,8 @@ GitHub Actions, npm. `mobile/` (Expo) is paused and out of scope.
 - **Overload recommendation**: a progression flag for a lift (ready to increase, deload, stale).
 - **Coach Board**: the asynchronous note thread between the user and their agent.
 - **Agent**: the user's own AI, connected with an API key.
+- **Chad**: the in-app coach at `/api/chad`, built on the OpenAI Agents SDK. Separate from the user's
+  agent and the Coach Board.
 - **API key**: a `swol_` bearer key, hashed at rest, carrying scopes. **Scope**: one permission on
   a key.
 - **Leader / member**: roles in a workout group. A member logs sets against the leader's program

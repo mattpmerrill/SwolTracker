@@ -6,6 +6,9 @@
       "memory": 1024,
       "maxDuration": 300
     },
+    "api/chad.js": {
+      "maxDuration": 60
+    },
     "api/mcp.js": {
       "maxDuration": 30,
       "includeFiles": "SKILL.md"
