@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '../lib/supabase';
 import { sendChadMessage, sendChadDecision } from '../lib/chad';
+import { reloadProgram } from '../lib/reloadProgram';
 import { reportWriteFailure, ErrorCategory, ErrorSeverity } from '../lib/errorService';
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -86,28 +87,20 @@ export function useChadChat({ currentUser, programGymId, setWorkoutProgram, toas
   }), [currentUser, toast]);
 
   const refreshProgram = useCallback(async () => {
-    try {
-      const programs = await db.getAllWorkoutPrograms(programGymId);
-      // Same guard as bootstrap: never replace the program with an empty map.
-      if (programs && Object.keys(programs).length > 0) {
-        setWorkoutProgram(programs);
-        toast.success('Workout updated');
-      } else {
-        throw new Error('getAllWorkoutPrograms returned no weeks');
-      }
-    } catch (err) {
-      await reportWriteFailure({
-        db,
-        toast,
-        userId: currentUser,
-        component: 'useChadChat.js',
-        operation: 'refreshProgram',
-        message: err?.message || 'refreshProgram failed',
-        userMessage: 'Chad updated your workout, but it did not refresh. Reload to see it.',
-        originalError: err,
-        errorType: 'load_failed',
-      });
+    if (await reloadProgram({ programGymId, setWorkoutProgram })) {
+      toast.success('Workout updated');
+      return;
     }
+    await reportWriteFailure({
+      db,
+      toast,
+      userId: currentUser,
+      component: 'useChadChat.js',
+      operation: 'refreshProgram',
+      message: 'refreshProgram failed',
+      userMessage: 'Chad updated your workout, but it did not refresh. Reload to see it.',
+      errorType: 'load_failed',
+    });
   }, [programGymId, setWorkoutProgram, toast, currentUser]);
 
   const applyResponse = useCallback(async (response) => {
@@ -184,5 +177,15 @@ export function useChadChat({ currentUser, programGymId, setWorkoutProgram, toas
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
 
-  return { isOpen, messages, history, pending, loading, open, close, send, decide, reset };
+  /**
+   * Open the panel and send a seeded first message, for entry points like the check-in card.
+   * The panel opens even if the send is refused (busy, or an edit is waiting for an answer).
+   * @returns {Promise<boolean>} what `send` returned
+   */
+  const openWith = useCallback((text) => {
+    setIsOpen(true);
+    return send(text);
+  }, [send]);
+
+  return { isOpen, messages, history, pending, loading, open, openWith, close, send, decide, reset };
 }

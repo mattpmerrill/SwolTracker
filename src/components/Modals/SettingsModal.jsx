@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Brain, Zap, Check, Shield, Package, Plus, Bot, Key, Copy, Trash2, Loader2, Activity, AlertCircle, FileText, ClipboardList } from 'lucide-react';
 import { db } from '../../lib/supabase';
 import PushSettings from '../PushSettings';
+import ChadCheckinSettings from '../Chad/ChadCheckinSettings';
 import { parseCalendarDate } from '../../utils/date';
 import swoltrackerSkillGuide from '../../../SKILL.md?raw';
 
@@ -20,6 +21,7 @@ export default function SettingsModal({
   actualCurrentWeek,
   isAdmin,
   supabase,
+  checkin,
   onClose,
   onOpenAiGenerator,
   onOpenAdmin,
@@ -116,6 +118,9 @@ export default function SettingsModal({
 
         {/* Workout reminders — standalone, not nested in agent sections */}
         <PushSettings />
+
+        {/* Chad's weekly check-in: shown only when the server has it set up */}
+        {checkin && <ChadCheckinSettings checkin={checkin} />}
 
         {/* Connect Agent Section */}
         {supabase && <AgentKeysSection supabase={supabase} />}

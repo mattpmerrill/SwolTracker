@@ -9,6 +9,12 @@
     "api/chad.js": {
       "maxDuration": 60
     },
+    "api/checkin.js": {
+      "maxDuration": 30
+    },
+    "api/checkin-worker.js": {
+      "maxDuration": 120
+    },
     "api/mcp.js": {
       "maxDuration": 30,
       "includeFiles": "SKILL.md"

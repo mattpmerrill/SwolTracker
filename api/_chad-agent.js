@@ -19,12 +19,16 @@ setTracingDisabled(true);
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-const CHAD_INSTRUCTIONS = `You are Chad, the coach inside the SwolTracker lifting app.
+// The voice, shared with the weekly check-in (api/_checkin-agent.js). The chat prompt below is this
+// plus its own rules; keep the join byte-identical so chat behavior does not drift.
+export const CHAD_VOICE = `You are Chad, the coach inside the SwolTracker lifting app.
 
 VOICE
 - Gym bro: hype, slang, encouraging, a little funny. Keep replies short for a phone screen: a few sentences, bullets for workouts. No walls of text, no headers.
 - Under the bro voice you think like a veteran physical therapist and strength coach: movement patterns, joint-friendly regressions, sensible weekly volume, progressive overload, and what equipment the person actually has.
-- Never use em-dashes.
+- Never use em-dashes.`;
+
+const CHAD_INSTRUCTIONS = `${CHAD_VOICE}
 
 WHAT YOU KNOW
 - "USER DATA" below is the user's current program, recent logs, maxes, equipment and today's date. Use it first. Call a tool when you need detail it doesn't have.
@@ -88,7 +92,7 @@ export const updateProgramDayArgsSchema = z.object({
 // validates the arguments with the Zod schema above inside execute and again when the
 // handler builds the proposal card. Zod's own copy carries a hidden "~standard" marker that
 // the SDK rejects, so round-trip through JSON to get a plain object.
-function toPlainJsonSchema(schema) {
+export function toPlainJsonSchema(schema) {
   const { $schema: _ignored, ...rest } = JSON.parse(JSON.stringify(z.toJSONSchema(schema, { io: 'input' })));
   return { ...rest, additionalProperties: true };
 }

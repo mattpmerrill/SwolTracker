@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap, Globe, ChevronDown } from 'lucide-react';
+import { buildChadPriceSetting, normalizeRollout, parseChadPrice, ROLLOUT_OPTIONS } from '../../utils/chadUsage';
 
 const PROVIDERS = [
   {
@@ -76,6 +77,11 @@ const AdminApiSettings = ({ db }) => {
   const [savingModel, setSavingModel] = useState(false);
   const [chadModel, setChadModel] = useState('');
   const [savingChadModel, setSavingChadModel] = useState(false);
+  const [chadPriceIn, setChadPriceIn] = useState('');
+  const [chadPriceOut, setChadPriceOut] = useState('');
+  const [savingChadPrice, setSavingChadPrice] = useState(false);
+  const [chadRollout, setChadRollout] = useState('admin');
+  const [savingRollout, setSavingRollout] = useState(false);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -119,6 +125,11 @@ const AdminApiSettings = ({ db }) => {
       }
 
       setChadModel((settingsMap['chad_model'] || '').trim());
+
+      const chadPrice = parseChadPrice(settingsMap['chad_price_per_mtok']);
+      setChadPriceIn(chadPrice ? String(chadPrice.input) : '');
+      setChadPriceOut(chadPrice ? String(chadPrice.output) : '');
+      setChadRollout(normalizeRollout(settingsMap['chad_checkin_rollout']));
 
       setHasExistingKeys(existingKeys);
       setApiKeys(maskedKeys);
@@ -254,6 +265,48 @@ const AdminApiSettings = ({ db }) => {
       setMessage({ type: 'error', text: err.message || 'Failed to save Chad model' });
     } finally {
       setSavingChadModel(false);
+    }
+  };
+
+  const handleSaveChadPrice = async () => {
+    const built = buildChadPriceSetting(chadPriceIn, chadPriceOut);
+    if (!built.ok) {
+      setMessage({ type: 'error', text: built.error });
+      return;
+    }
+    setSavingChadPrice(true);
+    setMessage(null);
+    try {
+      // Both rates go in one value so a call is never priced with half a rate.
+      const success = await db.saveAppSetting('chad_price_per_mtok', built.value);
+      if (success) {
+        setChadPriceIn(String(built.price.input));
+        setChadPriceOut(String(built.price.output));
+        setMessage({ type: 'success', text: `Chad prices saved: $${built.price.input} in, $${built.price.output} out per million tokens` });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save Chad prices' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to save Chad prices' });
+    } finally {
+      setSavingChadPrice(false);
+    }
+  };
+
+  const handleSaveRollout = async () => {
+    setSavingRollout(true);
+    setMessage(null);
+    try {
+      const success = await db.saveAppSetting('chad_checkin_rollout', chadRollout);
+      if (success) {
+        setMessage({ type: 'success', text: chadRollout === 'all' ? 'Weekly check-ins are open to everyone' : 'Weekly check-ins are admin only' });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save rollout' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to save rollout' });
+    } finally {
+      setSavingRollout(false);
     }
   };
 
@@ -545,6 +598,77 @@ const AdminApiSettings = ({ db }) => {
           </button>
         </div>
         <p className="text-xs text-zinc-600 mt-2">Leave empty to use the default.</p>
+      </div>
+
+      {/* Chad prices: the check-in meter multiplies tokens by these to get cost_usd */}
+      <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-orange-500/20 shadow-xl shadow-black/20">
+        <h3 className="font-semibold text-white mb-1">Chad token prices</h3>
+        <p className="text-sm text-zinc-400 mb-4">Dollars per million tokens, saved together. Used for the cost shown in the Chad tab.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="chad-price-in" className="block text-xs text-zinc-400 mb-1.5">Chad price, input $/M tokens</label>
+            <input
+              id="chad-price-in"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={chadPriceIn}
+              onChange={(e) => setChadPriceIn(e.target.value)}
+              placeholder="3"
+              className="w-full px-4 py-3 bg-zinc-950/50 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all text-sm text-white placeholder:text-zinc-600"
+            />
+          </div>
+          <div>
+            <label htmlFor="chad-price-out" className="block text-xs text-zinc-400 mb-1.5">Chad price, output $/M tokens</label>
+            <input
+              id="chad-price-out"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={chadPriceOut}
+              onChange={(e) => setChadPriceOut(e.target.value)}
+              placeholder="15"
+              className="w-full px-4 py-3 bg-zinc-950/50 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all text-sm text-white placeholder:text-zinc-600"
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleSaveChadPrice}
+          disabled={savingChadPrice}
+          className="mt-4 px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+        >
+          {savingChadPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save prices
+        </button>
+        <p className="text-xs text-zinc-600 mt-2">Until both are set, check-in costs are recorded as $0.</p>
+      </div>
+
+      {/* Rollout: who may turn the weekly check-in on */}
+      <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-orange-500/20 shadow-xl shadow-black/20">
+        <h3 className="font-semibold text-white mb-1">Weekly check-in rollout</h3>
+        <p className="text-sm text-zinc-400 mb-4">Admin only is the default. Switch to everyone once a real week has run cleanly.</p>
+        <div className="flex gap-3">
+          <select
+            value={chadRollout}
+            onChange={(e) => setChadRollout(e.target.value)}
+            aria-label="Weekly check-in rollout"
+            className="flex-1 px-4 py-3 bg-zinc-950/50 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all text-sm text-white"
+          >
+            {ROLLOUT_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option === 'all' ? 'Everyone' : 'Admin only'}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleSaveRollout}
+            disabled={savingRollout}
+            className="px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+          >
+            {savingRollout ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
       </div>
 
       {/* Available Models Info */}

@@ -48,3 +48,22 @@ function normalizePath(pathname) {
   if (pathname.endsWith('/') && pathname.length > 1) return pathname.slice(0, -1);
   return pathname;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The check-in deep link carried by Chad's pushes: /workout?checkin=<id> or /workout?offer=<id>
+ * (shared/checkin-contract.ts). Anything that is not a uuid is ignored, so a mangled link is
+ * a plain /workout visit.
+ * @param {string} search - location.search
+ * @returns {{ kind: 'checkin' | 'offer', id: string } | null}
+ */
+export function parseCheckinLink(search) {
+  if (!search) return null;
+  const params = new URLSearchParams(search);
+  for (const kind of ['checkin', 'offer']) {
+    const id = params.get(kind);
+    if (id && UUID_RE.test(id)) return { kind, id: id.toLowerCase() };
+  }
+  return null;
+}

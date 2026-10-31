@@ -2,13 +2,40 @@
 
 Where the project stands and how to pick it up. Update this at the end of each working session.
 
-**Chad, the in-app coach (2026-10-29, branch feat/chad-coach, not yet merged).**
+**Chad's weekly check-in on Temporal (2026-10-31, branch feat/chad-checkin, not yet merged).**
+Design: ADR-006, the "Chad weekly check-in" section of architecture.md, and the contract header in
+`shared/checkin-contract.ts`. Built to learn Temporal hands-on.
+- Server: `api/checkin.js`, `api/checkin-worker.js`, `api/_checkin-core.js`, `_checkin-agent.js`,
+  `_checkin-db.js`, `_temporal.js`; shared `checkin-contract.ts` and `temporal-codec.ts`; kit
+  `apply_program_days` (not an MCP tool; still 44). Worker: `worker/` (own package, README, tests
+  with Temporal's time-skipping server and replay fixtures). Web: `ChadCheckinCard`,
+  `ChadMissedDayCard`, `ChadCheckinSettings`, `useCheckin`, admin Chad tab.
+- `migrations/044-chad-checkins.sql` was applied to production on 2026-10-31 (through
+  `supabase db query --linked -f`; RLS, grants and `get_chad_usage` verified afterwards). Vercel needs
+  `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_API_KEY`, `CHECKIN_CODEC_KEY`,
+  `CHECKIN_WORKER_SECRET`; without the Temporal pair `/api/checkin` answers 503 and the toggle stays
+  hidden, so merging early is safe. The worker needs the same plus `SWOLTRACKER_API_URL`
+  (`worker/.env`, gitignored). Rollout defaults to `admin` (`app_settings.chad_checkin_rollout`).
+- Known gaps and follow-ups:
+  - The worker runs on Matt's Mac only. While it is off, timers wait and Updates (Apply) answer 503;
+    it catches up when it starts. Hosting it (Railway or Fly) is the next step.
+  - No codec server, so encrypted payloads are unreadable in the Temporal Cloud UI.
+  - Group members (leader's program) are not eligible.
+  - `apply_program_days` reads then writes the week with no version check, like
+    `update_program_day`; a web edit to another day in between can be lost.
+  - Two overlapping `draft` retries on a `drafting` row could pay for the model twice (the write
+    stays consistent).
+  - The `reloadProgram` error log row no longer carries the original error (console only).
+  - Not yet run end to end against real Supabase, push and a model; not yet viewed signed in.
+
+**Chad, the in-app coach (2026-10-29, merged in PR #14 on 2026-10-30).**
 Design: ADR-005 and the Chad section of architecture.md. A same-day POC to learn the OpenAI
-Agents SDK.
+Agents SDK. Live in production; the model is set to `deepseek/deepseek-v4.1-flash-1017` in the
+admin panel.
 - `api/chad.js`, `api/_chad-agent.js`, `api/_chad-core.js`; kit functions `get_program_day` and
   `update_program_day` (not MCP tools; still 44); web `src/components/Chad/*`, `useChadChat`,
   `src/lib/chad.js`; admin field for `chad_model`.
-- Needs `OPENROUTER_API_KEY` in Vercel Production. Without it `/api/chad` answers 503. Preview
+- `OPENROUTER_API_KEY` is set in Vercel Production. Without it `/api/chad` answers 503. Preview
   deployments have no `SUPABASE_SERVICE_ROLE_KEY`, so test on production.
 - Known gaps and follow-ups:
   - For group members, `get_todays_workout`, `get_weekly_workout` and the context bundle read the

@@ -106,7 +106,8 @@ GitHub Actions, npm. `mobile/` (Expo) is paused and out of scope.
 | `src/lib/llm.js` | Browser client for `/api/llm` |
 | `src/lib/offlineQueue.js`, `offlineWrites.js` | Offline write queue |
 | `src/utils/` | Pure helpers; `date.js` and `e1rm.js` re-export `shared/` |
-| `api/` | Vercel functions: `llm.js`, `mcp.js`, `mcp/*`, `push.js`, `cron/reminders.js`; `_*.js` are helpers |
+| `api/` | Vercel functions: `llm.js`, `chad.js`, `checkin.js`, `checkin-worker.js`, `mcp.js`, `mcp/*`, `push.js`, `cron/reminders.js`; `_*.js` are helpers |
+| `worker/` | Standalone Temporal worker for Chad's weekly check-in (not deployed to Vercel); see its README |
 | `mcp/src/tools/` | MCP tool bodies by family: queries, actions, context, generation, coaching, natural-language, onboarding |
 | `mcp/src/sdk-adapter.ts` | Registers the 44 tools with names, schemas, categories and scopes |
 | `mcp/src/__tests__/` | MCP contract, scope, IDOR, OpenAPI and skill tests |
@@ -133,6 +134,9 @@ GitHub Actions, npm. `mobile/` (Expo) is paused and out of scope.
 - **Agent**: the user's own AI, connected with an API key.
 - **Chad**: the in-app coach at `/api/chad`, built on the OpenAI Agents SDK. Separate from the user's
   agent and the Coach Board.
+- **Check-in**: Chad's weekly review and proposed changes for next week, approved by the user. A
+  **missed-day offer** proposes moving an unlogged day to a later rest day.
+- **Worker**: the Temporal worker process in `worker/` that runs each user's check-in workflow.
 - **API key**: a `swol_` bearer key, hashed at rest, carrying scopes. **Scope**: one permission on
   a key.
 - **Leader / member**: roles in a workout group. A member logs sets against the leader's program

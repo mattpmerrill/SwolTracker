@@ -4,6 +4,7 @@
     "api/**/*.js",
     "!api/_*.js",
     "public/sw.js",
+    "shared/checkin-contract.ts",
     "mcp/src/server.ts",
     "mcp/src/sdk-adapter.ts"
   ],

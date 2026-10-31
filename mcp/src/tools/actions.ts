@@ -76,7 +76,9 @@ const BlockSchema = z.object({
 
 // Blocks reference exercises by position, so the day is the unit that can be
 // checked: a per-block schema cannot see how many exercises there are.
-const DaySchema = z
+// Exported so the check-in endpoint can run a model-drafted day through the same check, and store the
+// parsed (unknown keys stripped) form, before the user is ever asked to approve it.
+export const ProgramDaySchema = z
   .object({
     focus: z.string().max(FOCUS_MAX).optional(),
     coach_notes: z.string().max(COACH_NOTES_MAX).optional(),
@@ -115,7 +117,7 @@ const DaySchema = z
   });
 
 const WeekProgramSchema = z
-  .record(z.enum(REQUIRED_DAYS), DaySchema)
+  .record(z.enum(REQUIRED_DAYS), ProgramDaySchema)
   .refine(
     (w) => REQUIRED_DAYS.every((d) => Object.prototype.hasOwnProperty.call(w, d)),
     { message: `All 7 days (${REQUIRED_DAYS.join(", ")}) must be present` },
@@ -127,6 +129,41 @@ function formatZodIssues(issues: z.ZodIssue[], limit = 5): string {
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
 }
+
+/**
+ * Structural equality for JSON values, independent of object key order. Used to detect that a
+ * stored program day no longer matches the draft it was proposed against. `null` and `undefined`
+ * are the same value, and an object key holding `undefined` counts as absent, so a day that is
+ * missing from the stored week equals a draft `before` of `null`. Jsonb round-trips drop
+ * `undefined`, which is why a plain `===` or `JSON.stringify` compare would give false conflicts.
+ */
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  if (typeof a !== "object" || typeof b !== "object") return a === b;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => jsonEqual(v, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (!jsonEqual(left[key], right[key])) return false;
+  }
+  return true;
+}
+
+/**
+ * One day of a multi-day edit. `before` is the stored day the edit was drafted against; null or
+ * omitted means the day must be absent from the stored week, so an existing day is then skipped as
+ * changed_since_draft. update_program_day ignores `before`.
+ */
+interface ProgramDayEdit {
+  before?: unknown;
+  after: unknown;
+}
+
+type SkippedDay = { day: string; reason: "changed_since_draft" | "already_logged" };
 
 interface LogSetParams {
   gym_id?: string;
@@ -814,22 +851,25 @@ export function createActionTools(
     };
   }
 
-  // Edits exactly one day of an existing week. It delegates to save_workout_program so the
-  // gym write check, WeekProgramSchema/DaySchema validation and the upsert stay in one place.
-  async function update_program_day(
+  // Shared body of update_program_day and apply_program_days. It delegates the write to
+  // save_workout_program so the gym write check, WeekProgramSchema/DaySchema validation and the
+  // upsert stay in one place, and it saves once for the whole set of days.
+  // `guarded` turns on the two checks a stale draft needs: the stored day must still equal `before`,
+  // and the day must have no completed sets. Direct chat edits (update_program_day) run unguarded.
+  async function editProgramDays(
     weekNumber: number,
-    dayName: string,
-    dayData: unknown,
-    gymId?: string
-  ): Promise<ToolResult> {
+    edits: Record<string, ProgramDayEdit>,
+    note: string,
+    opts: { gymId?: string; guarded: boolean }
+  ): Promise<{ gymId: string; applied: string[]; skipped: SkippedDay[]; save: ToolResult | null }> {
     // A group member owns a personal gym too, so requireWritableGym alone would let them edit a
     // program they do not follow. Joining a group adds no gym_members row in the leader's gym,
     // so the leader's program has to be checked explicitly.
     const leader = await queries.resolveLeaderProgramGym();
-    if (leader && (!gymId || gymId === leader.id)) {
+    if (leader && (!opts.gymId || opts.gymId === leader.id)) {
       throw AppError.forbidden(`You follow ${leader.name}'s program. Only the group leader can change it.`);
     }
-    const resolvedGymId = await requireWritableGym(gymId);
+    const resolvedGymId = await requireWritableGym(opts.gymId);
 
     const clock = await resolveUserClock(supabase, userId);
     if (weekNumber < clock.currentWeek) {
@@ -838,9 +878,29 @@ export function createActionTools(
       );
     }
 
-    if (!(REQUIRED_DAYS as readonly string[]).includes(dayName)) {
-      throw AppError.invalidArgs(`dayName must be one of: ${REQUIRED_DAYS.join(", ")}.`);
+    const dayNames = Object.keys(edits);
+    if (dayNames.length === 0) {
+      throw AppError.invalidArgs("At least one day is required.");
     }
+    for (const dayName of dayNames) {
+      if (!(REQUIRED_DAYS as readonly string[]).includes(dayName)) {
+        throw AppError.invalidArgs(`dayName must be one of: ${REQUIRED_DAYS.join(", ")}.`);
+      }
+    }
+
+    for (const dayName of dayNames) {
+      const edit = edits[dayName];
+      if (edit === null || typeof edit !== "object") {
+        throw AppError.invalidArgs(`${dayName} must be an object with an "after" day.`);
+      }
+    }
+
+    const failed = (message: string, skipped: SkippedDay[] = []) => ({
+      gymId: resolvedGymId,
+      applied: [],
+      skipped,
+      save: { success: false, message, data: {} } as ToolResult,
+    });
 
     const { data: existing, error: readErr } = await supabase
       .from("workout_programs")
@@ -850,18 +910,106 @@ export function createActionTools(
       .maybeSingle();
 
     if (readErr) {
-      return { success: false, message: `Failed to read program: ${readErr.message}`, data: {} };
+      return failed(`Failed to read program: ${readErr.message}`);
     }
     if (!existing) {
       // Creating a week is a bigger decision than editing a day; keep it out of this path.
       throw AppError.notFound(`No program for week ${weekNumber}.`);
     }
 
-    const merged = {
-      ...((existing as { program_data: Record<string, unknown> }).program_data ?? {}),
-      [dayName]: dayData,
+    const stored = ((existing as { program_data: Record<string, unknown> }).program_data ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const skipped: SkippedDay[] = [];
+    let candidates = dayNames;
+
+    if (opts.guarded) {
+      candidates = [];
+      for (const dayName of dayNames) {
+        if (jsonEqual(stored[dayName], edits[dayName].before)) candidates.push(dayName);
+        else skipped.push({ day: dayName, reason: "changed_since_draft" });
+      }
+
+      // Logs are keyed by the program gym for an owner, the same gym id log_set resolves. One
+      // query covers every remaining day; `completed` rows mean the user started that day.
+      if (candidates.length > 0) {
+        const { data: logged, error: logErr } = await supabase
+          .from("workout_logs")
+          .select("day_name")
+          .eq("user_id", userId)
+          .eq("gym_id", resolvedGymId)
+          .eq("week_number", weekNumber)
+          .in("day_name", candidates)
+          .eq("completed", true);
+        if (logErr) {
+          return failed(`Failed to check logged sets: ${logErr.message}`, skipped);
+        }
+        const started = new Set(((logged ?? []) as Array<{ day_name: string }>).map((r) => r.day_name));
+        const stillOpen: string[] = [];
+        for (const dayName of candidates) {
+          if (started.has(dayName)) skipped.push({ day: dayName, reason: "already_logged" });
+          else stillOpen.push(dayName);
+        }
+        candidates = stillOpen;
+      }
+    }
+
+    if (candidates.length === 0) {
+      return { gymId: resolvedGymId, applied: [], skipped, save: null };
+    }
+
+    const merged: Record<string, unknown> = { ...stored };
+    for (const dayName of candidates) merged[dayName] = edits[dayName].after;
+
+    const save = await save_workout_program(resolvedGymId, weekNumber, merged, true, note);
+    return { gymId: resolvedGymId, applied: save.success ? candidates : [], skipped, save };
+  }
+
+  // Edits exactly one day of an existing week, on Chad's chat path. No draft exists, so there is
+  // no conflict check and no logged-sets guard; the user confirmed the edit in the chat itself.
+  async function update_program_day(
+    weekNumber: number,
+    dayName: string,
+    dayData: unknown,
+    gymId?: string
+  ): Promise<ToolResult> {
+    const { save } = await editProgramDays(weekNumber, { [dayName]: { after: dayData } }, "Edited by Chad", {
+      gymId,
+      guarded: false,
+    });
+    // Unguarded, so there is always something to save or a read failure to report.
+    return save!;
+  }
+
+  // Applies a reviewed draft: several days of one week in a single save. Each day carries the
+  // `before` it was drafted against. A day is skipped, not failed, when the stored day has since
+  // changed or the user already completed sets on it, so one stale day never blocks the rest.
+  // Not an MCP tool; the check-in worker reaches it through buildToolKit.
+  async function apply_program_days(
+    weekNumber: number,
+    days: Record<string, ProgramDayEdit>,
+    note: string,
+    gymId?: string
+  ): Promise<ToolResult> {
+    const { gymId: resolvedGymId, applied, skipped, save } = await editProgramDays(weekNumber, days, note, {
+      gymId,
+      guarded: true,
+    });
+    const data = { applied, skipped, gym_id: resolvedGymId, week_number: weekNumber };
+
+    if (save && !save.success) {
+      return { success: false, message: save.message, data: { ...save.data, ...data } };
+    }
+
+    const parts: string[] = [];
+    if (applied.length > 0) parts.push(`Applied ${applied.join(", ")}`);
+    if (skipped.length > 0) parts.push(`Skipped ${skipped.map((s) => `${s.day} (${s.reason})`).join(", ")}`);
+    return {
+      success: true,
+      message: `Week ${weekNumber}: ${parts.join(". ")}.`,
+      data,
     };
-    return save_workout_program(resolvedGymId, weekNumber, merged, true, "Edited by Chad");
   }
 
   async function substitute_equipment_globally(
@@ -1419,6 +1567,7 @@ export function createActionTools(
     delete_max,
     save_workout_program,
     update_program_day,
+    apply_program_days,
     substitute_equipment_globally,
     get_pending_events,
     generate_weekly_summary,

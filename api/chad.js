@@ -12,6 +12,8 @@ import { setCorsHeaders } from './_mcp-shared.js';
 import { captureException, initSentry } from './_sentry.js';
 import { createChad, createRunner, updateProgramDayArgsSchema } from './_chad-agent.js';
 import { RED_FLAG_REPLY, chatRequestSchema, dropDanglingToolCalls, resolveChadModel, sanitizeHistory } from './_chad-core.js';
+import { costFor } from './_checkin-core.js';
+import { loadPrices, recordEvent } from './_checkin-db.js';
 
 const CHAD_DAILY_LIMIT = 30; // per user per day, counted separately for messages and decisions
 const MAX_TURNS = 8;
@@ -73,8 +75,38 @@ function newUsage(result, baseline) {
   };
 }
 
+// Metering for the admin Chad tab (migration 044). A chat message is one run: run.started, then
+// completed (or step.failed) with the tokens and cost. A decision resumes that run, so it adds only
+// its own step, and its cost, without counting a second run. Like log_api_usage it must never break a
+// reply, and a missing table (044 not applied yet) just logs.
+async function logChadEvents(supabase, { userId, model, result, baseline, success, isDecision }) {
+  try {
+    const ctx = { userId, instigation: 'user_message', workflowId: null, runId: null, attempt: 1 };
+    const usage = result ? newUsage(result, baseline) : { prompt: 0, completion: 0 };
+    const tokens = { promptTokens: usage.prompt, completionTokens: usage.completion };
+    // The price lookup and the run.started insert do not depend on each other.
+    const [prices] = await Promise.all([
+      loadPrices(supabase),
+      isDecision ? null : recordEvent(supabase, ctx, 'run.started', { step: 'chat', model }),
+    ]);
+    const fields = { model, step: isDecision ? 'decision' : 'chat', ...tokens, costUsd: costFor(tokens, prices), metadata: prices.valid ? {} : { price_missing: true } };
+    const event = success ? (isDecision ? 'step.completed' : 'completed') : 'step.failed';
+    await recordEvent(supabase, ctx, event, fields);
+  } catch (error) {
+    console.error('chad_events failed:', error?.message);
+  }
+}
+
 // Usage logging must never break a reply.
-async function logUsage(supabase, { userId, model, result, baseline = { prompt: 0, completion: 0 }, success, errorMessage = null }) {
+async function logUsage(supabase, { userId, model, result, baseline = { prompt: 0, completion: 0 }, success, errorMessage = null, isDecision = false }) {
+  // Two independent best-effort writes; neither waits for the other.
+  await Promise.all([
+    logChadEvents(supabase, { userId, model, result, baseline, success, isDecision }),
+    logApiUsage(supabase, { userId, model, result, baseline, success, errorMessage }),
+  ]);
+}
+
+async function logApiUsage(supabase, { userId, model, result, baseline, success, errorMessage }) {
   try {
     const usage = newUsage(result, baseline);
     const { error } = await supabase.rpc('log_api_usage', {
@@ -89,6 +121,33 @@ async function logUsage(supabase, { userId, model, result, baseline = { prompt: 
     if (error) console.error('log_api_usage failed:', error.message);
   } catch (error) {
     console.error('log_api_usage failed:', error?.message);
+  }
+}
+
+// The newest check-in still waiting on the user, in a few lines. Best effort: chat works without it
+// (and before migration 044 is applied).
+async function loadPendingCheckin(supabase, userId) {
+  try {
+    const { data } = await supabase
+      .from('chad_checkins')
+      .select('target_week, recap, changes, expires_at')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const row = data?.[0];
+    if (!row || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now())) return null;
+    return {
+      for_week: row.target_week,
+      headline: row.recap?.headline ?? null,
+      wins: row.recap?.wins ?? [],
+      watch: row.recap?.watch ?? [],
+      proposed_changes: (row.changes ?? []).map((c) => ({ day: c.day, summary: c.summary, reason: c.reason })),
+      note: 'Not applied yet. The user approves each change on the check-in card; to change one, use update_program_day.',
+    };
+  } catch (error) {
+    console.error('Chad pending check-in lookup failed:', error?.message);
+    return null;
   }
 }
 
@@ -114,11 +173,13 @@ export default async function handler(req, res) {
   // Hoisted so the failure paths can still report a write that already happened.
   let changed = false;
   let state = null;
+  let isDecision = false;
 
   try {
     const parsedBody = chatRequestSchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: 'That request looked off. Try again.' });
     const request = parsedBody.data;
+    isDecision = request.type === 'decision';
 
     if (!process.env.OPENROUTER_API_KEY) return res.status(503).json({ error: NO_KEY });
 
@@ -153,6 +214,10 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Chad context bundle failed:', error?.name || 'Error');
     }
+
+    // "Talk to Chad about it" from the check-in card lands here: give him the proposal on the card.
+    const pendingCheckin = await loadPendingCheckin(supabase, user.id);
+    if (pendingCheckin) contextBundle = { ...contextBundle, pending_weekly_checkin: pendingCheckin };
 
     const { data: modelSetting } = await supabase.rpc('get_app_setting', { p_key: 'chad_model' });
     model = resolveChadModel(modelSetting);
@@ -202,17 +267,17 @@ export default async function handler(req, res) {
         return res.status(200).json({ reply: RED_FLAG_REPLY, history, pending: null, changed: false });
       }
       if (signal.aborted) {
-        await logUsage(supabase, { userId: user.id, model, result: null, success: false, errorMessage: 'timeout' });
+        await logUsage(supabase, { userId: user.id, model, isDecision, result: null, success: false, errorMessage: 'timeout' });
         return res.status(200).json(unfinished(changed ? LOST_THREAD : TOO_SLOW));
       }
       if (error instanceof MaxTurnsExceededError) {
-        await logUsage(supabase, { userId: user.id, model, result: null, success: false, errorMessage: 'max_turns' });
+        await logUsage(supabase, { userId: user.id, model, isDecision, result: null, success: false, errorMessage: 'max_turns' });
         return res.status(200).json(unfinished(changed ? LOST_THREAD : TANGLED));
       }
       throw error;
     }
 
-    await logUsage(supabase, { userId: user.id, model, result, baseline, success: true });
+    await logUsage(supabase, { userId: user.id, model, isDecision, result, baseline, success: true });
 
     const [firstInterruption] = result.interruptions ?? [];
     if (firstInterruption) {
@@ -241,7 +306,7 @@ export default async function handler(req, res) {
     console.error('Chad error:', error?.name || 'Error');
     captureException(error, { tags: { endpoint: 'chad' } });
     if (supabase && user) {
-      await logUsage(supabase, { userId: user.id, model, result: null, success: false, errorMessage: (error?.name || 'error').slice(0, 100) });
+      await logUsage(supabase, { userId: user.id, model, isDecision, result: null, success: false, errorMessage: (error?.name || 'error').slice(0, 100) });
     }
     // The provider can fail after the write went through. Say so instead of a 500, or the
     // user would retry an edit that is already saved.
