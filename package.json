@@ -21,6 +21,7 @@
     "@sentry/browser": "^10.22.0",
     "@sentry/node": "^10.22.0",
     "@supabase/supabase-js": "^2.39.0",
+    "@temporalio/client": "1.25.0",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",

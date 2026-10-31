@@ -9,6 +9,7 @@ export default defineConfig([
     'dist',
     'mobile',
     'mcp',
+    'worker',
     'vendor',
     'node_modules',
     '.brv',

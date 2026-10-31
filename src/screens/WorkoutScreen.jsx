@@ -28,6 +28,9 @@ import {
 import CoachNoteCard from '../components/AgentChat/CoachNoteCard';
 import CoachBoardEntry from '../components/AgentChat/CoachBoardEntry';
 import ChadEntry from '../components/Chad/ChadEntry';
+import ChadCheckinCard from '../components/Chad/ChadCheckinCard';
+import ChadMissedDayCard from '../components/Chad/ChadMissedDayCard';
+import { checkinChatSeed } from '../utils/checkinView';
 import PostWorkoutCoachPrompt from '../components/AgentChat/PostWorkoutCoachPrompt';
 
 /**
@@ -69,6 +72,8 @@ export default function WorkoutScreen({
   latestCoachNote,
   onOpenAgentChat,
   onOpenChad,
+  onTalkToChad,
+  checkin = null,
   hasAgentKey = false,
   coachHasUnread = false,
   coachSending = false,
@@ -365,8 +370,37 @@ export default function WorkoutScreen({
     </>
   );
 
+  // The open check-in and the missed-day offer wait on a decision, so they go first. A decided
+  // check-in is only a result, and sits down beside the Chad entry.
+  const checkinCard = checkin?.checkin && (
+    <ChadCheckinCard
+      view={checkin.checkin}
+      busy={checkin.busy}
+      error={checkin.error}
+      focused={checkin.focusId === checkin.checkin.id}
+      onDecide={(acceptIds) => checkin.decide(checkin.checkin.id, acceptIds)}
+      onTalk={() => onTalkToChad?.(checkinChatSeed(checkin.checkin))}
+      onDismiss={() => checkin.dismissResult(checkin.checkin.id)}
+      onFocusHandled={checkin.clearFocus}
+    />
+  );
+
   return (
     <>
+      {checkin?.checkin?.open && <div className="mb-4">{checkinCard}</div>}
+      {checkin?.offer && (
+        <div className="mb-4">
+          <ChadMissedDayCard
+            view={checkin.offer}
+            busy={checkin.busy}
+            error={checkin.error}
+            focused={checkin.focusId === checkin.offer.id}
+            onAnswer={(accept) => checkin.answerOffer(checkin.offer.id, accept)}
+            onFocusHandled={checkin.clearFocus}
+          />
+        </div>
+      )}
+
       {session}
 
       {showWeekEndReview && weekEndSummary && (
@@ -409,6 +443,11 @@ export default function WorkoutScreen({
         {showThisWeek && <div className="mt-4">{weekPicker}</div>}
       </div>
 
+      {checkin?.checkin && !checkin.checkin.open && (
+        <div className="mt-4">
+          {checkinCard}
+        </div>
+      )}
       <div className="mt-4">
         <ChadEntry onOpen={onOpenChad} />
       </div>

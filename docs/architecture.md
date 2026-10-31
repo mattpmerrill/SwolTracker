@@ -10,7 +10,8 @@ falls short of the rules in [AGENTS.md](../AGENTS.md), [status.md](status.md) li
 | Part | Path | What it is |
 | ---- | ---- | ---------- |
 | Web app | `src/` | React 18 + Vite single-page app in JavaScript, Tailwind v4, installable as a PWA (`public/sw.js`, `public/manifest.webmanifest`). Talks to Supabase with the public anon key and the signed-in user's JWT, so RLS applies. |
-| Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the in-app coach (`chad.js`), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
+| Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the in-app coach (`chad.js`), Chad's weekly check-in (`checkin.js` for the browser, `checkin-worker.js` for the Temporal worker), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
+| Worker | `worker/` | Standalone TypeScript package: the Temporal worker that runs Chad's weekly check-in workflow (`coachLoopWorkflow`, one per opted-in user). Not deployed to Vercel; runs on Matt's Mac for now. Its activities only call `/api/checkin-worker` over HTTP. See [ADR-006](decisions/ADR-006-temporal-chad-checkins.md). |
 | MCP package | `mcp/` | TypeScript package with the agent tool kit: 44 tools in `mcp/src/tools/*`, wrapped as SDK tools in `mcp/src/sdk-adapter.ts`, plus context modules. Compiled to `mcp/dist/`, which the functions import. Also has a local stdio server (`mcp/src/server.ts`) for development. |
 | Shared core | `shared/` | Pure TypeScript with no I/O: week math, exercise aliases and name normalizer, estimated 1RM, set outcomes, workout blocks (AMRAP / For Time sections and scores). Imported by the web app (through `src/utils/*` re-exports) and by `mcp/` (through thin re-export shims). `mcp`'s `tsc` compiles it to `mcp/dist/shared/`. |
 | Vendored SDK | `vendor/bot-native-sdk/` | Built `dist/` of `@bot-native/sdk`, committed on purpose. It owns MCP protocol dispatch, scope checks, the skill loader, the OpenAPI export and the context-bundle builder. |
@@ -229,6 +230,47 @@ ChadPanel -> useChadChat -> src/lib/chad.js
   the same checks.
 - **Safety.** A keyword guardrail (`detectRedFlags`) catches chest pain, numbness, a pop and similar
   messages and answers with a fixed "see a professional" reply without calling the model.
+- **Check-in context.** When the user has a pending weekly check-in, its recap and change summaries
+  are added to the context so "Talk to Chad about it" works. Each chat turn also writes best-effort
+  `chad_events` metering rows; a failure there never breaks chat.
+
+## Chad weekly check-in (Temporal)
+
+Chad reviews each finished week on his own, proposes up to four changes to next week, and waits for
+the user to approve. A durable Temporal workflow per user owns the timing and the waiting. See
+[ADR-006](decisions/ADR-006-temporal-chad-checkins.md); the wire contract is the header of
+`shared/checkin-contract.ts`.
+
+```
+Browser ── /api/checkin (user JWT) ──┐                       ┌── worker/ (Temporal worker)
+  reads chad_* tables through RLS    │  Temporal client      │   coachLoopWorkflow, id coach-<userId>
+                                     ├─▶ Temporal ◀──────────┤   activities = HTTP calls
+                                     │  (dev server / Cloud) │
+/api/checkin-worker (bearer secret) ◀┴───────────────────────┘
+  schedule, review, draft (Agents SDK), notify (web push), apply / missed_apply (kit), expire, missed_check
+  └─ Supabase service role · buildToolKit(userId) · OpenRouter · chad_events metering
+```
+
+- **Timing.** Sunday 18:00 in the user's zone: review the week, draft, push. Monday 07:00: one
+  reminder (only when there are changes; it deliberately ignores push quiet hours). Monday 23:59:
+  the proposal expires. Every day at 09:00: if yesterday's planned day went unlogged and a rest day
+  is left this week, offer to move it. Marking a day missed in the app sends the same check at once.
+  All wall-clock math happens in the `schedule` op; the workflow only sleeps until ISO times.
+- **Messages.** Signals `setEnabled` (the settings toggle) and `dayMissed` are accepted even when
+  the worker is offline. Updates `decideCheckin` and `answerMissedDay` need a running worker; when
+  it is offline `/api/checkin` answers 503 and the card re-reads Supabase before showing an error.
+  Query `getState` is for debugging. Permanent failures come back as 409 or 403, transient ones as 503.
+- **Writes.** The workflow, through `/api/checkin-worker`, is the only writer of `chad_checkins` and
+  `chad_missed_offers`. Changes are applied with the kit's `apply_program_days`, which writes all
+  accepted days in one save and skips a day that changed since the draft or already has logged sets.
+- **Data.** `migrations/044-chad-checkins.sql`: `chad_coach_settings`, `chad_checkins`,
+  `chad_missed_offers` (users read their own rows), `chad_events` (service role only) and the
+  admin-only `get_chad_usage` report behind the admin Chad tab.
+- **Secrets and privacy.** The worker holds only the Temporal credentials, `CHECKIN_WORKER_SECRET`
+  and `CHECKIN_CODEC_KEY`. Payloads are AES-GCM encrypted by `shared/temporal-codec.ts` when the key
+  is set, and the API refuses to talk to Temporal Cloud without it.
+- **Rollout.** `app_settings.chad_checkin_rollout` is `admin` (default) or `all`. Check-ins are for
+  users who own their program; group members are not eligible yet.
 
 ## Push and reminders
 

@@ -29,3 +29,25 @@ jobs:
         run: npm test
       - name: Build web
         run: npm run build
+
+  worker:
+    # The Temporal worker (ADR-006) is its own package. It reads shared/ directly, so it needs
+    # neither the web dependencies nor the mcp build. The tests download Temporal's time-skipping
+    # test server on first run.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install worker deps
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run worker tests
+        run: npm test

@@ -5,6 +5,6 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     include: ['src/**/*.test.{js,jsx}', 'mcp/src/**/*.test.{ts,tsx}', 'shared/**/*.test.ts', 'api/**/*.test.js'],
-    exclude: ['node_modules', 'dist', 'mobile', 'mcp/dist'],
+    exclude: ['node_modules', 'dist', 'mobile', 'mcp/dist', 'worker/**'],
   },
 });

@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useWorkoutLogger } from '../hooks/useWorkoutLogger';
 import { exerciseLogFromRows } from '../lib/bootstrapLogs';
 import { db } from '../lib/supabase';
+import { noteDayMissed } from '../lib/checkin';
 import { useProgram } from './ProgramContext';
 
 const WorkoutLogContext = createContext(null);
@@ -39,7 +40,7 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     toggleWorkoutComplete,
     isWorkoutMissed,
     getMissedReason,
-    markWorkoutMissed,
+    markWorkoutMissed: logMissedDay,
     clearWorkoutMissed,
   } = useWorkoutLogger({
     currentUser,
@@ -49,6 +50,17 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
     gymId,
     toast,
   });
+
+  // Marking a day missed also tells Chad, who may offer to move the workout to a rest day. That ping
+  // is fire and forget (and only for users who turned the check-in on): the skip already succeeded,
+  // so it never blocks and never shows an error.
+  const markWorkoutMissed = useCallback(async (...args) => {
+    const logged = await logMissedDay(...args);
+    const [week, day] = args;
+    const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (logged && gymId && online) noteDayMissed({ db, userId: currentUser, week, day });
+    return logged;
+  }, [logMissedDay, gymId, currentUser]);
 
   // Hydrate from bootstrap once the ready bundle arrives / reloads.
   useEffect(() => {

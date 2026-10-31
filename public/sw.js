@@ -68,13 +68,40 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+  const raw = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil((async () => {
+    // Only ever go to a page of this app. A push cannot send the user to another origin.
+    let target;
+    try {
+      target = new URL(raw, self.location.origin);
+    } catch {
+      target = new URL('/', self.location.origin);
+    }
+    if (target.origin !== self.location.origin) target = new URL('/', self.location.origin);
+
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientList) {
+      if (!('focus' in client)) continue;
+      // Bring the window forward first (a notification tap is allowed to), then send it to a deep
+      // link so a check-in lands on its card. A plain "open the app" push (the home page) only
+      // brings the window forward, as before.
+      let focused = client;
+      try {
+        focused = (await client.focus()) || client;
+      } catch {
+        // Focus can be refused; navigating still works.
       }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    }),
-  );
+      const isDeepLink = target.pathname !== '/' || target.search !== '';
+      if (isDeepLink && 'navigate' in client) {
+        try {
+          return await client.navigate(target.href);
+        } catch {
+          // Some browsers refuse to navigate a window we do not control. It is already focused.
+        }
+      }
+      return focused;
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(target.href);
+    return undefined;
+  })());
 });

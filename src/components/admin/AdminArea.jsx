@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { X, LayoutDashboard, Key, FileText, ArrowLeft, AlertCircle } from 'lucide-react';
+import { X, LayoutDashboard, Key, FileText, ArrowLeft, AlertCircle, Dumbbell } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
 import AdminApiSettings from './AdminApiSettings';
 import AdminPromptEditor from './AdminPromptEditor';
 import AdminErrorLogs from './AdminErrorLogs';
+import AdminChadUsage from './AdminChadUsage';
 
 const AdminArea = ({ onClose, db }) => {
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -13,6 +14,7 @@ const AdminArea = ({ onClose, db }) => {
     { id: 'api', label: 'API Settings', icon: Key },
     { id: 'prompts', label: 'Prompts', icon: FileText },
     { id: 'errors', label: 'Error Logs', icon: AlertCircle },
+    { id: 'chad', label: 'Chad', icon: Dumbbell },
   ];
 
   return (
@@ -45,12 +47,12 @@ const AdminArea = ({ onClose, db }) => {
       </div>
 
       {/* Tab Navigation */}
-      <div className="relative z-10 flex border-b border-zinc-800/50 px-6 gap-6 bg-zinc-900/30 backdrop-blur-md">
+      <div className="relative z-10 flex border-b border-zinc-800/50 px-6 gap-6 bg-zinc-900/30 backdrop-blur-md overflow-x-auto">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveSection(tab.id)}
-            className={`flex items-center gap-2 py-4 text-sm font-medium transition-all relative
+            className={`flex items-center gap-2 py-4 text-sm font-medium transition-all relative shrink-0
               ${activeSection === tab.id
                 ? 'text-white'
                 : 'text-zinc-500 hover:text-zinc-300'
@@ -71,6 +73,7 @@ const AdminArea = ({ onClose, db }) => {
         {activeSection === 'api' && <AdminApiSettings db={db} />}
         {activeSection === 'prompts' && <AdminPromptEditor db={db} />}
         {activeSection === 'errors' && <AdminErrorLogs db={db} />}
+        {activeSection === 'chad' && <AdminChadUsage db={db} />}
       </div>
     </div>
   );

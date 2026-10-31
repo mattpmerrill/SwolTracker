@@ -6,6 +6,7 @@ import { useAiGenerator } from '../hooks/useAiGenerator';
 import { useExerciseSwap } from '../hooks/useExerciseSwap';
 import { useAgentChat } from '../hooks/useAgentChat';
 import { useChadChat } from '../hooks/useChadChat';
+import { useCheckin } from '../hooks/useCheckin';
 import { useBuddyActions } from '../hooks/useBuddyActions';
 import { useMaxesActions } from '../hooks/useMaxesActions';
 import { useProfileActions } from '../hooks/useProfileActions';
@@ -13,6 +14,7 @@ import { useAppNavigation } from '../hooks/useAppNavigation';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useBlockScores } from '../hooks/useBlockScores';
 import { useProgram, useWorkoutLog } from '../contexts';
+import { ROUTES, parseCheckinLink } from '../lib/routes';
 
 import { Header, BottomNav } from './Layout';
 import ScreenRouter from './ScreenRouter';
@@ -41,6 +43,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
     closeSettings,
     openAdmin,
     closeAdmin,
+    location,
+    navigate,
   } = useAppNavigation();
 
   const {
@@ -162,6 +166,18 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   // Members read the leader's program, so a refresh after a Chad edit must too.
   const programGymId = groupRole === 'member' && leaderGymId ? leaderGymId : gymId;
   const chadChat = useChadChat({ currentUser, programGymId, setWorkoutProgram, toast });
+  const checkin = useCheckin({ currentUser, programGymId, setWorkoutProgram, toast });
+
+  // A check-in push opens /workout?checkin=<id> (or ?offer=<id>): refresh, ask the card to scroll
+  // into view, and clear the param so a reload or a back tap does not replay it. Navigating to the
+  // workout path also makes sure the workout tab is the one showing.
+  const { kind: linkKind = null, id: linkId = null } = parseCheckinLink(location.search) || {};
+  const { showFromLink } = checkin;
+  useEffect(() => {
+    if (!linkKind) return;
+    showFromLink({ kind: linkKind, id: linkId });
+    navigate(ROUTES.workout, { replace: true });
+  }, [linkKind, linkId, showFromLink, navigate]);
 
   const aiGen = useAiGenerator({
     currentUser,
@@ -316,6 +332,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
             latestCoachNote: agentChat.latestCoachNote,
             onOpenAgentChat: agentChat.open,
             onOpenChad: chadChat.open,
+            onTalkToChad: chadChat.openWith,
+            checkin,
             hasAgentKey,
             coachHasUnread: agentChat.hasUnread,
             coachSending: agentChat.sending,
@@ -399,6 +417,12 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
           programStartDate,
           actualCurrentWeek,
           isAdmin,
+          checkin: {
+            status: checkin.status,
+            saving: checkin.busy === 'settings',
+            onSetEnabled: checkin.setEnabled,
+            onRefreshStatus: checkin.refreshStatus,
+          },
           onClose: closeSettings,
           onOpenAiGenerator: aiGen.openAiGenerator,
           onOpenAdmin: openAdmin,
