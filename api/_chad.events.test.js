@@ -1,5 +1,5 @@
 // The two check-in additions to POST /api/chad: the pending proposal in Chad's context, and the
-// best-effort metering rows in chad_events. The rest of the endpoint is covered by chad.test.js.
+// best-effort metering rows in chad_events. The rest of the endpoint is covered by _chad.test.js.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
