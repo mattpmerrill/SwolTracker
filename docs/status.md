@@ -10,7 +10,8 @@ Design: ADR-006, the "Chad weekly check-in" section of architecture.md, and the 
   `apply_program_days` (not an MCP tool; still 44). Worker: `worker/` (own package, README, tests
   with Temporal's time-skipping server and replay fixtures). Web: `ChadCheckinCard`,
   `ChadMissedDayCard`, `ChadCheckinSettings`, `useCheckin`, admin Chad tab.
-- Before it works anywhere: apply `migrations/044-chad-checkins.sql` by hand. Vercel needs
+- `migrations/044-chad-checkins.sql` was applied to production on 2026-10-31 (through
+  `supabase db query --linked -f`; RLS, grants and `get_chad_usage` verified afterwards). Vercel needs
   `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_API_KEY`, `CHECKIN_CODEC_KEY`,
   `CHECKIN_WORKER_SECRET`; without the Temporal pair `/api/checkin` answers 503 and the toggle stays
   hidden, so merging early is safe. The worker needs the same plus `SWOLTRACKER_API_URL`
