@@ -15,9 +15,12 @@ const h = vi.hoisted(() => ({
   pushConfigured: true,
   pushSent: null, // null = every subscription
   pushes: [],
+  shelved: false,
 }));
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.db.client }));
+// Check-ins are shelved in production (CHECKIN_SHELVED); these tests run the feature as if it were on.
+vi.mock('./_checkin-core.js', async (importOriginal) => ({ ...(await importOriginal()), isCheckinShelved: () => h.shelved }));
 vi.mock('../mcp/dist/mcp/src/sdk-adapter.js', () => ({ buildToolKit: (...args) => h.kit.build(...args) }));
 vi.mock('./_push.js', () => ({
   configureWebPush: () => h.pushConfigured,
@@ -157,6 +160,7 @@ beforeEach(() => {
   app = { chad_checkin_rollout: 'all', chad_price_per_mtok: '{"input":3,"output":15}' };
   isAdmin = false;
   leaderGym = null;
+  h.shelved = false;
   h.db = seedDb();
   kit = makeKit();
   h.kit = kit;
@@ -238,6 +242,11 @@ describe('op schedule', () => {
       nextCheckinAt: '2026-03-16T00:00:00.000Z', // Sunday Mar 15 18:00 MDT; "now" is just after this week's
     });
     expect(h.db.writes('chad_events')).toHaveLength(0);
+  });
+
+  it('shelved: tells the workflow to stop, even for an eligible user with the switch on', async () => {
+    h.shelved = true;
+    expect((await op('schedule')).body).toEqual({ stop: true, reason: 'rollout' });
   });
 
   it('stops when the switch is off', async () => {

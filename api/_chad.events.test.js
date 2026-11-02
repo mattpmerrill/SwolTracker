@@ -3,9 +3,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const h = vi.hoisted(() => ({ db: null, kit: null, provider: null, calls: [], script: null }));
+const h = vi.hoisted(() => ({ db: null, kit: null, provider: null, calls: [], script: null, shelved: false }));
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.db.client }));
+// Check-ins are shelved in production (CHECKIN_SHELVED); these tests run the feature as if it were on.
+vi.mock('./_checkin-core.js', async (importOriginal) => ({ ...(await importOriginal()), isCheckinShelved: () => h.shelved }));
 vi.mock('../mcp/dist/mcp/src/sdk-adapter.js', () => ({ buildToolKit: () => h.kit }));
 vi.mock('./_chad-agent.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -61,6 +63,7 @@ beforeEach(() => {
   process.env.SUPABASE_URL = 'http://localhost:54321';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-not-real';
   prices = '{"input":3,"output":15}';
+  h.shelved = false;
   h.db = seed();
   h.calls = [];
   h.script = () => [textItem('Squats are up, bro.')];
@@ -88,6 +91,13 @@ beforeEach(() => {
 });
 
 describe('the pending check-in in Chad\'s context', () => {
+  it('is left out while check-ins are shelved, even when a pending row exists', async () => {
+    h.shelved = true;
+    h.db = seed({ chad_checkins: [pendingRow()] });
+    await call({ type: 'message', message: 'Tell me about the changes', history: [] });
+    expect(h.calls[0].request.systemInstructions).not.toContain('pending_weekly_checkin');
+  });
+
   it('shows him the newest pending proposal, compactly', async () => {
     h.db = seed({ chad_checkins: [pendingRow({ id: 'old', target_week: 3, created_at: '2026-03-02T00:00:00.000Z', recap: { headline: 'Old one' } }), pendingRow()] });
     await call({ type: 'message', message: 'Tell me about the changes', history: [] });

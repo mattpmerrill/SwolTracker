@@ -10,10 +10,15 @@ import {
   calculateCurrentWeek,
   isValidTimeZone,
 } from '../mcp/dist/shared/week-math.js';
-import { PROGRAM_DAYS } from '../mcp/dist/shared/checkin-contract.js';
+import { CHECKIN_SHELVED, PROGRAM_DAYS } from '../mcp/dist/shared/checkin-contract.js';
 // The program's own day check (a zod 3 schema, used only through safeParse), so a day the model drafts
 // is held to exactly what the save will hold it to.
 import { ProgramDaySchema } from '../mcp/dist/mcp/src/tools/actions.js';
+
+/** Whether check-ins are shelved (see CHECKIN_SHELVED). A function so tests can turn them back on. */
+export function isCheckinShelved() {
+  return CHECKIN_SHELVED;
+}
 
 const MAX_CHANGES = 4;
 const MAX_HEADLINE = 80;

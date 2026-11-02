@@ -4,6 +4,7 @@ import { useWorkoutLogger } from '../hooks/useWorkoutLogger';
 import { exerciseLogFromRows } from '../lib/bootstrapLogs';
 import { db } from '../lib/supabase';
 import { noteDayMissed } from '../lib/checkin';
+import { CHECKIN_SHELVED } from '../../shared/checkin-contract';
 import { useProgram } from './ProgramContext';
 
 const WorkoutLogContext = createContext(null);
@@ -53,12 +54,12 @@ export function WorkoutLogProvider({ children, currentUser, bundle }) {
 
   // Marking a day missed also tells Chad, who may offer to move the workout to a rest day. That ping
   // is fire and forget (and only for users who turned the check-in on): the skip already succeeded,
-  // so it never blocks and never shows an error.
+  // so it never blocks and never shows an error. Shelved check-ins skip it entirely.
   const markWorkoutMissed = useCallback(async (...args) => {
     const logged = await logMissedDay(...args);
     const [week, day] = args;
     const online = typeof navigator === 'undefined' || navigator.onLine !== false;
-    if (logged && gymId && online) noteDayMissed({ db, userId: currentUser, week, day });
+    if (logged && gymId && online && !CHECKIN_SHELVED) noteDayMissed({ db, userId: currentUser, week, day });
     return logged;
   }, [logMissedDay, gymId, currentUser]);
 

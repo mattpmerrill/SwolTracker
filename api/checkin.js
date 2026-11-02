@@ -21,7 +21,7 @@ import {
 } from '../mcp/dist/shared/checkin-contract.js';
 import { setCorsHeaders } from './_mcp-shared.js';
 import { captureException, initSentry } from './_sentry.js';
-import { checkinRequestSchema } from './_checkin-core.js';
+import { checkinRequestSchema, isCheckinShelved } from './_checkin-core.js';
 import { loadEligibility } from './_checkin-db.js';
 import { classifyTemporalError, getTemporalClient, isTemporalConfigured, withTemporalDeadline } from './_temporal.js';
 
@@ -124,8 +124,9 @@ export default async function handler(req, res) {
     if (!parsedBody.success) return res.status(400).json({ error: 'That request looked off. Try again.' });
     const request = parsedBody.data;
 
-    // Without Temporal there is nothing to start or ask, and the web app hides the switch on this 503.
-    if (!isTemporalConfigured()) return res.status(503).json({ error: OFF });
+    // Shelved or without Temporal there is nothing to start or ask, and the web app hides the switch
+    // on this 503.
+    if (isCheckinShelved() || !isTemporalConfigured()) return res.status(503).json({ error: OFF });
 
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

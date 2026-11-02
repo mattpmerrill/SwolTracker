@@ -1,5 +1,8 @@
 # Chad's check-in worker (Temporal)
 
+> **Shelved since 2026-11-02.** Don't run this against production: while `CHECKIN_SHELVED` is
+> true, the API tells every workflow to stop. ADR-006 "Shelved" says how to bring it back.
+
 This package is the Temporal **worker** for Chad's weekly check-in. Design and reasoning are in
 [ADR-006](../docs/decisions/ADR-006-temporal-chad-checkins.md); the names and shapes shared with the API
 are in [`shared/checkin-contract.ts`](../shared/checkin-contract.ts). Read the contract header first.

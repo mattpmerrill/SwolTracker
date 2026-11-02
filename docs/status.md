@@ -2,9 +2,13 @@
 
 Where the project stands and how to pick it up. Update this at the end of each working session.
 
-**Chad's weekly check-in on Temporal (2026-10-31, branch feat/chad-checkin, not yet merged).**
+**Chad's weekly check-in on Temporal (2026-10-31, merged in PR #15; shelved 2026-11-02).**
 Design: ADR-006, the "Chad weekly check-in" section of architecture.md, and the contract header in
 `shared/checkin-contract.ts`. Built to learn Temporal hands-on.
+- **Shelved.** `CHECKIN_SHELVED` in `shared/checkin-contract.ts` turns the feature off end to end:
+  `/api/checkin` answers 503, the web app shows no switch or cards, and a waking workflow is told to
+  stop. Chad's chat and its metering are unaffected. ADR-006 "Shelved" has what it does and how to
+  bring it back. It never ran a real check-in.
 - Server: `api/checkin.js`, `api/checkin-worker.js`, `api/_checkin-core.js`, `_checkin-agent.js`,
   `_checkin-db.js`, `_temporal.js`; shared `checkin-contract.ts` and `temporal-codec.ts`; kit
   `apply_program_days` (not an MCP tool; still 44). Worker: `worker/` (own package, README, tests
@@ -27,6 +31,8 @@ Design: ADR-006, the "Chad weekly check-in" section of architecture.md, and the 
     stays consistent).
   - The `reloadProgram` error log row no longer carries the original error (console only).
   - Not yet run end to end against real Supabase, push and a model; not yet viewed signed in.
+  - Matt's Temporal Cloud namespace `swoltracker-chad` may still hold one idle `coach-<userId>`
+    workflow started by the settings switch before shelving. It does nothing without a worker.
 
 **Chad, the in-app coach (2026-10-29, merged in PR #14 on 2026-10-30).**
 Design: ADR-005 and the Chad section of architecture.md. A same-day POC to learn the OpenAI

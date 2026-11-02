@@ -135,7 +135,8 @@ GitHub Actions, npm. `mobile/` (Expo) is paused and out of scope.
 - **Chad**: the in-app coach at `/api/chad`, built on the OpenAI Agents SDK. Separate from the user's
   agent and the Coach Board.
 - **Check-in**: Chad's weekly review and proposed changes for next week, approved by the user. A
-  **missed-day offer** proposes moving an unlogged day to a later rest day.
+  **missed-day offer** proposes moving an unlogged day to a later rest day. Shelved (ADR-006):
+  `CHECKIN_SHELVED` keeps it out of the running app.
 - **Worker**: the Temporal worker process in `worker/` that runs each user's check-in workflow.
 - **API key**: a `swol_` bearer key, hashed at rest, carrying scopes. **Scope**: one permission on
   a key.

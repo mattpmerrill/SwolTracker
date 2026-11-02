@@ -28,8 +28,10 @@ const CLOCK_TICK_MS = 60000;
  *
  * A decision that fails with a 503, a timeout or a network error may still have run on the worker,
  * so those paths re-read Supabase and show what is stored before they show any error.
+ *
+ * `enabled: false` (check-ins shelved) makes it inert: no reads, no polling, no cards.
  */
-export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast }) {
+export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast, enabled = true }) {
   const [checkinRows, setCheckinRows] = useState([]);
   const [offerRows, setOfferRows] = useState([]);
   const [now, setNow] = useState(() => Date.now());
@@ -53,7 +55,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
   const hasRowsRef = useRef(false);
 
   const loadRows = useCallback(async () => {
-    if (!currentUser) return null;
+    if (!currentUser || !enabled) return null;
     const seq = ++loadSeqRef.current;
     const [checkins, offers] = await Promise.all([
       db.getRecentCheckins(currentUser),
@@ -68,7 +70,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
       setNow(Date.now());
     }
     return { checkins, offers };
-  }, [currentUser]);
+  }, [currentUser, enabled]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -122,7 +124,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
   // cannot tell): that call also restarts a workflow that ended, and it is a wasted request for
   // everyone else. The settings card asks again when it opens.
   useEffect(() => {
-    if (!currentUser) return undefined;
+    if (!currentUser || !enabled) return undefined;
     let cancelled = false;
     loadRows();
     (async () => {
@@ -132,11 +134,11 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
       if (on !== false) refreshStatus();
     })();
     return () => { cancelled = true; };
-  }, [currentUser, loadRows, refreshStatus]);
+  }, [currentUser, enabled, loadRows, refreshStatus]);
 
   // Back to the tab (or the window): a push may have just made a new check-in.
   useEffect(() => {
-    if (!currentUser || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
+    if (!currentUser || !enabled || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
     const onReturn = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       // A user who never turned this on and has nothing waiting has no reason to be polled.
@@ -150,7 +152,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
       window.removeEventListener('focus', onReturn);
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onReturn);
     };
-  }, [currentUser, loadRows]);
+  }, [currentUser, enabled, loadRows]);
 
   // seenRef mirrors seenIds for async callbacks that must not read a stale closure.
   const updateSeen = useCallback((fn) => {
@@ -285,6 +287,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
 
   /** A push deep link: refresh, and ask the matching card to scroll into view. */
   const showFromLink = useCallback(async ({ kind, id }) => {
+    if (!enabled) return;
     setFocusId(id);
     const fresh = await loadRows();
     if (!fresh) return;
@@ -294,7 +297,7 @@ export function useCheckin({ currentUser, programGymId, setWorkoutProgram, toast
       : pickOffer(fresh.offers, t);
     // Already answered or expired: there is no card to scroll to.
     if (shown?.id !== id) setFocusId(null);
-  }, [loadRows]);
+  }, [enabled, loadRows]);
 
   const clearFocus = useCallback(() => setFocusId(null), []);
   const clearError = useCallback(() => setError(null), []);

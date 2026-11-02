@@ -11,7 +11,7 @@ falls short of the rules in [AGENTS.md](../AGENTS.md), [status.md](status.md) li
 | ---- | ---- | ---------- |
 | Web app | `src/` | React 18 + Vite single-page app in JavaScript, Tailwind v4, installable as a PWA (`public/sw.js`, `public/manifest.webmanifest`). Talks to Supabase with the public anon key and the signed-in user's JWT, so RLS applies. |
 | Functions | `api/` | Vercel serverless functions in JavaScript: the LLM proxy (`llm.js`), the in-app coach (`chad.js`), Chad's weekly check-in (`checkin.js` for the browser, `checkin-worker.js` for the Temporal worker), the MCP endpoint and its siblings (`mcp.js`, `mcp/context.js`, `mcp/skill.js`, `mcp/openapi.js`), web push (`push.js`) and the reminder cron (`cron/reminders.js`). Files starting with `_` are shared helpers, not routes. |
-| Worker | `worker/` | Standalone TypeScript package: the Temporal worker that runs Chad's weekly check-in workflow (`coachLoopWorkflow`, one per opted-in user). Not deployed to Vercel; runs on Matt's Mac for now. Its activities only call `/api/checkin-worker` over HTTP. See [ADR-006](decisions/ADR-006-temporal-chad-checkins.md). |
+| Worker | `worker/` | Standalone TypeScript package: the Temporal worker that runs Chad's weekly check-in workflow (`coachLoopWorkflow`, one per opted-in user). Not deployed to Vercel; shelved (not running) since 2026-11-02. Its activities only call `/api/checkin-worker` over HTTP. See [ADR-006](decisions/ADR-006-temporal-chad-checkins.md). |
 | MCP package | `mcp/` | TypeScript package with the agent tool kit: 44 tools in `mcp/src/tools/*`, wrapped as SDK tools in `mcp/src/sdk-adapter.ts`, plus context modules. Compiled to `mcp/dist/`, which the functions import. Also has a local stdio server (`mcp/src/server.ts`) for development. |
 | Shared core | `shared/` | Pure TypeScript with no I/O: week math, exercise aliases and name normalizer, estimated 1RM, set outcomes, workout blocks (AMRAP / For Time sections and scores). Imported by the web app (through `src/utils/*` re-exports) and by `mcp/` (through thin re-export shims). `mcp`'s `tsc` compiles it to `mcp/dist/shared/`. |
 | Vendored SDK | `vendor/bot-native-sdk/` | Built `dist/` of `@bot-native/sdk`, committed on purpose. It owns MCP protocol dispatch, scope checks, the skill loader, the OpenAPI export and the context-bundle builder. |
@@ -235,6 +235,9 @@ ChadPanel -> useChadChat -> src/lib/chad.js
   `chad_events` metering rows; a failure there never breaks chat.
 
 ## Chad weekly check-in (Temporal)
+
+> **Shelved since 2026-11-02.** `CHECKIN_SHELVED` in `shared/checkin-contract.ts` keeps everything
+> below out of the running app. The design is unchanged; see ADR-006 "Shelved".
 
 Chad reviews each finished week on his own, proposes up to four changes to next week, and waits for
 the user to approve. A durable Temporal workflow per user owns the timing and the waiting. See

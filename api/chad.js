@@ -12,7 +12,7 @@ import { setCorsHeaders } from './_mcp-shared.js';
 import { captureException, initSentry } from './_sentry.js';
 import { createChad, createRunner, updateProgramDayArgsSchema } from './_chad-agent.js';
 import { RED_FLAG_REPLY, chatRequestSchema, dropDanglingToolCalls, resolveChadModel, sanitizeHistory } from './_chad-core.js';
-import { costFor } from './_checkin-core.js';
+import { costFor, isCheckinShelved } from './_checkin-core.js';
 import { loadPrices, recordEvent } from './_checkin-db.js';
 
 const CHAD_DAILY_LIMIT = 30; // per user per day, counted separately for messages and decisions
@@ -216,7 +216,7 @@ export default async function handler(req, res) {
     }
 
     // "Talk to Chad about it" from the check-in card lands here: give him the proposal on the card.
-    const pendingCheckin = await loadPendingCheckin(supabase, user.id);
+    const pendingCheckin = isCheckinShelved() ? null : await loadPendingCheckin(supabase, user.id);
     if (pendingCheckin) contextBundle = { ...contextBundle, pending_weekly_checkin: pendingCheckin };
 
     const { data: modelSetting } = await supabase.rpc('get_app_setting', { p_key: 'chad_model' });

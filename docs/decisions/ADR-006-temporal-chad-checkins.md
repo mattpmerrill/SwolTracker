@@ -1,6 +1,28 @@
 # ADR-006: Chad's weekly check-in runs on Temporal
 
-Status: accepted (2026-10-31)
+Status: accepted (2026-10-31); shelved (2026-11-02)
+
+## Shelved (2026-11-02)
+
+The feature is built, tested and merged, but paused before its first real run so time could go to
+other work. The code, migration 044 and the `worker/` package stay; nothing in the app reaches
+Temporal. One switch does it, `CHECKIN_SHELVED` in `shared/checkin-contract.ts`:
+
+- `/api/checkin` answers 503 "Check-ins are off right now." before auth or any Temporal call, so the
+  web app has nothing to show.
+- The web app passes `enabled: false` to `useCheckin` (no reads, no polling, no cards), hides the
+  settings card and the admin rollout control, and skips the mark-missed ping.
+- `/api/chad` stops looking up a pending check-in for Chad's context. Chad's chat and its
+  `chad_events` metering are unchanged.
+- The eligibility check treats the feature as rolled out to nobody, so if the worker ever runs, the
+  `schedule` op tells each workflow to stop and it ends cleanly.
+
+At shelving there were no check-ins, offers or check-in events in production, and the one user who
+had turned the switch on (Matt) was switched off in `chad_coach_settings`.
+
+To bring it back: set `CHECKIN_SHELVED` to false, rebuild `mcp/`, deploy, confirm the Vercel
+variables listed in docs/status.md, and start the worker (`worker/README.md`). The settings switch
+then starts each user's workflow again.
 
 ## Context
 
