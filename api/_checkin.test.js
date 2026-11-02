@@ -12,9 +12,12 @@ const h = vi.hoisted(() => ({
   connectError: null,
   blocked: false,
   rpcNames: [],
+  shelved: false,
 }));
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.db.client }));
+// Check-ins are shelved in production (CHECKIN_SHELVED); these tests run the feature as if it were on.
+vi.mock('./_checkin-core.js', async (importOriginal) => ({ ...(await importOriginal()), isCheckinShelved: () => h.shelved }));
 vi.mock('./_temporal.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -88,6 +91,7 @@ beforeEach(() => {
   isAdmin = false;
   leaderGym = null;
   h.configured = true;
+  h.shelved = false;
   h.connectError = null;
   h.blocked = false;
   h.db = seed();
@@ -125,6 +129,18 @@ describe('POST /api/checkin: gates', () => {
     expect(res.statusCode).toBe(503);
     expect(res.body.error).toBe('Check-ins are off right now.');
     expect(h.db.writes('rpc')).toHaveLength(0);
+    expect(h.client.workflow.getHandle).not.toHaveBeenCalled();
+  });
+
+  it('503 "Check-ins are off right now." while shelved, even with Temporal configured, and nothing is touched', async () => {
+    h.shelved = true;
+    for (const body of [{ action: 'status' }, { action: 'settings', enabled: true }, { action: 'event', type: 'day_missed', week: 3, day: 'Monday' }]) {
+      const res = await call(body);
+      expect(res.statusCode, body.action).toBe(503);
+      expect(res.body.error).toBe('Check-ins are off right now.');
+    }
+    expect(h.db.writes('rpc')).toHaveLength(0);
+    expect(h.client.workflow.signalWithStart).not.toHaveBeenCalled();
     expect(h.client.workflow.getHandle).not.toHaveBeenCalled();
   });
 

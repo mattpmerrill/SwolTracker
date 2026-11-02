@@ -91,6 +91,19 @@ describe('useCheckin: loading', () => {
     view.unmount();
   });
 
+  it('is inert when disabled (check-ins shelved): no reads, no status call, no cards, no deep link', async () => {
+    const view = await mount({ enabled: false });
+    expect(mocks.db.getRecentCheckins).not.toHaveBeenCalled();
+    expect(mocks.db.getRecentMissedOffers).not.toHaveBeenCalled();
+    expect(mocks.db.getWeeklyCheckinSetting).not.toHaveBeenCalled();
+    expect(mocks.getCheckinStatus).not.toHaveBeenCalled();
+    expect(view.result.current.checkin).toBeNull();
+    expect(view.result.current.offer).toBeNull();
+    await view.result.current.showFromLink({ kind: 'checkin', id: 'c1' });
+    expect(view.result.current.focusId).toBeNull();
+    expect(mocks.db.getRecentCheckins).not.toHaveBeenCalled();
+  });
+
   it('asks the server for status when the switch is on, or unknown', async () => {
     const view = await mount();
     expect(mocks.getCheckinStatus).toHaveBeenCalledTimes(1);

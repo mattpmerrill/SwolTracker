@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2, ChevronRight, Sparkles, Bot, Zap, Globe, ChevronDown } from 'lucide-react';
 import { buildChadPriceSetting, normalizeRollout, parseChadPrice, ROLLOUT_OPTIONS } from '../../utils/chadUsage';
+import { CHECKIN_SHELVED } from '../../../shared/checkin-contract';
 
 const PROVIDERS = [
   {
@@ -648,6 +649,9 @@ const AdminApiSettings = ({ db }) => {
       {/* Rollout: who may turn the weekly check-in on */}
       <div className="bg-zinc-900/50 backdrop-blur-xl rounded-2xl p-8 border border-orange-500/20 shadow-xl shadow-black/20">
         <h3 className="font-semibold text-white mb-1">Weekly check-in rollout</h3>
+        {CHECKIN_SHELVED ? (
+          <p className="text-sm text-zinc-400">Weekly check-ins are shelved, so this setting has no effect. See ADR-006 to bring them back.</p>
+        ) : (<>
         <p className="text-sm text-zinc-400 mb-4">Admin only is the default. Switch to everyone once a real week has run cleanly.</p>
         <div className="flex gap-3">
           <select
@@ -669,6 +673,7 @@ const AdminApiSettings = ({ db }) => {
             Save
           </button>
         </div>
+        </>)}
       </div>
 
       {/* Available Models Info */}

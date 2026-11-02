@@ -3,7 +3,7 @@
 // query by that id. The pure rules are in api/_checkin-core.js.
 
 import { resolveUserClock } from '../mcp/dist/mcp/src/user-clock.js';
-import { parsePrices } from './_checkin-core.js';
+import { isCheckinShelved, parsePrices } from './_checkin-core.js';
 
 const ROLLOUT_ALL = 'all';
 
@@ -70,6 +70,8 @@ export async function loadEligibility(supabase, userId) {
     'Reading check-in settings',
   );
   const enabled = settings?.weekly_checkin === true;
+  // Shelved means rolled out to nobody: the worker's schedule op then tells any workflow to stop.
+  if (isCheckinShelved()) return { enabled, reason: 'rollout', gymId: null };
 
   const rollout = must(await supabase.rpc('get_app_setting', { p_key: 'chad_checkin_rollout' }), 'Reading rollout');
   let allowed = typeof rollout === 'string' && rollout.trim().toLowerCase() === ROLLOUT_ALL;

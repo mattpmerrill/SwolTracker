@@ -13,8 +13,8 @@
  * ---------------------------------------------------------------------------------------------
  * /api/checkin  (browser -> Vercel, `Authorization: Bearer <Supabase JWT>`, POST, JSON)
  * ---------------------------------------------------------------------------------------------
- * Gate order: CORS, method, body shape (400), Temporal configured (503 "Check-ins are off right
- * now."), JWT (401), daily limit (429, 30/day, every action except `status`). The user id is always
+ * Gate order: CORS, method, body shape (400), not shelved and Temporal configured (503 "Check-ins
+ * are off right now."), JWT (401), daily limit (429, 30/day, every action except `status`). The user id is always
  * the verified JWT id, never a body field.
  *
  *   { action: "status" }
@@ -118,6 +118,14 @@
  *   missed_apply                      approved | declined, then completed; a permanent conflict closes
  *                                     the offer as expired (expired, then completed) and answers 409
  */
+
+/**
+ * Check-ins are shelved (2026-11-02, ADR-006): the code, tables and worker stay, but nothing in the
+ * app reaches Temporal. `/api/checkin` answers 503 (so the web hides the switch), a workflow that
+ * wakes up is told to stop, and the web app neither reads nor shows check-in cards. Set to false,
+ * deploy, and run the worker to bring the feature back.
+ */
+export const CHECKIN_SHELVED = true;
 
 export const TASK_QUEUE = "chad-checkin";
 /** The workflow is started by type name from the API, so api/ never imports worker code. */

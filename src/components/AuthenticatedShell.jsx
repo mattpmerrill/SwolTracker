@@ -15,6 +15,7 @@ import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useBlockScores } from '../hooks/useBlockScores';
 import { useProgram, useWorkoutLog } from '../contexts';
 import { ROUTES, parseCheckinLink } from '../lib/routes';
+import { CHECKIN_SHELVED } from '../../shared/checkin-contract';
 
 import { Header, BottomNav } from './Layout';
 import ScreenRouter from './ScreenRouter';
@@ -166,7 +167,7 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
   // Members read the leader's program, so a refresh after a Chad edit must too.
   const programGymId = groupRole === 'member' && leaderGymId ? leaderGymId : gymId;
   const chadChat = useChadChat({ currentUser, programGymId, setWorkoutProgram, toast });
-  const checkin = useCheckin({ currentUser, programGymId, setWorkoutProgram, toast });
+  const checkin = useCheckin({ currentUser, programGymId, setWorkoutProgram, toast, enabled: !CHECKIN_SHELVED });
 
   // A check-in push opens /workout?checkin=<id> (or ?offer=<id>): refresh, ask the card to scroll
   // into view, and clear the param so a reload or a back tap does not replay it. Navigating to the
@@ -417,7 +418,8 @@ export default function AuthenticatedShell({ authUser, signOut, bundle }) {
           programStartDate,
           actualCurrentWeek,
           isAdmin,
-          checkin: {
+          // Shelved check-ins have no settings card (and no status call to ask whether to show one).
+          checkin: CHECKIN_SHELVED ? null : {
             status: checkin.status,
             saving: checkin.busy === 'settings',
             onSetEnabled: checkin.setEnabled,
